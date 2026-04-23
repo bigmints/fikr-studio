@@ -39,7 +39,7 @@ const nextConfig = {
             // - script-src: Next.js needs 'unsafe-inline' + 'unsafe-eval' in dev;
             //   nonces are the proper fix but require custom server — this is the
             //   pragmatic baseline for a static/Vercel deployment.
-            // - connect-src: explicit allowlist for supported AI providers
+            // - connect-src: https: allows any user-configured custom endpoint
             // - img-src: data URIs for inline images, blob for canvas exports
             // - style-src unsafe-inline: Tailwind injects inline styles at runtime
             key: "Content-Security-Policy",
