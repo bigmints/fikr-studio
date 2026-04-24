@@ -108,7 +108,7 @@ export function KanbanArea({
   }, [columns])
 
   return (
-    <div className="relative h-full w-full bg-[#050505] overflow-hidden">
+    <div className="relative h-full w-full bg-background overflow-hidden">
       {/* Scrollable Container */}
       <div 
         ref={containerRef}
@@ -177,7 +177,10 @@ export function KanbanArea({
       {blocks.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="flex flex-col items-center gap-8 w-[420px]">
-            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/35">type-grouped board view</p>
+            <div className="opacity-80 mix-blend-plus-lighter">
+              <img src="logo-icon.png" alt="FikrPad" className="h-14 w-14 object-contain" />
+            </div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/35 -mt-2">type-grouped board view</p>
 
             <div className="flex flex-col gap-5 w-full">
               {([

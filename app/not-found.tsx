@@ -52,13 +52,9 @@ export default function NotFound() {
 
         {/* Logo mark */}
         <div className="mb-2 flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <span className="h-2.5 w-2.5 rounded-[3px] bg-[var(--type-quote)]" />
-            <span className="h-2.5 w-2.5 rounded-[3px] bg-[var(--type-quote)] opacity-60" />
-            <span className="h-2.5 w-2.5 rounded-[3px] bg-[var(--type-quote)] opacity-30" />
-          </div>
+          <img src="logo-icon.png" alt="FikrPad" className="h-5 w-5 object-contain opacity-80" />
           <span className="font-mono text-xs font-semibold tracking-tight text-foreground/60">
-            nodepad
+            FikrPad
           </span>
         </div>
 

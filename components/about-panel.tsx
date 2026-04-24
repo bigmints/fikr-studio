@@ -14,41 +14,6 @@ interface AboutPanelProps {
   onClose: () => void
 }
 
-function CopyEmailButton() {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText("mskayyali@me.com").then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }, [])
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest border px-2 py-0.5 rounded-sm transition-all duration-300 cursor-pointer"
-      style={{
-        color:       copied ? "var(--color-emerald-400, #34d399)" : "color-mix(in oklch, var(--primary) 60%, transparent)",
-        borderColor: copied ? "color-mix(in oklch, var(--color-emerald-400, #34d399) 35%, transparent)" : "color-mix(in oklch, var(--primary) 25%, transparent)",
-      }}
-    >
-      <span className="relative flex items-center" style={{ width: "12px", height: "12px" }}>
-        <Mail
-          className="absolute inset-0 transition-all duration-300"
-          style={{ width: "12px", height: "12px", opacity: copied ? 0 : 1, transform: copied ? "scale(0.6)" : "scale(1)" }}
-        />
-        <Check
-          className="absolute inset-0 transition-all duration-300"
-          style={{ width: "12px", height: "12px", opacity: copied ? 1 : 0, transform: copied ? "scale(1)" : "scale(0.6)" }}
-        />
-      </span>
-      <span className="transition-all duration-300" style={{ opacity: copied ? 0.7 : 1 }}>
-        {copied ? "Copied!" : "Copy email"}
-      </span>
-    </button>
-  )
-}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -102,46 +67,21 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
         side="right"
         className="w-full sm:max-w-2xl flex flex-col gap-0 p-0 bg-card border-l border-border z-[200] overflow-hidden"
       >
-        <SheetTitle className="sr-only">About nodepad</SheetTitle>
+        <SheetTitle className="sr-only">About FikrPad</SheetTitle>
 
         {/* Header */}
         <div className="flex-shrink-0 px-8 pt-8 pb-6 border-b border-border">
           <div className="flex items-center gap-3 mb-3">
-            <div className="flex items-center gap-0.5">
-              <span className="inline-block h-3 w-3 rounded-sm bg-primary" />
-              <span className="inline-block h-3 w-3 rounded-sm bg-primary/60" />
-              <span className="inline-block h-3 w-3 rounded-sm bg-primary/30" />
-            </div>
-            <h1 className="font-mono text-xl font-black text-foreground tracking-tight">nodepad</h1>
+            <img src="logo-icon.png" alt="FikrPad" className="h-5 w-5 object-contain" />
+            <h1 className="font-mono text-xl font-black text-foreground tracking-tight">FikrPad</h1>
           </div>
           <p className="text-base text-muted-foreground leading-relaxed max-w-lg">
-            A spatial research tool that reads what you write and enriches it with AI — no prompting, no chat. Just capture your thinking and let the structure emerge.
+            Part of the Fikr family. A spatial research tool that reads what you write and enriches it with AI — no prompting, no chat. Just capture your thinking and let the structure emerge.
           </p>
           <p className="mt-2 text-xs font-mono text-primary/60 uppercase tracking-widest">
-            No chat · No prompts · AI that augments your thinking
+            Desktop companion for Fikr Voice Notes
           </p>
-          <p className="mt-3 text-xs text-muted-foreground/50 flex items-center gap-3 flex-wrap">
-            <span>
-              A design experiment by{" "}
-              <a
-                href="http://mskayyali.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground/70 hover:text-foreground underline underline-offset-2 transition-colors"
-              >
-                Saleh Kayyali
-              </a>
-            </span>
-            <a
-              href="https://github.com/mskayyali/nodepad"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50 hover:text-foreground border border-white/10 hover:border-white/25 px-2 py-0.5 rounded-sm transition-colors"
-            >
-              Source code ↗
-            </a>
-            <CopyEmailButton />
-          </p>
+
           <p className="mt-1.5 text-xs text-muted-foreground/35">
             This app uses anonymous analytics (Umami) to track feature interactions — views switched, exports, synthesis events. No note content, no personal data, no cross-site tracking.
           </p>
@@ -150,26 +90,15 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-8 py-6 space-y-8">
 
-          {/* Intro video */}
-          <Section title="Watch the intro">
-            <div className="relative w-full rounded-sm overflow-hidden border border-border/50" style={{ paddingBottom: "56.25%" }}>
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src="https://www.youtube-nocookie.com/embed/nCLY7rHAjWE?rel=0&modestbranding=1&color=white"
-                title="nodepad introduction"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          </Section>
+
 
           {/* The idea */}
           <Section title="The idea">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Most AI tools ask you to prompt them. nodepad flips this — you write freely, and the AI quietly reads everything you've captured, classifies it, annotates it, finds contradictions, surfaces connections, and synthesises emerging insights. Your canvas evolves as you think.
+              Most AI tools ask you to prompt them. FikrPad flips this — you write freely, and the AI quietly reads everything you've captured, classifies it, annotates it, finds contradictions, surfaces connections, and synthesises emerging insights. Your canvas evolves as you think.
             </p>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              It's designed for researchers, writers, and deep thinkers who want a thinking partner — not a chatbot. The goal is to reduce the friction between a raw thought and a structured insight.
+              Designed as the desktop spatial workspace companion to the Fikr mobile app. It's built for researchers, writers, and deep thinkers who want a thinking partner — not a chatbot. The goal is to reduce the friction between a raw thought and a structured insight.
             </p>
           </Section>
 
@@ -180,7 +109,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
                 Open the sidebar (☰ top-left) → Settings. The default provider is OpenRouter — create a free account at openrouter.ai and paste your key. You can use <strong className="text-foreground/80">free models</strong> (Nemotron 30B or 120B) with no credits, or add credits to access GPT-4o, Claude Sonnet, Gemini 2.5 Pro, and DeepSeek. OpenAI and Z.ai are also supported as direct providers.
               </Step>
               <Step n={2} title="Capture anything">
-                Type a thought, paste a quote, drop a URL, or write a question into the input bar at the bottom and press Enter. nodepad classifies it automatically.
+                Type a thought, paste a quote, drop a URL, or write a question into the input bar at the bottom and press Enter. FikrPad classifies it automatically.
               </Step>
               <Step n={3} title="Watch it enrich">
                 Each node is sent to the AI in context with everything else on your canvas. It comes back with a type, category, annotation, and connections to related nodes.
@@ -189,7 +118,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
                 Start your note with a shorthand like <code className="px-1 rounded bg-secondary font-mono text-xs text-primary">#claim</code>, <code className="px-1 rounded bg-secondary font-mono text-xs text-primary">#question</code>, or <code className="px-1 rounded bg-secondary font-mono text-xs text-primary">#idea</code> to override AI classification.
               </Step>
               <Step n={5} title="Watch for synthesis">
-                After a few nodes, nodepad auto-generates a synthesis note — an emergent thesis drawn from everything on the canvas. Find it in the Synthesis panel (top-right sparkle icon).
+                After a few nodes, FikrPad auto-generates a synthesis note — an emergent thesis drawn from everything on the canvas. Find it in the Synthesis panel (top-right sparkle icon).
               </Step>
             </div>
           </Section>
@@ -197,7 +126,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
           {/* Content types */}
           <Section title="Content types">
             <p className="text-sm text-muted-foreground mb-3">
-              nodepad recognises 14 types of thinking. Each node is classified into one automatically, and given a colour to match.
+              FikrPad recognises 14 types of thinking. Each node is classified into one automatically, and given a colour to match.
             </p>
             <div className="grid grid-cols-2 gap-2">
               {CONTENT_TYPE_HIGHLIGHTS.map((type) => {
@@ -255,7 +184,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
                 { icon: Zap, title: "Contextual annotation", desc: "The AI reads your whole canvas and writes a 2–4 sentence annotation for each node that explains it in the context of everything else." },
                 { icon: Search, title: "Connection mapping", desc: "Hover the dot indicator on any tile header to dim unrelated nodes and reveal which nodes are semantically connected. In Graph view, the same connections drive the layout — connected nodes pull toward each other." },
                 { icon: Globe, title: "Web grounding", desc: "Enable web grounding in settings to have claims, questions, and references verified against live sources. Citations appear inline." },
-                { icon: Sparkles, title: "Synthesis", desc: "After ≥3 nodes, nodepad quietly generates an emergent thesis — a 15–25 word synthesis of what you're actually thinking about. Solidify it to keep it, or dismiss." },
+                { icon: Sparkles, title: "Synthesis", desc: "After ≥3 nodes, FikrPad quietly generates an emergent thesis — a 15–25 word synthesis of what you're actually thinking about. Solidify it to keep it, or dismiss." },
               ].map(({ icon: Icon, title, desc }) => (
                 <div key={title} className="flex gap-3">
                   <Icon className="h-4 w-4 flex-shrink-0 text-primary/70 mt-0.5" />
@@ -274,8 +203,8 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
               <div className="flex gap-3">
                 <FolderDown className="h-4 w-4 flex-shrink-0 text-primary/70 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-foreground mb-0.5">Export .nodepad</p>
-                  <p className="text-sm text-muted-foreground">Save your full research space as a <code className="px-1 rounded bg-secondary font-mono text-xs">.nodepad</code> file. Import it on any device to pick up where you left off.</p>
+                  <p className="text-sm font-semibold text-foreground mb-0.5">Export .FikrPad</p>
+                  <p className="text-sm text-muted-foreground">Save your full research space as a <code className="px-1 rounded bg-secondary font-mono text-xs">.FikrPad</code> file. Import it on any device to pick up where you left off.</p>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -311,7 +240,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
           <Section title="Tips">
             <ul className="space-y-2">
               {[
-                "Write in fragments — nodepad handles the structure. You don't need to write in full sentences.",
+                "Write in fragments — FikrPad handles the structure. You don't need to write in full sentences.",
                 "Mix types freely. A canvas with claims, questions, and quotes is richer than one with only one type.",
                 "Switch to Graph view (via ⌘K → Graph) to understand which nodes are central to your thinking and which are peripheral.",
                 "The canvas index (⌘K → Index) groups nodes by category — hovering a title in the index highlights the matching node in any view.",
@@ -328,13 +257,14 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
           </Section>
 
           {/* Footer */}
-          <div className="pt-2 pb-4 border-t border-border">
+          <div className="pt-3 pb-4 border-t border-border space-y-3">
             <div className="flex items-center gap-1.5">
-              <span className="inline-block h-1.5 w-1.5 rounded-sm bg-primary" />
-              <span className="inline-block h-1.5 w-1.5 rounded-sm bg-primary/60" />
-              <span className="inline-block h-1.5 w-1.5 rounded-sm bg-primary/30" />
-              <span className="font-mono text-[10px] font-bold text-muted-foreground/40 ml-1">nodepad</span>
+              <img src="logo-icon.png" alt="FikrPad" className="h-3 w-3 object-contain opacity-50 grayscale" />
+              <span className="font-mono text-[10px] font-bold text-muted-foreground/40 ml-1">FikrPad</span>
             </div>
+            <p className="text-[10px] text-muted-foreground/50 leading-relaxed max-w-sm">
+              This app is based on <a href="https://github.com/mskayyali/Nodepad" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2">Nodepad</a>, an open-source spatial canvas released under the MIT License.
+            </p>
           </div>
 
         </div>

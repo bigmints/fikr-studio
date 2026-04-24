@@ -4,8 +4,16 @@ import Script from 'next/script'
 import { MobileWall } from '@/components/mobile-wall'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
 const vazirmatn = Vazirmatn({
   subsets: ["arabic"],
   variable: "--font-vazirmatn",
@@ -13,23 +21,23 @@ const vazirmatn = Vazirmatn({
 });
 
 export const metadata: Metadata = {
-  title: 'nodepad',
+  title: 'FikrPad',
   description: 'A spatial research tool where AI augments your thinking — not replaces it.',
   icons: {
     icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
     apple: '/apple-icon.png',
   },
   openGraph: {
-    title: 'nodepad',
+    title: 'FikrPad',
     description: 'A spatial research tool where AI augments your thinking — not replaces it.',
-    url: 'https://nodepad.space',
-    siteName: 'nodepad',
+    url: 'https://FikrPad.space',
+    siteName: 'FikrPad',
     locale: 'en_US',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'nodepad',
+    title: 'FikrPad',
     description: 'A spatial research tool where AI augments your thinking — not replaces it.',
   },
 }
@@ -41,10 +49,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`font-sans antialiased ${vazirmatn.variable}`} suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${vazirmatn.variable} font-sans antialiased`} suppressHydrationWarning>
         <MobileWall />
         {children}
-        {/* Umami analytics — nodepad.space only. Remove or replace with your
+        {/* Umami analytics — FikrPad.space only. Remove or replace with your
             own data-website-id if self-hosting. Safe to delete entirely. */}
         <Script
           src="https://cloud.umami.is/script.js"

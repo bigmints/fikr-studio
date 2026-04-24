@@ -230,7 +230,7 @@ export function TilingArea({
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#020202]">
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-background">
       {/* Task Header stays sticky at top */}
       {taskBlock && (
         <div className={`w-full shrink-0 p-1 z-10 transition-[opacity,filter] duration-300 ${activeConnectionId && !relatedIds.has(taskBlock.id) ? 'opacity-15 saturate-0' : 'opacity-100'}`}>
@@ -287,31 +287,40 @@ export function TilingArea({
 
       {/* Empty state — absolutely positioned so it centers identically across all views */}
       {pageTrees.length === 0 && !taskBlock && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center gap-8 w-[420px]">
-            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/35">spatial research workspace</p>
-
-            <div className="flex flex-col gap-5 w-full">
-              {([
-                { color: "var(--type-question)", label: "question", text: "Does consciousness require a period of genuine solitude?" },
-                { color: "var(--type-claim)",    label: "claim",    text: "Caffeine improves short-term recall by ~15%" },
-                { color: "var(--type-quote)",    label: "quote",    text: "Attention is the rarest form of generosity — Simone Weil" },
-                { color: "var(--type-task)",     label: "task",     text: "Review papers on distributed consensus" },
-              ] as const).map(({ color, label, text }) => (
-                <div key={label} className="flex items-start gap-4">
-                  <div className="w-0.5 self-stretch rounded-full shrink-0 mt-0.5" style={{ background: color }} />
-                  <div className="flex flex-col gap-1">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.2em]" style={{ color }}>{label}</span>
-                    <p className="text-[14px] leading-snug text-foreground/50">{text}</p>
-                  </div>
-                </div>
-              ))}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-background">
+          <div className="flex flex-col items-center text-center max-w-xl px-6">
+            <div className="mb-6 opacity-80 mix-blend-plus-lighter">
+              <img src="logo-icon.png" alt="FikrPad" className="h-14 w-14 object-contain" />
+            </div>
+            <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary mb-8 shadow-sm">
+              <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-[pulse_3s_ease-in-out_infinite]"></span>
+              AI-Powered Spatial Thinking
+            </div>
+            
+            <div className="flex flex-col gap-3 mb-6">
+              <h1 className="text-foreground text-[clamp(1.5rem,3vw,2.25rem)] font-bold tracking-tight leading-[1.2]">
+                "If you think you know something, but don't write it down, you only think you know it."
+              </h1>
+              <a 
+                href="https://www.lamport.org/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="font-mono text-sm text-muted-foreground/50 hover:text-foreground/80 transition-colors pointer-events-auto"
+              >
+                — Leslie Lamport
+              </a>
             </div>
 
-
-            <p className="text-[13px] text-white uppercase tracking-[0.15em] whitespace-nowrap">
-              {`type anything · #type to classify · ${mod}K for commands`}
+            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed mb-12 max-w-md mx-auto">
+              FikrPad transforms your thinking into an organised, spatial workspace. 
+              Write freely, and let the AI categorise, connect, and synthesise.
             </p>
+
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-[12px] text-foreground/70 uppercase tracking-[0.15em] whitespace-nowrap font-mono bg-secondary/50 px-5 py-2.5 rounded-lg border border-border/80 shadow-sm">
+                {`type anything · #type to classify · ${mod}K commands`}
+              </p>
+            </div>
           </div>
         </div>
       )}

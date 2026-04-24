@@ -17,3 +17,9 @@ next-env.d.ts
 
 # Internal docs
 CLAUDE.md
+
+# Build output
+out/
+build/
+dist/
+*.log

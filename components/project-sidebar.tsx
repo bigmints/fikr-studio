@@ -143,12 +143,15 @@ export function ProjectSidebar({
       className="relative z-50 transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-black/20 backdrop-blur-3xl flex flex-col h-full"
     >
       <div className="w-[240px] flex flex-col h-full">
-        {/* Header */}
-        <div className="flex h-10 items-center justify-between border-b border-border bg-card/5 backdrop-blur-md px-3 py-1.5 shrink-0">
+        <div 
+          className="flex h-10 items-center justify-between border-b border-border bg-card/5 backdrop-blur-md pr-3 pl-[80px] py-1.5 shrink-0 select-none"
+          style={{ WebkitAppRegion: 'drag' } as any}
+        >
           <div className="flex items-center gap-2.5">
             {showSettings ? (
               <button
                 onClick={handleSaveSettings}
+                style={{ WebkitAppRegion: 'no-drag' } as any}
                 className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
@@ -167,6 +170,7 @@ export function ProjectSidebar({
           </div>
           <button
             onClick={handleClose}
+            style={{ WebkitAppRegion: 'no-drag' } as any}
             className="p-1 px-1.5 hover:bg-white/5 rounded-sm transition-colors text-muted-foreground hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
@@ -314,7 +318,7 @@ export function ProjectSidebar({
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -4 }}
                           transition={{ duration: 0.1 }}
-                          className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-[#0d0d10] shadow-xl"
+                          className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-border bg-card shadow-xl"
                         >
                           {AI_PROVIDER_PRESETS.map(preset => (
                             <button
@@ -438,7 +442,7 @@ export function ProjectSidebar({
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.1 }}
-                            className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-[#0d0d10] shadow-xl"
+                            className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-border bg-card shadow-xl"
                           >
                             {models.map(model => (
                               <button
@@ -500,12 +504,12 @@ export function ProjectSidebar({
 
                 {/* API Status */}
                 <div className={`flex items-center gap-2 rounded-md px-2.5 py-2 font-mono text-[9px] ${
-                  draft.apiKey
+                  draft.apiKey || draft.provider === "custom"
                     ? "bg-primary/10 border border-primary/20 text-primary"
                     : "bg-white/5 border border-white/5 text-muted-foreground"
                 }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${draft.apiKey ? "bg-primary animate-pulse" : "bg-white/30"}`} />
-                  {draft.apiKey ? `${currentPreset.label} — API key configured` : "No API key — AI disabled"}
+                  <span className={`h-1.5 w-1.5 rounded-full ${draft.apiKey || draft.provider === "custom" ? "bg-primary animate-pulse" : "bg-white/30"}`} />
+                  {draft.apiKey ? `${currentPreset.label} — API key configured` : draft.provider === "custom" ? "Custom endpoint configured" : "No API key — AI disabled"}
                 </div>
               </motion.div>
             )}

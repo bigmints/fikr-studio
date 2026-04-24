@@ -73,10 +73,14 @@ export function StatusBar({
   }, [blocks])
 
   return (
-    <header className="flex h-10 items-center justify-between border-b border-border bg-card/80 backdrop-blur-md px-3 py-1.5 z-50">
+    <header 
+      className={`flex h-10 items-center justify-between border-b border-border bg-card/80 backdrop-blur-md pr-3 py-1.5 z-50 select-none ${!isSidebarOpen ? 'pl-[80px]' : 'pl-3'}`}
+      style={{ WebkitAppRegion: 'drag' } as any}
+    >
       <div className="flex items-center gap-1.5">
         <button 
           onClick={onMenuClick}
+          style={{ WebkitAppRegion: 'no-drag' } as any}
           className={`p-1.5 rounded-sm transition-all duration-200 ${
             isSidebarOpen 
               ? "bg-primary/20 text-primary shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]" 
@@ -87,13 +91,9 @@ export function StatusBar({
         </button>
         
         <div className="flex items-center gap-2.5 ml-1">
-          <div className="flex items-center gap-0.5">
-            <span className="inline-block h-2 w-2 rounded-sm bg-primary" />
-            <span className="inline-block h-2 w-2 rounded-sm bg-primary/60" />
-            <span className="inline-block h-2 w-2 rounded-sm bg-primary/30" />
-          </div>
+          <img src="logo-icon.png" alt="FikrPad" className="h-4 w-4 object-contain" />
           <h1 className="font-mono text-xs font-bold text-foreground tracking-tight select-none">
-            nodepad
+            FikrPad
           </h1>
           {activeProjectName && (
             <div className="flex items-center gap-2 ml-1">
@@ -166,6 +166,7 @@ export function StatusBar({
           {/* Ghost panel toggle with badge */}
           <button
             onClick={onGhostPanelToggle}
+            style={{ WebkitAppRegion: 'no-drag' } as any}
             className={`relative p-1.5 rounded-sm transition-all duration-200 ${
               isGhostPanelOpen
                 ? "bg-primary/20 text-primary shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]"
@@ -182,6 +183,7 @@ export function StatusBar({
           </button>
           <button
             onClick={onIndexToggle}
+            style={{ WebkitAppRegion: 'no-drag' } as any}
             className={`p-1.5 rounded-sm transition-all duration-200 ${
               isIndexOpen
                 ? "bg-primary/20 text-primary shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]"
@@ -200,8 +202,9 @@ export function StatusBar({
                 setIsAboutOpen(true)
                 onHelpTooltipDismiss?.()
               }}
+              style={{ WebkitAppRegion: 'no-drag' } as any}
               className="p-1.5 rounded-sm transition-all duration-200 hover:bg-secondary text-muted-foreground/40 hover:text-foreground"
-              title="About nodepad"
+              title="About FikrPad"
             >
               <span className="font-mono text-[11px] font-black leading-none">?</span>
             </button>
