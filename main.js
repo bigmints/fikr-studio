@@ -161,7 +161,10 @@ function pushToRenderer(mainWindow, type, payload) {
 
 /** Execute an MCP tool call and return the result */
 function executeTool(name, args, mainWindow) {
-  const projects = loadProjectsFromDisk() || [];
+  const workspace = loadProjectsFromDisk() || { projects: [], activeProjectId: "" };
+  // Support both the new { projects, activeProjectId } shape and a legacy raw array
+  const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
+  const save = () => saveProjectsToDisk(Array.isArray(workspace) ? projects : { ...workspace, projects });
 
   const getProject = (id) =>
     id ? projects.find((p) => p.id === id) : projects[0];
@@ -229,7 +232,7 @@ function executeTool(name, args, mainWindow) {
         fromMcp: true,
       };
       proj.blocks = [...(proj.blocks || []), newNote];
-      saveProjectsToDisk(projects);
+      save();
       // Push live event to React canvas
       pushToRenderer(mainWindow, "note-added", { projectId: proj.id, note: newNote });
       return {
@@ -246,7 +249,7 @@ function executeTool(name, args, mainWindow) {
         ghostNotes: [],
       };
       projects.push(newProject);
-      saveProjectsToDisk(projects);
+      save();
       pushToRenderer(mainWindow, "project-created", { project: newProject });
       return {
         content: [{ type: "text", text: `Project "${args.name}" created with id: ${newProject.id}` }],
@@ -261,7 +264,7 @@ function executeTool(name, args, mainWindow) {
       if (proj.blocks.length === before) {
         return { content: [{ type: "text", text: `Note ${args.note_id} not found` }], isError: true };
       }
-      saveProjectsToDisk(projects);
+      save();
       pushToRenderer(mainWindow, "note-deleted", { projectId: proj.id, noteId: args.note_id });
       return { content: [{ type: "text", text: `Note ${args.note_id} deleted` }] };
     }
@@ -273,7 +276,7 @@ function executeTool(name, args, mainWindow) {
       if (!note) return { content: [{ type: "text", text: `Note ${args.note_id} not found` }], isError: true };
       note.text = args.new_text;
       note.isEnriching = true;
-      saveProjectsToDisk(projects);
+      save();
       pushToRenderer(mainWindow, "note-updated", { projectId: proj.id, note });
       return { content: [{ type: "text", text: `Note ${args.note_id} updated` }] };
     }
@@ -378,7 +381,8 @@ function startMcpServer(mainWindow) {
 
           case "resources/read": {
             if (rpc.params?.uri === "fikrpad://projects") {
-              const projects = loadProjectsFromDisk() || [];
+              const workspace = loadProjectsFromDisk() || { projects: [] };
+              const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
               respond({ contents: [{ uri: "fikrpad://projects", mimeType: "application/json", text: JSON.stringify(projects, null, 2) }] });
             } else {
               respondError(-32602, "Unknown resource URI");
