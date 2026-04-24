@@ -309,7 +309,7 @@ You have live web access. For this note type, include 1–2 real source citation
 
   const globalContext = context.length > 0
     ? `\n\n## Global Page Context\n${context.map((c, i) =>
-        `<note index="${i}" category="${(c.category || 'general').replace(/"/g, '')}">${c.text.substring(0, 100).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</note>`
+        `<note index="${i}" category="${(c.category || 'general').replace(/"/g, '')}">${(c.text || '').substring(0, 100).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</note>`
       ).join('\n')}`
     : ""
 

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Plus,
@@ -676,9 +677,23 @@ export function ProjectSidebar({
                         </div>
                       </div>
 
-                      <button 
-                        onClick={() => {
-                          const configJson = `"fikrpad-cloud": {
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <button className="h-8 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-foreground font-mono text-[9px] rounded-sm transition-all flex items-center justify-center gap-2">
+                            <Settings className="h-3 w-3" />
+                            View MCP Configuration
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10">
+                          <DialogHeader>
+                            <DialogTitle className="font-mono text-sm uppercase text-primary">MCP Configuration</DialogTitle>
+                            <DialogDescription className="font-mono text-[10px] text-muted-foreground">
+                              Copy this JSON snippet into your MCP client configuration file to give your agent access to your FikrPad.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="mt-2 bg-black/40 rounded-md border border-white/10 p-3 relative group">
+                            <pre className="font-mono text-[10px] text-foreground/80 whitespace-pre-wrap">
+                              {`"fikrpad-cloud": {
   "command": "npx",
   "args": [
     "-y",
@@ -688,41 +703,64 @@ export function ProjectSidebar({
   "env": {
     "MCP_RELAY_KEY": "Bearer ${relayApiKey || '<GENERATING_KEY...>'}"
   }
-}`;
-                          // @ts-ignore
-                          window.alert("Copy this into your MCP configuration file:\n\n" + configJson);
-                          navigator.clipboard.writeText(`"fikrpad-cloud": {\n  "command": "npx",\n  "args": [\n    "-y",\n    "fikrpad-mcp",\n    "https://fikr.one/api/mcp/relay"\n  ],\n  "env": {\n    "MCP_RELAY_KEY": "Bearer ${relayApiKey || '<GENERATING_KEY...>'}"\n  }\n}`)
-                        }}
-                        className="h-8 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-foreground font-mono text-[9px] rounded-sm transition-all flex items-center justify-center gap-2"
-                      >
-                        <Settings className="h-3 w-3" />
-                        View MCP Configuration
-                      </button>
+}`}
+                            </pre>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`"fikrpad-cloud": {\n  "command": "npx",\n  "args": [\n    "-y",\n    "fikrpad-mcp",\n    "https://fikr.one/api/mcp/relay"\n  ],\n  "env": {\n    "MCP_RELAY_KEY": "Bearer ${relayApiKey || '<GENERATING_KEY...>'}"\n  }\n}`)
+                              }}
+                              className="absolute top-2 right-2 p-1.5 rounded-sm bg-white/10 hover:bg-white/20 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Copy to clipboard"
+                            >
+                              <Check className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                      
                       <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
                         Add this to your agent's MCP config. This secure key gives cloud agents access to your FikrPad.
                       </p>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-3">
-                      <button 
-                        onClick={() => {
-                          const configJson = `"fikrpad": {
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <button className="h-8 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-foreground font-mono text-[9px] rounded-sm transition-all flex items-center justify-center gap-2">
+                            <Settings className="h-3 w-3" />
+                            View MCP Configuration
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10">
+                          <DialogHeader>
+                            <DialogTitle className="font-mono text-sm uppercase text-primary">MCP Configuration</DialogTitle>
+                            <DialogDescription className="font-mono text-[10px] text-muted-foreground">
+                              Copy this JSON snippet into your MCP client configuration file to give your agent access to your FikrPad.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="mt-2 bg-black/40 rounded-md border border-white/10 p-3 relative group">
+                            <pre className="font-mono text-[10px] text-foreground/80 whitespace-pre-wrap">
+                              {`"fikrpad": {
   "command": "npx",
   "args": [
     "-y",
     "fikrpad-mcp",
     "http://localhost:${mcpPort || 3025}/sse"
   ]
-}`;
-                          // @ts-ignore
-                          window.alert("Copy this into your MCP configuration file:\n\n" + configJson);
-                          navigator.clipboard.writeText(`"fikrpad": {\n  "command": "npx",\n  "args": [\n    "-y",\n    "fikrpad-mcp",\n    "http://localhost:${mcpPort || 3025}/sse"\n  ]\n}`)
-                        }}
-                        className="h-8 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-foreground font-mono text-[9px] rounded-sm transition-all flex items-center justify-center gap-2"
-                      >
-                        <Settings className="h-3 w-3" />
-                        View MCP Configuration
-                      </button>
+}`}
+                            </pre>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`"fikrpad": {\n  "command": "npx",\n  "args": [\n    "-y",\n    "fikrpad-mcp",\n    "http://localhost:${mcpPort || 3025}/sse"\n  ]\n}`)
+                              }}
+                              className="absolute top-2 right-2 p-1.5 rounded-sm bg-white/10 hover:bg-white/20 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Copy to clipboard"
+                            >
+                              <Check className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
 
                       <div className="flex flex-col gap-2 bg-black/20 p-2 rounded-md border border-white/5">
                         <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
