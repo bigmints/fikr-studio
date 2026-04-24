@@ -165,7 +165,7 @@ const sseClients = new Set();
 const MCP_TOOLS = [
   {
     name: "create_note",
-    description: "Add a new note/thought to the active FikrPad canvas. The note will be automatically classified and enriched by the AI.",
+    description: "Add a new note/thought to the active FikrPad canvas. Pre-processed attributes like type, category, and annotation can be provided.",
     inputSchema: {
       type: "object",
       properties: {
@@ -175,6 +175,8 @@ const MCP_TOOLS = [
           type: "string",
           description: "Optional type hint: claim, question, idea, task, quote, reference, definition, opinion, reflection, narrative, comparison, thesis, entity, general",
         },
+        category: { type: "string", description: "Optional broader topic or category (e.g., 'Architecture', 'Fixes')" },
+        annotation: { type: "string", description: "Optional concise AI summary or tagging label" },
       },
       required: ["text"],
     },
@@ -232,13 +234,16 @@ const MCP_TOOLS = [
   },
   {
     name: "update_note",
-    description: "Edit the text of an existing note in FikrPad",
+    description: "Edit an existing note in FikrPad (text, category, type, annotation)",
     inputSchema: {
       type: "object",
       properties: {
         note_id: { type: "string", description: "The note ID to update" },
         new_text: { type: "string", description: "Replacement text" },
         project_id: { type: "string", description: "Project ID containing the note" },
+        type: { type: "string", description: "Optional new type" },
+        category: { type: "string", description: "Optional new category" },
+        annotation: { type: "string", description: "Optional new annotation" },
       },
       required: ["note_id", "new_text"],
     },
@@ -365,7 +370,9 @@ async function executeTool(name, args, mainWindow) {
         text: args.text,
         timestamp: Date.now(),
         contentType: args.type || "general",
-        isEnriching: true,
+        category: args.category,
+        annotation: args.annotation,
+        isEnriching: false,
         fromMcp: true,
       };
       // Generate embedding synchronously before saving (MCP caller already waits)
@@ -415,7 +422,10 @@ async function executeTool(name, args, mainWindow) {
       const note = (proj.blocks || []).find((b) => b.id === args.note_id);
       if (!note) return { content: [{ type: "text", text: `Note ${args.note_id} not found` }], isError: true };
       note.text = args.new_text;
-      note.isEnriching = true;
+      if (args.type) note.contentType = args.type;
+      if (args.category) note.category = args.category;
+      if (args.annotation) note.annotation = args.annotation;
+      note.isEnriching = false;
       // Re-embed on edit
       const updatedEmbedding = await embedText(args.new_text);
       if (updatedEmbedding) note.embedding = updatedEmbedding;

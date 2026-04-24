@@ -244,7 +244,7 @@ export default function Page() {
         const { projectId, note } = event.payload
         setProjects(prev => prev.map(p =>
           p.id === projectId
-            ? { ...p, blocks: p.blocks.map(b => b.id === note.id ? { ...b, text: note.text, isEnriching: true } : b) }
+            ? { ...p, blocks: p.blocks.map(b => b.id === note.id ? { ...b, text: note.text, contentType: note.contentType, category: note.category, annotation: note.annotation, isEnriching: false } : b) }
             : p
         ))
       } else if (event.type === "project-created") {
