@@ -24,7 +24,8 @@ const AnnotationMarkdownComponents = {
 }
 
 // Inline URL linkifier — identical logic to tile-card.tsx
-function linkifyText(text: string): React.ReactNode {
+function linkifyText(text?: string): React.ReactNode {
+  if (!text) return text
   const URL_RE = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g
   const parts: React.ReactNode[] = []
   let last = 0

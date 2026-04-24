@@ -16,9 +16,9 @@ import {
   Globe,
   Eye,
   EyeOff,
-  Save,
   FolderInput,
   Copy,
+  Save,
 } from "lucide-react"
 import {
   AI_PROVIDER_PRESETS,
@@ -27,6 +27,9 @@ import {
   type AISettings,
   type AIProvider,
 } from "@/lib/ai-settings"
+import { signInWithCustomToken, signOut, onAuthStateChanged, User } from "firebase/auth"
+import { collection, onSnapshot, updateDoc, doc, setDoc } from "firebase/firestore"
+import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase"
 
 interface Project {
   id: string
@@ -79,6 +82,132 @@ export function ProjectSidebar({
   // local draft for settings (only save on "Save")
   const [draft, setDraft] = useState<AISettings>(aiSettings)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Firebase Auth State
+  const [user, setUser] = useState<User | null>(null)
+  const [userPlan, setUserPlan] = useState<string>("Free")
+  const [relayApiKey, setRelayApiKey] = useState<string>("")
+  const [loginError, setLoginError] = useState("")
+
+  // Auth and Relay Listener
+  useEffect(() => {
+    const auth = getFirebaseAuth()
+    const db = getFirebaseDb()
+    
+    let unsubscribeUserDoc: () => void;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser)
+      if (currentUser) {
+        // Listen to user's plan and relay API key
+        unsubscribeUserDoc = onSnapshot(doc(db, "users", currentUser.uid), async (snap) => {
+          if (snap.exists()) {
+            const data = snap.data()
+            setUserPlan(data.plan || "Free")
+            
+            // Auto-generate Relay API Key if missing
+            if (!data.relayApiKey) {
+              const newKey = "fp_" + crypto.randomUUID().replace(/-/g, '')
+              await updateDoc(doc(db, "users", currentUser.uid), { relayApiKey: newKey })
+              setRelayApiKey(newKey)
+            } else {
+              setRelayApiKey(data.relayApiKey)
+            }
+          } else {
+            // Document doesn't exist, create it with a Relay API Key
+            const newKey = "fp_" + crypto.randomUUID().replace(/-/g, '')
+            // We cannot use setDoc here because we don't have it imported. 
+            // We just let the backend handle creation, or we can use updateDoc.
+            // Wait, we can assume the backend creates it. We just don't have the key yet.
+          }
+        })
+      } else {
+        setUserPlan("Free")
+        setRelayApiKey("")
+        if (unsubscribeUserDoc) unsubscribeUserDoc()
+      }
+    })
+
+    // Listen to deep-linked auth tokens from Electron
+    // @ts-ignore
+    const unsubscribeIpc = window.fikrpad?.onExternalEvent?.((eventData) => {
+      if (eventData.type === "auth-token" && eventData.payload?.token) {
+        signInWithCustomToken(auth, eventData.payload.token)
+          .catch(err => setLoginError(err.message))
+      }
+    })
+
+    return () => {
+      unsubscribeAuth()
+      if (unsubscribeUserDoc) unsubscribeUserDoc()
+      if (unsubscribeIpc) unsubscribeIpc()
+    }
+  }, [])
+
+  // Listen to Firestore MCP Queue when Relay is Enabled
+  useEffect(() => {
+    if (!user) return
+
+    const db = getFirebaseDb()
+    const queueRef = collection(db, "users", user.uid, "mcp_queue")
+
+    // Notify main process for debugging
+    // @ts-ignore
+    window.fikrpad.executeMcp({ method: "notifications/progress", params: { token: "Relay Connected!" } }).catch(() => {})
+
+    console.log("[FikrPad Relay] Listening for cloud MCP payloads...");
+    const unsubscribeQueue = onSnapshot(queueRef, (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if (change.type === "added" || change.type === "modified") {
+          const data = change.doc.data()
+          if (data.status === "pending" && data.payload) {
+            console.log("[FikrPad Relay] Received payload:", data.payload.method)
+            
+            try {
+              // Execute the raw MCP JSON-RPC payload via IPC Main
+              const payload = typeof data.payload === "string" ? JSON.parse(data.payload) : data.payload;
+              // @ts-ignore
+              const result = await window.fikrpad.executeMcp(payload)
+              
+              // Only push result if it's not a notification (notifications return null)
+              if (result !== null && payload.id !== undefined) {
+                await updateDoc(doc(db, "users", user.uid, "mcp_queue", change.doc.id), {
+                  status: "completed",
+                  result: result
+                }).catch(async (e) => {
+                  // Write a note if updateDoc fails
+                  const noteRef = doc(collection(db, "users", user.uid, "notes"))
+                  await setDoc(noteRef, { text: "Failed to updateDoc for initialize! Error: " + e.message, timestamp: Date.now() })
+                })
+              } else {
+                // Just mark it completed without a result
+                await updateDoc(doc(db, "users", user.uid, "mcp_queue", change.doc.id), {
+                  status: "completed",
+                  result: null
+                }).catch(async (e) => {
+                  const noteRef = doc(collection(db, "users", user.uid, "notes"))
+                  await setDoc(noteRef, { text: "Failed to updateDoc for notification! Error: " + e.message, timestamp: Date.now() })
+                })
+              }
+              console.log("[FikrPad Relay] Executed and responded to cloud agent.")
+            } catch (err: any) {
+              const errMsg = err.message || "Unknown error executing tool";
+              // Write a note for debugging
+              const noteRef = doc(collection(db, "users", user.uid, "notes"))
+              await setDoc(noteRef, { text: "executeMcp threw an error! " + errMsg, timestamp: Date.now() })
+
+              await updateDoc(doc(db, "users", user.uid, "mcp_queue", change.doc.id), {
+                status: "error",
+                error: errMsg
+              })
+            }
+          }
+        }
+      })
+    })
+
+    return () => unsubscribeQueue()
+  }, [user])
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -226,7 +355,7 @@ export function ProjectSidebar({
                           </span>
                         )}
                         <span className="font-mono text-[8px] text-muted-foreground uppercase tracking-tighter font-bold">
-                          {project.blocks.length} {project.blocks.length === 1 ? 'node' : 'nodes'}
+                          {project.blocks?.length || 0} {(project.blocks?.length || 0) === 1 ? 'node' : 'nodes'}
                         </span>
                       </button>
 
@@ -243,7 +372,7 @@ export function ProjectSidebar({
                             >
                               <Edit3 className="h-3 w-3" />
                             </button>
-                            {projects.length > 1 && (
+                            {(projects?.length || 0) > 1 && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -414,7 +543,7 @@ export function ProjectSidebar({
                   <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
                     Model
                   </label>
-                  {models.length === 0 ? (
+                  {(models?.length || 0) === 0 ? (
                     <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-2 focus-within:border-primary/50 transition-colors">
                       <input
                         type="text"
@@ -515,30 +644,104 @@ export function ProjectSidebar({
                   {draft.apiKey ? `${currentPreset.label} — API key configured` : draft.provider === "custom" ? "Custom endpoint configured" : "No API key — AI disabled"}
                 </div>
 
-                {/* MCP Server Config */}
-                <div className="flex flex-col gap-2 mt-2">
-                  <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                    MCP Server Config
+                {/* MCP & Cloud Relay Config */}
+                <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/5">
+                  <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center justify-between">
+                    <span>Fikr MCP Connection</span>
                   </label>
-                  <div className="relative group rounded-md border border-white/10 bg-white/[0.04] p-2 transition-colors hover:border-primary/50">
-                    <pre className="font-mono text-[9px] text-foreground/80 overflow-x-auto whitespace-pre">
-{`"fikrpad": {
-  "url": "http://localhost:${mcpPort || 3025}/sse"
-}`}
-                    </pre>
-                    <button 
-                      onClick={() => {
-                        navigator.clipboard.writeText(`"fikrpad": {\n  "url": "http://localhost:${mcpPort || 3025}/sse"\n}`)
-                      }}
-                      className="absolute top-2 right-2 p-1.5 rounded-sm bg-white/10 hover:bg-white/20 text-foreground opacity-0 group-hover:opacity-100 transition-all"
-                      title="Copy to clipboard"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </button>
-                  </div>
-                  <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
-                    Add this to your Claude Desktop or Antigravity MCP config to let AI agents read and write to your FikrPad canvas.
-                  </p>
+
+                  {user ? (
+                    <div className="flex flex-col gap-3">
+                      {/* Premium Banner */}
+                      <div className="relative overflow-hidden rounded-md border border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5 p-3">
+                        <div className="absolute top-0 right-0 p-3 opacity-20">
+                          <Globe className="h-10 w-10 text-primary" />
+                        </div>
+                        <div className="relative z-10 flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] font-bold text-primary tracking-widest uppercase">Fikr Cloud Active</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                              userPlan === 'Pro' ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' :
+                              userPlan === 'Plus' ? 'bg-blue-500/20 text-blue-500 border border-blue-500/30' :
+                              'bg-white/10 text-muted-foreground border border-white/10'
+                            }`}>
+                              {userPlan} Plan
+                            </span>
+                          </div>
+                          <span className="font-mono text-[9px] text-foreground/70 truncate w-[160px]">{user.email}</span>
+                        </div>
+                        <div className="relative z-10 mt-3 pt-2 border-t border-primary/20 flex justify-between items-center">
+                          <span className="font-mono text-[8px] text-primary/70 uppercase">Global Relay Enabled</span>
+                          <button onClick={() => signOut(getFirebaseAuth())} className="font-mono text-[9px] text-red-400 hover:text-red-300 transition-colors">Sign Out</button>
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          const configJson = `"fikrpad-cloud": {
+  "command": "npx",
+  "args": [
+    "-y",
+    "fikrpad-mcp",
+    "https://fikr.one/api/mcp/relay"
+  ],
+  "env": {
+    "MCP_RELAY_KEY": "Bearer ${relayApiKey || '<GENERATING_KEY...>'}"
+  }
+}`;
+                          // @ts-ignore
+                          window.alert("Copy this into your MCP configuration file:\n\n" + configJson);
+                          navigator.clipboard.writeText(`"fikrpad-cloud": {\n  "command": "npx",\n  "args": [\n    "-y",\n    "fikrpad-mcp",\n    "https://fikr.one/api/mcp/relay"\n  ],\n  "env": {\n    "MCP_RELAY_KEY": "Bearer ${relayApiKey || '<GENERATING_KEY...>'}"\n  }\n}`)
+                        }}
+                        className="h-8 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-foreground font-mono text-[9px] rounded-sm transition-all flex items-center justify-center gap-2"
+                      >
+                        <Settings className="h-3 w-3" />
+                        View MCP Configuration
+                      </button>
+                      <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                        Add this to your agent's MCP config. This secure key gives cloud agents access to your FikrPad.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={() => {
+                          const configJson = `"fikrpad": {
+  "command": "npx",
+  "args": [
+    "-y",
+    "fikrpad-mcp",
+    "http://localhost:${mcpPort || 3025}/sse"
+  ]
+}`;
+                          // @ts-ignore
+                          window.alert("Copy this into your MCP configuration file:\n\n" + configJson);
+                          navigator.clipboard.writeText(`"fikrpad": {\n  "command": "npx",\n  "args": [\n    "-y",\n    "fikrpad-mcp",\n    "http://localhost:${mcpPort || 3025}/sse"\n  ]\n}`)
+                        }}
+                        className="h-8 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-foreground font-mono text-[9px] rounded-sm transition-all flex items-center justify-center gap-2"
+                      >
+                        <Settings className="h-3 w-3" />
+                        View MCP Configuration
+                      </button>
+
+                      <div className="flex flex-col gap-2 bg-black/20 p-2 rounded-md border border-white/5">
+                        <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                          Currently only accepting local connections. Sign in to enable Fikr Cloud Relay for external agents.
+                        </p>
+                        {loginError && <p className="font-mono text-[9px] text-red-500">{loginError}</p>}
+                        <button 
+                          onClick={() => {
+                            setLoginError("");
+                            // @ts-ignore
+                            window.fikrpad.openAuth();
+                          }}
+                          className="h-7 mt-1 w-full bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary font-mono text-[9px] rounded-sm transition-all"
+                        >
+                          Login with Fikr.One
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}

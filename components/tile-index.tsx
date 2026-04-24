@@ -132,7 +132,7 @@ export function TileIndex({ blocks, onHighlight, highlightedId, onClose, isOpen,
                       {getIcon(block.contentType)}
                     </div>
                     <span className="font-mono text-[10px] font-bold truncate leading-tight">
-                      {block.text.substring(0, 35) || "Empty note"}
+                      {(block.text || '').substring(0, 35) || "Empty note"}
                     </span>
                   </button>
                 ))}

@@ -1,7 +1,15 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient("fikrpad", process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient("fikrpad");
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MCP_PORT = 3025;
@@ -150,6 +158,12 @@ ipcMain.handle("fikrpad:save-projects", async (_event, data) => {
   return ok;
 });
 ipcMain.handle("fikrpad:get-mcp-port", () => MCP_PORT);
+ipcMain.handle("fikrpad:open-auth", async () => {
+  shell.openExternal("https://www.fikr.one/login?returnUrl=fikrpad://auth/callback");
+});
+ipcMain.handle("fikrpad:execute-tool", async (event, { name, args }) => {
+  return await executeTool(name, args, mainWindow);
+});
 ipcMain.handle("fikrpad:get-intro-seen", () => fs.existsSync(INTRO_FILE));
 ipcMain.handle("fikrpad:set-intro-seen", () => {
   ensureWorkspaceDir();
@@ -448,6 +462,57 @@ async function executeTool(name, args, mainWindow) {
   }
 }
 
+// ─── Direct MCP Execution via IPC ─────────────────────────────────────────────
+ipcMain.handle("fikrpad:execute-mcp", async (event, rpc) => {
+  try {
+    switch (rpc.method) {
+      case "initialize":
+        console.log("[FikrPad] IPC received initialize!");
+        return {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
+          serverInfo: { name: "fikrpad", version: "1.0.0" },
+        };
+
+      case "tools/list":
+        return { tools: MCP_TOOLS };
+
+      case "tools/call": {
+        const { name, arguments: args } = rpc.params || {};
+        return await executeTool(name, args || {}, mainWindow);
+      }
+
+      case "resources/list":
+        return {
+          resources: [
+            { uri: "fikrpad://projects", name: "All Projects", description: "Full workspace dump", mimeType: "application/json" },
+          ],
+        };
+
+      case "resources/read": {
+        if (rpc.params?.uri === "fikrpad://projects") {
+          const workspace = loadProjectsFromDisk() || { projects: [] };
+          const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
+          return { contents: [{ uri: "fikrpad://projects", mimeType: "application/json", text: JSON.stringify(projects, null, 2) }] };
+        } else {
+          throw new Error("Unknown resource URI");
+        }
+      }
+
+      case "notifications/initialized":
+      case "notifications/cancelled":
+      case "notifications/progress":
+        console.log(`[FikrPad] Received MCP notification: ${rpc.method}`, rpc.params || "");
+        return null; // Notifications have no response
+
+      default:
+        throw new Error(`Method not found: ${rpc.method}`);
+    }
+  } catch (err) {
+    throw err; // Will be caught by the React frontend and mapped to a JSON-RPC error
+  }
+});
+
 /** Start the MCP HTTP/SSE server */
 function startMcpServer(mainWindow) {
   const server = http.createServer((req, res) => {
@@ -477,22 +542,25 @@ function startMcpServer(mainWindow) {
       // Send the MCP server info on connect
       const send = (event, data) => res.write(`event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`);
 
-      send("endpoint", `http://localhost:${MCP_PORT}/message?sessionId=${sessionId}`);
+      send("endpoint", `/message?sessionId=${sessionId}`);
       
       req.on("close", () => sseSessions.delete(sessionId));
       return;
     }
 
     // ── JSON-RPC message endpoint ─────────────────────────────────────────────
-    if (req.method === "POST" && url.pathname === "/message") {
-      const sessionId = url.searchParams.get("sessionId");
-      const sseRes = sseSessions.get(sessionId);
+    if (req.method === "POST") {
+      console.log("[FikrPad] POST request to:", req.url);
+      
+      if (url.pathname === "/message") {
+        const sessionId = url.searchParams.get("sessionId");
+        const sseRes = sseSessions.get(sessionId);
 
-      if (!sseRes) {
-        res.writeHead(404, { "Content-Type": "text/plain" });
-        res.end("Session not found");
-        return;
-      }
+        if (!sseRes) {
+          res.writeHead(404, { "Content-Type": "text/plain" });
+          res.end("Session not found");
+          return;
+        }
 
       let body = "";
       req.on("data", (chunk) => (body += chunk));
@@ -571,6 +639,7 @@ function startMcpServer(mainWindow) {
       });
       return;
     }
+  }
 
     // ── Health check ──────────────────────────────────────────────────────────
     if (req.method === "GET" && url.pathname === "/health") {
@@ -641,6 +710,17 @@ app.whenReady().then(() => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  const parsed = new URL(url);
+  if (parsed.hostname === "auth" && parsed.pathname === "/callback") {
+    const token = parsed.searchParams.get("token");
+    if (token && mainWindow) {
+      pushToRenderer(mainWindow, "auth-token", { token });
+    }
+  }
 });
 
 app.on("window-all-closed", () => {

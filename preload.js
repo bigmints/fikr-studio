@@ -31,4 +31,13 @@ contextBridge.exposeInMainWorld("fikrpad", {
 
   /** Get the MCP server port (for displaying in Settings) */
   getMcpPort: () => ipcRenderer.invoke("fikrpad:get-mcp-port"),
+
+  /** Execute a tool directly from the React renderer (e.g. from Cloud Relay) */
+  executeTool: (name, args) => ipcRenderer.invoke("fikrpad:execute-tool", { name, args }),
+
+  /** Execute a raw MCP payload directly */
+  executeMcp: (rpc) => ipcRenderer.invoke("fikrpad:execute-mcp", rpc),
+
+  /** Open Fikr.One SSO login in browser */
+  openAuth: () => ipcRenderer.invoke("fikrpad:open-auth"),
 });

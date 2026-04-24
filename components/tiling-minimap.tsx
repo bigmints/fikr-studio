@@ -43,9 +43,9 @@ export function TilingMinimap({ pages, activePageIdx, onPageClick }: TilingMinim
                   <div className="flex flex-col gap-1.5">
                     {page.map(block => {
                       const config = CONTENT_TYPE_CONFIG[block.contentType]
-                      const title  = block.text.length > 48
-                        ? block.text.slice(0, 48) + "…"
-                        : block.text
+                      const title  = (block.text || '').length > 48
+                        ? (block.text || '').slice(0, 48) + "…"
+                        : (block.text || "Empty note")
                       return (
                         <div key={block.id} className="flex items-start gap-1.5">
                           <div

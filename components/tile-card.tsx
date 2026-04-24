@@ -680,8 +680,8 @@ export const TileCard = memo(function TileCard({
                               return (
                                 <div key={i} className="flex items-start gap-2 overflow-hidden">
                                   <div className="h-1 w-1 rounded-full bg-primary shrink-0 mt-1" />
-                                  <span className="font-mono text-[9px] text-foreground/70 truncate leading-tight">
-                                    {linked ? linked.text.substring(0, 48) + (linked.text.length > 48 ? '…' : '') : `#${id.slice(0, 8)}`}
+                                  <span className="font-mono text-[9px] text-foreground/70 truncate leading-tight" title={linked ? (linked.text || '') : id}>
+                                    {linked ? (linked.text || '').substring(0, 48) + ((linked.text || '').length > 48 ? '…' : '') : `#${id.slice(0, 8)}`}
                                   </span>
                                 </div>
                               )
@@ -721,7 +721,8 @@ export const TileCard = memo(function TileCard({
 
 // Finds bare https?:// URLs in plain text and returns React nodes with
 // clickable <a> links mixed into the surrounding text.
-function linkifyText(text: string): React.ReactNode {
+function linkifyText(text?: string): React.ReactNode {
+  if (!text) return text
   const URL_RE = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g
   const parts: React.ReactNode[] = []
   let last = 0
