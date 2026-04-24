@@ -18,6 +18,7 @@ import {
   EyeOff,
   Save,
   FolderInput,
+  Copy,
 } from "lucide-react"
 import {
   AI_PROVIDER_PRESETS,
@@ -49,6 +50,7 @@ interface ProjectSidebarProps {
   // AI Settings
   aiSettings: AISettings
   onUpdateAISettings: (patch: Partial<AISettings>) => void
+  mcpPort?: number | null
 }
 
 export function ProjectSidebar({
@@ -65,6 +67,7 @@ export function ProjectSidebar({
   onUpdateAISettings,
   openToSettings,
   onSettingsOpened,
+  mcpPort,
 }: ProjectSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
@@ -510,6 +513,32 @@ export function ProjectSidebar({
                 }`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${draft.apiKey || draft.provider === "custom" ? "bg-primary animate-pulse" : "bg-white/30"}`} />
                   {draft.apiKey ? `${currentPreset.label} — API key configured` : draft.provider === "custom" ? "Custom endpoint configured" : "No API key — AI disabled"}
+                </div>
+
+                {/* MCP Server Config */}
+                <div className="flex flex-col gap-2 mt-2">
+                  <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    MCP Server Config
+                  </label>
+                  <div className="relative group rounded-md border border-white/10 bg-white/[0.04] p-2 transition-colors hover:border-primary/50">
+                    <pre className="font-mono text-[9px] text-foreground/80 overflow-x-auto whitespace-pre">
+{`"fikrpad": {
+  "url": "http://localhost:${mcpPort || 3025}/sse"
+}`}
+                    </pre>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(`"fikrpad": {\n  "url": "http://localhost:${mcpPort || 3025}/sse"\n}`)
+                      }}
+                      className="absolute top-2 right-2 p-1.5 rounded-sm bg-white/10 hover:bg-white/20 text-foreground opacity-0 group-hover:opacity-100 transition-all"
+                      title="Copy to clipboard"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                    Add this to your Claude Desktop or Antigravity MCP config to let AI agents read and write to your FikrPad canvas.
+                  </p>
                 </div>
               </motion.div>
             )}

@@ -49,6 +49,7 @@ export default function Page() {
   const [viewMode, setViewMode] = useState<"tiling" | "kanban" | "graph">("tiling")
   const [isCommandKOpen, setIsCommandKOpen] = useState(false)
   const [jumpToSettings, setJumpToSettings] = useState(false)
+  const [mcpPort, setMcpPort] = useState<number | null>(null)
   const [isIntroOpen, setIsIntroOpen] = useState(false)
   const [showHelpTooltip, setShowHelpTooltip] = useState(false)
   const helpTooltipTimer = useRef<NodeJS.Timeout | null>(null)
@@ -197,6 +198,11 @@ export default function Page() {
       setProjects(initialProjects)
       setActiveProjectId(initialActiveId)
       setIsLoaded(true)
+      
+      if (ipc && ipc.getMcpPort) {
+        ipc.getMcpPort().then((port: number) => setMcpPort(port)).catch(console.error)
+      }
+
       if (!introSeen) setIsIntroOpen(true)
     }
 
@@ -896,6 +902,7 @@ export default function Page() {
         onUpdateAISettings={updateSettings}
         openToSettings={jumpToSettings}
         onSettingsOpened={() => setJumpToSettings(false)}
+        mcpPort={mcpPort}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
