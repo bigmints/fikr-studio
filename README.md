@@ -1,14 +1,14 @@
-# nodepad
+# FikrPad
 
 **A design experiment in spatial, AI-augmented thinking.**
 
-[![Watch the intro](https://img.youtube.com/vi/nCLY7rHAjWE/maxresdefault.jpg)](https://www.youtube.com/watch?v=nCLY7rHAjWE)
+Part of the Fikr family. A spatial research tool that reads what you write and enriches it with AI — no prompting, no chat. Just capture your thinking and let the structure emerge. Desktop companion for Fikr Voice Notes.
 
-*[Watch the intro →](https://www.youtube.com/watch?v=nCLY7rHAjWE)*
+*This application is a fork of [Nodepad](https://github.com/mskayyali/nodepad) by Saleh Kayyali, modified and rebranded for the Fikr ecosystem.*
 
 ---
 
-Most AI tools are built around a chat interface: you ask, it answers, you ask again. The interaction is sequential, conversational, and optimised for producing output. nodepad is built around a different premise: that thinking is spatial and associative, and that AI is most useful when it works quietly in the background rather than at the centre of attention.
+Most AI tools are built around a chat interface: you ask, it answers, you ask again. The interaction is sequential, conversational, and optimised for producing output. FikrPad is built around a different premise: that thinking is spatial and associative, and that AI is most useful when it works quietly in the background rather than at the centre of attention.
 
 You add notes. The AI classifies them, finds connections between them, surfaces what you haven't said yet, and occasionally synthesises an emergent insight from the whole canvas. You stay in control of the space. The AI earns its place by being genuinely useful rather than prominent.
 
@@ -26,18 +26,21 @@ Three views: **tiling** (spatial BSP grid), **kanban** (grouped by type), **grap
 
 ## Setup
 
-**Requirements**: a desktop browser and an API key from one of the supported providers.
+**Requirements**: macOS (for the desktop app) or a modern browser, plus an API key from one of the supported providers.
 
 ```bash
-git clone https://github.com/mskayyali/nodepad.git
-cd nodepad
+git clone https://github.com/Bigmints-com/fikrpad.git
+cd fikrpad
 npm install
+
+# Run in development (browser)
 npm run dev
+
+# Build the macOS DMG application
+APPLE_KEYCHAIN_PROFILE="notarytool-profile" APPLE_TEAM_ID="FBG8NKYPUJ" npm run electron:build
 ```
 
-Open [localhost:3000](http://localhost:3000).
-
-**Add your API key**: click the menu icon (top-left) → Settings → choose your provider → paste your key. The key is stored in your browser's `localStorage` and goes directly to the AI provider — it never passes through any server.
+**Add your API key**: click the menu icon (top-left) → Settings → choose your provider → paste your key. The key is stored locally and goes directly to the AI provider.
 
 **Enable web grounding** (optional): toggle "Web grounding" in Settings to let the AI cite real sources for claims, questions, and references. Supported on OpenRouter `:online` models and OpenAI search-preview models.
 
@@ -45,44 +48,24 @@ Open [localhost:3000](http://localhost:3000).
 
 ## Providers & Models
 
-Select provider and model from the sidebar Settings panel. Each provider remembers its key independently — switching providers and back restores your key.
+Select provider and model from the sidebar Settings panel. Each provider remembers its key independently.
 
 ### OpenRouter *(default)*
-Access to all major models through a single key. Create a free account at [openrouter.ai](https://openrouter.ai) — use the free-tier models below with no credits, or add credits for GPT-4o, Claude, and Gemini.
-
-| Model | Notes |
-|---|---|
-| `openai/gpt-4o` | Default. Strong annotation quality, web grounding. |
-| `anthropic/claude-sonnet-4-5` | Strong reasoning, complex research. |
-| `google/gemini-2.5-pro` | Long context, web grounding. |
-| `deepseek/deepseek-chat` | Fast, cost-effective. |
-| `mistralai/mistral-small-3.2` | Lightweight, fast. |
-
-**Free tier** — no credits required, ~200 req/day limit, Nvidia-hosted, no web grounding:
-
-| Model | Notes |
-|---|---|
-| `nvidia/nemotron-3-nano-30b-a3b:free` | Nemotron 30B — fast, reliable. |
-| `nvidia/nemotron-3-super-120b-a12b:free` | Nemotron 120B MoE — higher quality, same speed. |
+Access to all major models through a single key. Create a free account at [openrouter.ai](https://openrouter.ai).
+- `openai/gpt-4o` (Default)
+- `anthropic/claude-sonnet-4-5`
+- `google/gemini-2.5-pro`
+- `deepseek/deepseek-chat`
+- `nvidia/nemotron-3-nano-30b-a3b:free`
 
 ### OpenAI *(direct)*
-Use your OpenAI API key directly. Web grounding via search-preview models.
+Use your OpenAI API key directly.
+- `gpt-4o`
+- `gpt-4o-mini`
+- `o4-mini`
 
-| Model | Notes |
-|---|---|
-| `gpt-4o` | Strong structured output, web grounding. |
-| `gpt-4o-mini` | Fast, capable, web grounding. |
-| `gpt-4.1` | Latest GPT-4, improved instruction following. |
-| `o4-mini` | Fast reasoning model. |
-
-### Z.ai
-GLM models from Zhipu AI. Get a key at [z.ai](https://z.ai/manage-apikey/apikey-list).
-
-| Model | Notes |
-|---|---|
-| `glm-4.7` | Strong reasoning, 200K context. |
-| `glm-5` | Z.ai flagship model. |
-| `glm-5-turbo` | Fast, community-tested. |
+### Custom Local Providers
+FikrPad also supports Custom LLM Providers (e.g. self-hosted models or custom inferencing endpoints). You can configure a Custom Base URL and API key from the settings.
 
 ---
 
@@ -101,35 +84,22 @@ Double-click any note to edit. Click the type label to reclassify manually.
 
 ## Data
 
-Everything lives in your browser. No account, no server, no database.
+Everything lives locally. No account, no server, no database.
 
-- Notes are persisted to `localStorage` under `nodepad-projects`
-- A silent rolling backup is written on every change to `nodepad-backup`
-- Export to `.md` or `.nodepad` (versioned JSON) via `⌘K`
-- Import `.nodepad` files via the sidebar
+- Notes are persisted to `localStorage` under `fikrpad-projects`
+- A silent rolling backup is written on every change to `fikrpad-backup`
+- Export to `.md` or `.fikrpad` (versioned JSON) via `⌘K`
+- Import `.fikrpad` files via the sidebar
 
 ---
 
 ## Tech
 
-Next.js · React 19 · TypeScript · Tailwind CSS v4 · D3.js · Framer Motion
-
----
-
-## Contributing
-
-Pull requests welcome. Three PRs have already shaped the project:
-
-- **PR #1** by [@matwate](https://github.com/matwate) — OpenAI provider support, multi-provider architecture
-- **PR #2** by [@desireco](https://github.com/desireco) — Z.ai provider, robust JSON parsing for truncated responses
-- **PR #23** by [@aayushprsingh](https://github.com/aayushprsingh) — Custom base URL for local/self-hosted models, IPv6 SSRF guard fix
-
----
-
-A design experiment by [Saleh Kayyali](http://mskayyali.com).
+Next.js · React 19 · TypeScript · Tailwind CSS v4 · Electron · D3.js · Framer Motion
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the [MIT License](LICENSE).
+Based on the open-source project Nodepad by [Saleh Kayyali](https://github.com/mskayyali).
