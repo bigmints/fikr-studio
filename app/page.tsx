@@ -81,7 +81,12 @@ export default function Page() {
   // ── Intro modal ──────────────────────────────────────────────────────────
   const handleIntroClose = useCallback(() => {
     setIsIntroOpen(false)
-    localStorage.setItem("nodepad-intro-seen", "true")
+    // Persist intro-seen via IPC in Electron, fall back to localStorage in browser
+    if (typeof window !== "undefined" && (window as any).fikrpad) {
+      ;(window as any).fikrpad.setIntroSeen()
+    } else {
+      localStorage.setItem("nodepad-intro-seen", "true")
+    }
     // Show the help tooltip for 6 seconds pointing to the ? button
     setShowHelpTooltip(true)
     if (helpTooltipTimer.current) clearTimeout(helpTooltipTimer.current)
@@ -129,88 +134,127 @@ export default function Page() {
   }, [activeProjectId])
 
   // 1. Persistence: Initial Load & Migration
+  //    In Electron: reads from ~/.fikrpad/workspace.json via IPC bridge
+  //    In browser:  falls back to localStorage (dev mode)
   useEffect(() => {
-    const savedProjects = localStorage.getItem("nodepad-projects")
-    const savedActiveId = localStorage.getItem("nodepad-active-project")
-    
-    const oldBlocks = localStorage.getItem("nodepad-blocks")
-    const oldCollapsed = localStorage.getItem("nodepad-collapsed")
+    const ipc = typeof window !== "undefined" && (window as any).fikrpad
 
-    let initialProjects: Project[] = []
-    let initialActiveId = ""
+    const init = async () => {
+      let initialProjects: Project[] = []
+      let initialActiveId = ""
+      let introSeen = false
 
-    const backupProjects = localStorage.getItem("nodepad-backup")
-
-    if (savedProjects) {
-      try {
-        initialProjects = JSON.parse(savedProjects)
-        initialActiveId = savedActiveId || initialProjects[0]?.id || ""
-      } catch (e) {
-        console.error("Failed to parse saved projects — trying backup", e)
-        // Fall through to backup attempt below
-      }
-    }
-
-    // Fallback: restore from silent backup if primary key was absent or corrupt
-    if (initialProjects.length === 0 && backupProjects) {
-      try {
-        initialProjects = JSON.parse(backupProjects)
-        initialActiveId = initialProjects[0]?.id || ""
-        console.info("Restored from nodepad-backup")
-      } catch (e) {
-        console.error("Backup restore also failed", e)
-      }
-    }
-
-    if (initialProjects.length === 0 && oldBlocks) {
-      try {
-        const blks = JSON.parse(oldBlocks)
-        const collapsed = oldCollapsed ? JSON.parse(oldCollapsed) : []
-        const defaultProject: Project = {
-          id: "default",
-          name: "Default Space",
-          blocks: blks,
-          collapsedIds: collapsed,
-          ghostNotes: [],
+      if (ipc) {
+        // ── Electron path ──────────────────────────────────────────────────────
+        const diskData = await ipc.loadProjects()
+        introSeen = await ipc.getIntroSeen()
+        if (diskData && diskData.projects && diskData.projects.length > 0) {
+          initialProjects = diskData.projects
+          initialActiveId = diskData.activeProjectId || diskData.projects[0]?.id || ""
         }
-        initialProjects = [defaultProject]
-        initialActiveId = "default"
-      } catch (e) {
-        console.error("Migration failed", e)
+      } else {
+        // ── Browser / localStorage fallback ───────────────────────────────────
+        const savedProjects = localStorage.getItem("nodepad-projects")
+        const savedActiveId = localStorage.getItem("nodepad-active-project")
+        const oldBlocks = localStorage.getItem("nodepad-blocks")
+        const oldCollapsed = localStorage.getItem("nodepad-collapsed")
+        const backupProjects = localStorage.getItem("nodepad-backup")
+        introSeen = !!localStorage.getItem("nodepad-intro-seen")
+
+        if (savedProjects) {
+          try {
+            initialProjects = JSON.parse(savedProjects)
+            initialActiveId = savedActiveId || initialProjects[0]?.id || ""
+          } catch (e) {
+            console.error("Failed to parse saved projects — trying backup", e)
+          }
+        }
+        if (initialProjects.length === 0 && backupProjects) {
+          try {
+            initialProjects = JSON.parse(backupProjects)
+            initialActiveId = initialProjects[0]?.id || ""
+          } catch (e) {
+            console.error("Backup restore also failed", e)
+          }
+        }
+        if (initialProjects.length === 0 && oldBlocks) {
+          try {
+            const blks = JSON.parse(oldBlocks)
+            const collapsed = oldCollapsed ? JSON.parse(oldCollapsed) : []
+            initialProjects = [{ id: "default", name: "Default Space", blocks: blks, collapsedIds: collapsed, ghostNotes: [] }]
+            initialActiveId = "default"
+          } catch (e) {
+            console.error("Migration failed", e)
+          }
+        }
       }
+
+      if (initialProjects.length === 0) {
+        initialProjects = INITIAL_PROJECTS
+        initialActiveId = INITIAL_PROJECTS[0].id
+      }
+
+      setProjects(initialProjects)
+      setActiveProjectId(initialActiveId)
+      setIsLoaded(true)
+      if (!introSeen) setIsIntroOpen(true)
     }
 
-    if (initialProjects.length === 0) {
-      initialProjects = INITIAL_PROJECTS
-      initialActiveId = INITIAL_PROJECTS[0].id
-    }
-
-    setProjects(initialProjects)
-    setActiveProjectId(initialActiveId)
-    setIsLoaded(true)
-
-    // Show intro modal on first visit
-    if (!localStorage.getItem("nodepad-intro-seen")) {
-      setIsIntroOpen(true)
-    }
-
+    init()
   }, [])
 
   // 2. Persistence: Save on Change
+  //    In Electron: saves to ~/.fikrpad/workspace.json via IPC
+  //    In browser:  saves to localStorage
   useEffect(() => {
     if (!isLoaded) return
-    localStorage.setItem("nodepad-projects", JSON.stringify(projects))
-    localStorage.setItem("nodepad-active-project", activeProjectId)
+    const ipc = typeof window !== "undefined" && (window as any).fikrpad
+    if (ipc) {
+      ipc.saveProjects({ projects, activeProjectId })
+    } else {
+      localStorage.setItem("nodepad-projects", JSON.stringify(projects))
+      localStorage.setItem("nodepad-active-project", activeProjectId)
+      try {
+        localStorage.setItem("nodepad-backup", JSON.stringify(projects))
+      } catch { /* quota exceeded — skip silently */ }
+    }
   }, [projects, activeProjectId, isLoaded])
 
-  // 3. Silent rolling backup — written on every change, separate key.
-  //    If nodepad-projects is ever wiped, the load effect can fall back to this.
+  // 3. MCP Live Events — listen for notes/projects pushed by external AI agents
   useEffect(() => {
-    if (!isLoaded || projects.length === 0) return
-    try {
-      localStorage.setItem("nodepad-backup", JSON.stringify(projects))
-    } catch { /* quota exceeded — skip silently */ }
-  }, [projects, isLoaded])
+    const ipc = typeof window !== "undefined" && (window as any).fikrpad
+    if (!ipc) return
+
+    const cleanup = ipc.onExternalEvent((event: { type: string; payload: any }) => {
+      if (event.type === "note-added") {
+        const { projectId, note } = event.payload
+        setProjects(prev => prev.map(p =>
+          p.id === projectId
+            ? { ...p, blocks: [...p.blocks, note] }
+            : p
+        ))
+      } else if (event.type === "note-deleted") {
+        const { projectId, noteId } = event.payload
+        setProjects(prev => prev.map(p =>
+          p.id === projectId
+            ? { ...p, blocks: p.blocks.filter(b => b.id !== noteId) }
+            : p
+        ))
+      } else if (event.type === "note-updated") {
+        const { projectId, note } = event.payload
+        setProjects(prev => prev.map(p =>
+          p.id === projectId
+            ? { ...p, blocks: p.blocks.map(b => b.id === note.id ? { ...b, text: note.text, isEnriching: true } : b) }
+            : p
+        ))
+      } else if (event.type === "project-created") {
+        const { project } = event.payload
+        setProjects(prev => [...prev, project])
+      }
+    })
+
+    return cleanup
+  }, [])
 
   // Hidden file input for .nodepad import — triggered from sidebar or ⌘K
   const importInputRef = useRef<HTMLInputElement>(null)
