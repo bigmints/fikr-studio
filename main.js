@@ -158,8 +158,8 @@ ipcMain.handle("fikrpad:set-intro-seen", () => {
 });
 
 // ─── MCP Server ───────────────────────────────────────────────────────────────
-/** Active SSE clients (for pushing events to connected MCP clients) */
-const sseClients = new Set();
+/** Active SSE clients mapped by sessionId */
+const sseSessions = new Map();
 
 /** The tool definitions advertised to MCP clients */
 const MCP_TOOLS = [
@@ -471,17 +471,29 @@ function startMcpServer(mainWindow) {
         Connection: "keep-alive",
       });
 
-      // Send the MCP server info on connect
-      const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      const sessionId = Math.random().toString(36).substring(2, 15);
+      sseSessions.set(sessionId, res);
 
-      send("endpoint", { uri: `http://localhost:${MCP_PORT}/message` });
-      sseClients.add(res);
-      req.on("close", () => sseClients.delete(res));
+      // Send the MCP server info on connect
+      const send = (event, data) => res.write(`event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`);
+
+      send("endpoint", `http://localhost:${MCP_PORT}/message?sessionId=${sessionId}`);
+      
+      req.on("close", () => sseSessions.delete(sessionId));
       return;
     }
 
     // ── JSON-RPC message endpoint ─────────────────────────────────────────────
     if (req.method === "POST" && url.pathname === "/message") {
+      const sessionId = url.searchParams.get("sessionId");
+      const sseRes = sseSessions.get(sessionId);
+
+      if (!sseRes) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Session not found");
+        return;
+      }
+
       let body = "";
       req.on("data", (chunk) => (body += chunk));
       req.on("end", () => {
@@ -489,24 +501,26 @@ function startMcpServer(mainWindow) {
         try {
           rpc = JSON.parse(body);
         } catch {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Invalid JSON" }));
+          res.writeHead(400, { "Content-Type": "text/plain" });
+          res.end("Invalid JSON");
           return;
         }
 
-        const respond = (result) => {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result }));
+        // Standard MCP SSE: POST returns 202 Accepted, response goes via SSE
+        res.writeHead(202, { "Content-Type": "text/plain" });
+        res.end("Accepted");
+
+        const respondSse = (result) => {
+          sseRes.write(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result })}\n\n`);
         };
 
-        const respondError = (code, message) => {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, error: { code, message } }));
+        const respondErrorSse = (code, message) => {
+          sseRes.write(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: rpc.id, error: { code, message } })}\n\n`);
         };
 
         switch (rpc.method) {
           case "initialize":
-            respond({
+            respondSse({
               protocolVersion: "2024-11-05",
               capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
               serverInfo: { name: "fikrpad", version: "1.0.0" },
@@ -514,20 +528,19 @@ function startMcpServer(mainWindow) {
             break;
 
           case "tools/list":
-            respond({ tools: MCP_TOOLS });
+            respondSse({ tools: MCP_TOOLS });
             break;
 
           case "tools/call": {
             const { name, arguments: args } = rpc.params;
-            // executeTool is async (embeddings) — resolve before responding
             executeTool(name, args || {}, mainWindow)
-              .then(result => respond(result))
-              .catch(err => respondError(-32603, err.message || "Internal error"));
-            return; // response sent inside promise
+              .then(result => respondSse(result))
+              .catch(err => respondErrorSse(-32603, err.message || "Internal error"));
+            return;
           }
 
           case "resources/list":
-            respond({
+            respondSse({
               resources: [
                 { uri: "fikrpad://projects", name: "All Projects", description: "Full workspace dump", mimeType: "application/json" },
               ],
@@ -538,20 +551,22 @@ function startMcpServer(mainWindow) {
             if (rpc.params?.uri === "fikrpad://projects") {
               const workspace = loadProjectsFromDisk() || { projects: [] };
               const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
-              respond({ contents: [{ uri: "fikrpad://projects", mimeType: "application/json", text: JSON.stringify(projects, null, 2) }] });
+              respondSse({ contents: [{ uri: "fikrpad://projects", mimeType: "application/json", text: JSON.stringify(projects, null, 2) }] });
             } else {
-              respondError(-32602, "Unknown resource URI");
+              respondErrorSse(-32602, "Unknown resource URI");
             }
             break;
           }
 
           case "notifications/initialized":
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result: {} }));
+            // Notifications don't require a response
             break;
 
           default:
-            respondError(-32601, `Method not found: ${rpc.method}`);
+            // Could be a notification like ping, only respond if there is an ID
+            if (rpc.id !== undefined) {
+              respondErrorSse(-32601, `Method not found: ${rpc.method}`);
+            }
         }
       });
       return;
