@@ -8,6 +8,104 @@ const MCP_PORT = 3025;
 const WORKSPACE_DIR = path.join(app.getPath("home"), ".fikrpad");
 const WORKSPACE_FILE = path.join(WORKSPACE_DIR, "workspace.json");
 const INTRO_FILE = path.join(WORKSPACE_DIR, "intro-seen");
+const MODEL_CACHE_DIR = path.join(WORKSPACE_DIR, "models");
+const EMBED_MODEL = "Xenova/all-MiniLM-L6-v2";
+
+// ─── Embedding pipeline ───────────────────────────────────────────────────────
+/** Resolves to the pipeline once the model is loaded */
+let pipelineReady = null;
+
+/**
+ * Load the sentence embedding model.
+ * Model weights (~25MB) are cached in ~/.fikrpad/models/ so subsequent
+ * launches load instantly from disk.
+ */
+function loadEmbeddingModel() {
+  // Dynamic import — @xenova/transformers is ESM-only inside its pipeline helper
+  pipelineReady = (async () => {
+    try {
+      ensureWorkspaceDir();
+      if (!fs.existsSync(MODEL_CACHE_DIR)) fs.mkdirSync(MODEL_CACHE_DIR, { recursive: true });
+
+      const { pipeline, env } = await import("@xenova/transformers");
+      env.cacheDir = MODEL_CACHE_DIR;
+      env.allowLocalModels = true;
+
+      const extractor = await pipeline("feature-extraction", EMBED_MODEL, {
+        quantized: true,   // use INT8 quantized weights (~6MB instead of 25MB)
+      });
+      console.log("[FikrPad] Embedding model ready:", EMBED_MODEL);
+      return extractor;
+    } catch (e) {
+      console.error("[FikrPad] Failed to load embedding model:", e);
+      return null;
+    }
+  })();
+  return pipelineReady;
+}
+
+/** Generate a 384-dim float32 embedding for a text string. Returns null on failure. */
+async function embedText(text) {
+  try {
+    const extractor = await pipelineReady;
+    if (!extractor) return null;
+    const output = await extractor(text, { pooling: "mean", normalize: true });
+    // output.data is a Float32Array — convert to plain Array for JSON serialisation
+    return Array.from(output.data);
+  } catch (e) {
+    console.error("[FikrPad] Embedding failed:", e.message);
+    return null;
+  }
+}
+
+/** Cosine similarity between two equal-length float arrays */
+function cosineSimilarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot   += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom === 0 ? 0 : dot / denom;
+}
+
+/**
+ * Background embedding queue.
+ * Re-embeds any note in the workspace that is missing an embedding.
+ * Called after every save so new notes created by the React app get embedded too.
+ */
+let embedQueueRunning = false;
+async function runEmbedQueue() {
+  if (embedQueueRunning) return;
+  embedQueueRunning = true;
+  try {
+    const workspace = loadProjectsFromDisk();
+    if (!workspace) return;
+    const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
+    let dirty = false;
+
+    for (const proj of projects) {
+      for (const block of proj.blocks || []) {
+        if (!block.embedding && block.text) {
+          const embedding = await embedText(block.text);
+          if (embedding) {
+            block.embedding = embedding;
+            dirty = true;
+          }
+        }
+      }
+    }
+
+    if (dirty) {
+      saveProjectsToDisk(Array.isArray(workspace) ? projects : { ...workspace, projects });
+      console.log("[FikrPad] Embedding queue flushed — workspace updated");
+    }
+  } finally {
+    embedQueueRunning = false;
+  }
+}
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 function ensureWorkspaceDir() {
@@ -45,7 +143,12 @@ function generateId() {
 
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 ipcMain.handle("fikrpad:load-projects", () => loadProjectsFromDisk());
-ipcMain.handle("fikrpad:save-projects", (_event, data) => saveProjectsToDisk(data));
+ipcMain.handle("fikrpad:save-projects", async (_event, data) => {
+  const ok = saveProjectsToDisk(data);
+  // Kick off background embedding after every save (non-blocking)
+  runEmbedQueue().catch(console.error);
+  return ok;
+});
 ipcMain.handle("fikrpad:get-mcp-port", () => MCP_PORT);
 ipcMain.handle("fikrpad:get-intro-seen", () => fs.existsSync(INTRO_FILE));
 ipcMain.handle("fikrpad:set-intro-seen", () => {
@@ -160,7 +263,7 @@ function pushToRenderer(mainWindow, type, payload) {
 }
 
 /** Execute an MCP tool call and return the result */
-function executeTool(name, args, mainWindow) {
+async function executeTool(name, args, mainWindow) {
   const workspace = loadProjectsFromDisk() || { projects: [], activeProjectId: "" };
   // Support both the new { projects, activeProjectId } shape and a legacy raw array
   const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
@@ -201,23 +304,57 @@ function executeTool(name, args, mainWindow) {
     }
 
     case "search_notes": {
-      const query = (args.query || "").toLowerCase();
+      const query = args.query || "";
       const limit = args.limit || 10;
       const searchIn = args.project_id ? [getProject(args.project_id)].filter(Boolean) : projects;
-      const results = [];
-      for (const proj of searchIn) {
-        for (const b of proj.blocks || []) {
-          const haystack = `${b.text} ${b.annotation || ""} ${b.category || ""}`.toLowerCase();
-          if (haystack.includes(query)) {
-            results.push({ project: proj.name, project_id: proj.id, id: b.id, text: b.text, type: b.contentType, annotation: b.annotation });
-            if (results.length >= limit) break;
+
+      // Try semantic (vector) search first
+      const queryEmbedding = await embedText(query);
+
+      if (queryEmbedding) {
+        // ── Semantic search: rank by cosine similarity ───────────────────────
+        const scored = [];
+        for (const proj of searchIn) {
+          for (const b of proj.blocks || []) {
+            if (!b.text) continue;
+            const sim = b.embedding
+              ? cosineSimilarity(queryEmbedding, b.embedding)
+              : 0; // not yet embedded — will be 0, still included with text fallback
+            scored.push({
+              score: sim,
+              project: proj.name,
+              project_id: proj.id,
+              id: b.id,
+              text: b.text,
+              type: b.contentType,
+              annotation: b.annotation,
+            });
           }
         }
-        if (results.length >= limit) break;
+        // Sort by similarity descending, take top-k with score > 0.2
+        const results = scored
+          .sort((a, b) => b.score - a.score)
+          .slice(0, limit)
+          .filter(r => r.score > 0.2)
+          .map(({ score, ...rest }) => ({ ...rest, similarity: Math.round(score * 100) / 100 }));
+
+        return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+      } else {
+        // ── Fallback: keyword search (model not loaded yet) ─────────────────
+        const q = query.toLowerCase();
+        const results = [];
+        for (const proj of searchIn) {
+          for (const b of proj.blocks || []) {
+            const haystack = `${b.text} ${b.annotation || ""} ${b.category || ""}`.toLowerCase();
+            if (haystack.includes(q)) {
+              results.push({ project: proj.name, project_id: proj.id, id: b.id, text: b.text, type: b.contentType, annotation: b.annotation });
+              if (results.length >= limit) break;
+            }
+          }
+          if (results.length >= limit) break;
+        }
+        return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
       }
-      return {
-        content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
-      };
     }
 
     case "create_note": {
@@ -231,6 +368,9 @@ function executeTool(name, args, mainWindow) {
         isEnriching: true,
         fromMcp: true,
       };
+      // Generate embedding synchronously before saving (MCP caller already waits)
+      const embedding = await embedText(args.text);
+      if (embedding) newNote.embedding = embedding;
       proj.blocks = [...(proj.blocks || []), newNote];
       save();
       // Push live event to React canvas
@@ -276,6 +416,9 @@ function executeTool(name, args, mainWindow) {
       if (!note) return { content: [{ type: "text", text: `Note ${args.note_id} not found` }], isError: true };
       note.text = args.new_text;
       note.isEnriching = true;
+      // Re-embed on edit
+      const updatedEmbedding = await embedText(args.new_text);
+      if (updatedEmbedding) note.embedding = updatedEmbedding;
       save();
       pushToRenderer(mainWindow, "note-updated", { projectId: proj.id, note });
       return { content: [{ type: "text", text: `Note ${args.note_id} updated` }] };
@@ -366,9 +509,11 @@ function startMcpServer(mainWindow) {
 
           case "tools/call": {
             const { name, arguments: args } = rpc.params;
-            const result = executeTool(name, args || {}, mainWindow);
-            respond(result);
-            break;
+            // executeTool is async (embeddings) — resolve before responding
+            executeTool(name, args || {}, mainWindow)
+              .then(result => respond(result))
+              .catch(err => respondError(-32603, err.message || "Internal error"));
+            return; // response sent inside promise
           }
 
           case "resources/list":
@@ -460,6 +605,13 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
   mcpServer = startMcpServer(mainWindow);
+
+  // Start loading the embedding model in the background immediately.
+  // It resolves into `pipelineReady` so all tools can await it without blocking startup.
+  loadEmbeddingModel().then(() => {
+    // Once the model is ready, embed any notes that were saved before the model loaded
+    runEmbedQueue().catch(console.error);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
