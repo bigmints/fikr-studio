@@ -4,16 +4,22 @@
   "directories": {
     "output": "dist"
   },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "Bigmints-com",
+      "repo": "fikrpad"
+    }
+  ],
   "files": [
     "out/**/*",
     "main.js",
     "preload.js",
-    "package.json",
-    "!node_modules/**/*"
+    "package.json"
   ],
   "mac": {
     "category": "public.app-category.productivity",
-    "target": ["dmg"],
+    "target": ["dmg", "zip"],
     "hardenedRuntime": true,
     "identity": "Pretheesh Thomas (FBG8NKYPUJ)"
   },

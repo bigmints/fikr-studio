@@ -1,83 +1,96 @@
-"use client"
+"use client";
 
-import { AnimatePresence, motion } from "framer-motion"
-import { Check, Sparkles, X } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion";
+import { Plus, Sparkles, X } from "lucide-react";
 
 export interface GhostNote {
-  id: string
-  text: string
-  category: string
-  isGenerating: boolean
+  id: string;
+  text: string;
+  category: string;
+  isGenerating: boolean;
 }
 
 interface GhostPanelProps {
-  ghostNotes: GhostNote[]
-  isOpen: boolean
-  onClose: () => void
-  onClaim: (id: string) => void
-  onDismiss: (id: string) => void
+  ghostNotes: GhostNote[];
+  isOpen: boolean;
+  onClose: () => void;
+  onClaim: (id: string) => void;
+  onDismiss: (id: string) => void;
 }
 
-export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: GhostPanelProps) {
+const panelTransition = { duration: 0.25, ease: [0.25, 0.1, 0.25, 1.0] };
+
+export function GhostPanel({
+  ghostNotes,
+  isOpen,
+  onClose,
+  onClaim,
+  onDismiss,
+}: GhostPanelProps) {
   return (
-    <div
+    <motion.div
       style={{
-        width: isOpen ? 272 : 0,
-        opacity: isOpen ? 1 : 0,
-        visibility: isOpen ? "visible" : "hidden",
+        width: isOpen ? 320 : 0,
       }}
-      className="flex flex-col h-full bg-black/20 backdrop-blur-3xl border-l border-border shrink-0 overflow-hidden relative z-50 transition-all duration-200 ease-in-out"
+      animate={{
+        opacity: isOpen ? 1 : 0,
+        width: isOpen ? 320 : 0,
+      }}
+      transition={panelTransition}
+      className="flex flex-col h-full bg-card/60 backdrop-blur-2xl border-l-0 shrink-0 overflow-hidden relative z-50"
     >
-      <div className="w-[272px] flex flex-col h-full">
+      <div className="w-[320px] flex flex-col h-full">
         {/* Header */}
-        <div className="flex h-10 items-center justify-between border-b border-border bg-card/5 px-3 py-1.5 shrink-0">
+        <div className="flex h-11 items-center justify-between border-b-0 px-4 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center h-5 w-5 bg-primary/10 rounded-sm">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <div className="flex items-center justify-center h-6 w-6 bg-primary/5 rounded-md">
+              <Sparkles className="h-3.5 w-3.5 text-primary/70" />
             </div>
-            <h3 className="font-mono text-xs font-bold uppercase tracking-tight text-foreground/80 select-none">
-              Synthesis
+            <h3 className="text-sm font-semibold text-foreground/90 select-none">
+              Insights
             </h3>
             {ghostNotes.length > 0 && (
-              <span className="font-mono text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-sm font-bold tabular-nums">
+              <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[11px] font-semibold tabular-nums">
                 {ghostNotes.length}
               </span>
             )}
           </div>
           <button
             onClick={onClose}
-            className="p-1 px-1.5 hover:bg-white/5 rounded-sm transition-colors text-muted-foreground/30 hover:text-white"
+            className="p-1.5 hover:bg-foreground/5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground/70"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Note list */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar py-3 px-3 space-y-3">
+        <div className="flex-1 overflow-y-auto custom-scrollbar py-4 px-4 space-y-3">
           {ghostNotes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 gap-3 opacity-25">
-              <Sparkles className="h-5 w-5" />
-              <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-center leading-relaxed">
-                Emergent theses<br />will appear here
+            <div className="flex flex-col items-center justify-center h-40 gap-3">
+              <Sparkles className="h-8 w-8 text-muted-foreground/30" />
+              <p className="text-xs text-muted-foreground/60 leading-relaxed text-center">
+                Emergent insights will appear here
+                <br />
+                as you write
               </p>
             </div>
           ) : (
             <AnimatePresence initial={false}>
-              {ghostNotes.map(note => (
+              {ghostNotes.map((note) => (
                 <motion.div
                   key={note.id}
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: 20, transition: { duration: 0.15 } }}
-                  transition={{ duration: 0.2 }}
-                  className="rounded-md border border-primary/20 bg-primary/5 p-3 flex flex-col gap-3"
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 16, scale: 0.98 }}
+                  transition={panelTransition}
+                  className="bg-slate-900/40 border-0 rounded-xl p-4 flex flex-col gap-3"
                 >
                   {/* Row: sparkles + category + dismiss */}
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Sparkles className="h-3 w-3 text-primary/50 shrink-0" />
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                       {note.category && !note.isGenerating && (
-                        <span className="font-mono text-[8px] uppercase tracking-widest text-muted-foreground/50">
+                        <span className="text-[10px] font-medium text-muted-foreground/50">
                           {note.category}
                         </span>
                       )}
@@ -85,7 +98,7 @@ export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: 
                     {!note.isGenerating && (
                       <button
                         onClick={() => onDismiss(note.id)}
-                        className="h-5 w-5 flex items-center justify-center rounded-sm text-muted-foreground/25 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-foreground/5 transition-colors"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -94,18 +107,14 @@ export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: 
 
                   {/* Text / loading */}
                   {note.isGenerating ? (
-                    <div className="flex items-center gap-2.5 py-1">
-                      <div className="flex space-x-1">
-                        <div className="h-1 w-1 animate-bounce rounded-full bg-primary/40 [animation-delay:-0.3s]" />
-                        <div className="h-1 w-1 animate-bounce rounded-full bg-primary/40 [animation-delay:-0.15s]" />
-                        <div className="h-1 w-1 animate-bounce rounded-full bg-primary/40" />
-                      </div>
-                      <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40">
-                        Synthesizing...
+                    <div className="flex items-center gap-3 py-1">
+                      <div className="h-3 w-16 rounded-md bg-muted/50 animate-pulse shrink-0" />
+                      <p className="text-xs text-muted-foreground/50">
+                        Generating insight...
                       </p>
                     </div>
                   ) : (
-                    <p className="text-[13px] font-medium leading-relaxed text-foreground/75">
+                    <p className="text-[14px] font-normal leading-relaxed text-foreground/85">
                       {note.text}
                     </p>
                   )}
@@ -114,9 +123,9 @@ export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: 
                   {!note.isGenerating && (
                     <button
                       onClick={() => onClaim(note.id)}
-                      className="flex items-center gap-1.5 w-full justify-center rounded-sm bg-primary/15 hover:bg-primary/25 px-2.5 py-1.5 font-mono text-[9px] font-black uppercase tracking-wider text-primary transition-colors"
+                      className="flex items-center gap-1.5 w-full justify-center rounded-lg bg-primary/8 hover:bg-primary/12 px-4 py-2 text-xs font-medium text-primary transition-colors"
                     >
-                      <Check className="h-3 w-3 stroke-[3px]" />
+                      <Plus className="h-3.5 w-3.5" />
                       Add to canvas
                     </button>
                   )}
@@ -127,12 +136,12 @@ export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: 
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border/30 px-3 py-2 shrink-0">
-          <p className="font-mono text-[8px] text-muted-foreground/20 uppercase tracking-[0.15em] text-center">
-            Generated from your writing patterns
+        <div className="border-t-0 px-3 py-2.5 shrink-0">
+          <p className="text-[10px] text-muted-foreground/30 text-center">
+            Emergent from your patterns
           </p>
         </div>
       </div>
-    </div>
-  )
+    </motion.div>
+  );
 }

@@ -1,57 +1,33 @@
-"use client"
+"use client";
 
-import React, { useMemo, useRef, useEffect, useState, useCallback } from "react"
-import { TileCard, type TextBlock } from "@/components/tile-card"
-import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types"
-import { getRelatedIds, useModKey } from "@/lib/utils"
-import { TilingMinimap } from "./tiling-minimap"
-
-/** Number of tiles per BSP page */
-const PAGE_SIZE = 7
-
-// Pure BSP helpers — defined outside the component so they are never recreated
-function getWeight(n: BSPNode): number {
-  if (n.type === 'leaf') return 1
-  return getWeight(n.left!) + getWeight(n.right!)
-}
-
-function buildPageTree(pageBlocks: TextBlock[], depth: number = 0): BSPNode {
-  if (pageBlocks.length === 1) {
-    return { id: pageBlocks[0].id, type: 'leaf', blockId: pageBlocks[0].id }
-  }
-  const mid = Math.floor(pageBlocks.length / 2)
-  return {
-    id: `split-${depth}-${pageBlocks[0].id}`,
-    type: 'split',
-    direction: depth % 2 === 0 ? 'v' : 'h',
-    left: buildPageTree(pageBlocks.slice(0, mid), depth + 1),
-    right: buildPageTree(pageBlocks.slice(mid), depth + 1)
-  }
-}
-
-interface BSPNode {
-  id: string
-  type: 'split' | 'leaf'
-  direction?: 'h' | 'v'
-  left?: BSPNode
-  right?: BSPNode
-  blockId?: string
-}
+import React, {
+  useMemo,
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
+import { TileCard, type TextBlock } from "@/components/tile-card";
+import { getRelatedIds, useModKey } from "@/lib/utils";
+import { TilingMinimap } from "./tiling-minimap";
 
 interface TilingAreaProps {
-  blocks: TextBlock[]
-  collapsedIds: Set<string>
-  onDelete: (id: string) => void
-  onEdit: (id: string, newText: string) => void
-  onEditAnnotation: (id: string, newAnnotation: string) => void
-  onReEnrich: (id: string, newCategory?: string) => void
-  onChangeType: (id: string, newType: import("@/lib/content-types").ContentType) => void
-  onToggleCollapse: (id: string) => void
-  onTogglePin: (id: string) => void
-  onToggleSubTask: (id: string, subTaskId: string) => void
-  onDeleteSubTask: (id: string, subTaskId: string) => void
-  highlightedBlockId?: string | null
-  onHighlight: (id: string | null) => void
+  blocks: TextBlock[];
+  collapsedIds: Set<string>;
+  onDelete: (id: string) => void;
+  onEdit: (id: string, newText: string) => void;
+  onEditAnnotation: (id: string, newAnnotation: string) => void;
+  onReEnrich: (id: string, newCategory?: string) => void;
+  onChangeType: (
+    id: string,
+    newType: import("@/lib/content-types").ContentType,
+  ) => void;
+  onToggleCollapse: (id: string) => void;
+  onTogglePin: (id: string) => void;
+  onToggleSubTask: (id: string, subTaskId: string) => void;
+  onDeleteSubTask: (id: string, subTaskId: string) => void;
+  highlightedBlockId?: string | null;
+  onHighlight: (id: string | null) => void;
 }
 
 export function TilingArea({
@@ -69,274 +45,217 @@ export function TilingArea({
   highlightedBlockId,
   onHighlight,
 }: TilingAreaProps) {
-  const mod = useModKey()
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const [activePageIdx, setActivePageIdx] = useState(0)
-  const [hoveredConnectionId, setHoveredConnectionId] = useState<string | null>(null)
-  const [lockedConnectionId, setLockedConnectionId] = useState<string | null>(null)
+  const mod = useModKey();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [hoveredConnectionId, setHoveredConnectionId] = useState<string | null>(
+    null,
+  );
+  const [lockedConnectionId, setLockedConnectionId] = useState<string | null>(
+    null,
+  );
 
-  const activeConnectionId = lockedConnectionId ?? hoveredConnectionId
+  const activeConnectionId = lockedConnectionId ?? hoveredConnectionId;
 
   const relatedIds = useMemo<Set<string>>(
-    () => activeConnectionId ? getRelatedIds(activeConnectionId, blocks) : new Set(),
-    [activeConnectionId, blocks]
-  )
+    () =>
+      activeConnectionId
+        ? getRelatedIds(activeConnectionId, blocks)
+        : new Set(),
+    [activeConnectionId, blocks],
+  );
 
   const handleConnectionHover = useCallback((id: string | null) => {
-    setHoveredConnectionId(id)
-  }, [])
+    setHoveredConnectionId(id);
+  }, []);
 
   const handleConnectionLock = useCallback((id: string) => {
-    setLockedConnectionId(prev => prev === id ? null : id)
-  }, [])
+    setLockedConnectionId((prev) => (prev === id ? null : id));
+  }, []);
 
-  // Clear lock when locked block's connections change (enrichment can change influencedBy)
+  // Clear lock when locked block's connections change
   useEffect(() => {
-    if (!lockedConnectionId) return
-    const lockedBlock = blocks.find(b => b.id === lockedConnectionId)
+    if (!lockedConnectionId) return;
+    const lockedBlock = blocks.find((b) => b.id === lockedConnectionId);
     if (!lockedBlock || !lockedBlock.influencedBy?.length) {
-      setLockedConnectionId(null)
+      setLockedConnectionId(null);
     }
-  }, [blocks, lockedConnectionId])
+  }, [blocks, lockedConnectionId]);
 
   // Escape key clears lock
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLockedConnectionId(null) }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLockedConnectionId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
-  // 1. Chunking into elastic chunks — declared before effects that depend on them
-  const chunkedPages = useMemo(() => {
-    const gridBlocks = blocks
-      .filter((b: TextBlock) => b.contentType !== "task")
+  // Masonry blocks (sorted: pinned first, then oldest first)
+  const masonryBlocks = useMemo(() => {
+    return blocks
+      .filter((b) => b.contentType !== "task")
       .sort((a, b) => {
-        const pinDiff = (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0)
-        if (pinDiff !== 0) return pinDiff
-        return a.timestamp - b.timestamp // stable: older blocks first within same pin state
-      })
-    if (gridBlocks.length === 0) return []
-    const chunks: TextBlock[][] = []
-    for (let i = 0; i < gridBlocks.length; i += PAGE_SIZE) {
-      chunks.push(gridBlocks.slice(i, i + PAGE_SIZE))
-    }
-    return chunks
-  }, [blocks])
+        const pinDiff = (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0);
+        if (pinDiff !== 0) return pinDiff;
+        return a.timestamp - b.timestamp;
+      });
+  }, [blocks]);
 
-  const pageTrees = useMemo(() => {
-    return chunkedPages.map(page => buildPageTree(page))
-  }, [chunkedPages])
+  const taskBlock = useMemo(
+    () => blocks.find((b) => b.contentType === "task"),
+    [blocks],
+  );
 
-  const taskBlock = useMemo(() => blocks.find((b: TextBlock) => b.contentType === "task"), [blocks])
-
-  // Track which page is in view via IntersectionObserver
+  // Check if scrollable for minimap
+  const [isScrollable, setIsScrollable] = useState(false);
   useEffect(() => {
-    const container = scrollContainerRef.current
-    if (!container) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter(e => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
-        if (visible) {
-          const idx = Number((visible.target as HTMLElement).dataset.pageIdx)
-          if (!isNaN(idx)) setActivePageIdx(idx)
-        }
-      },
-      { root: container, threshold: 0.3 }
-    )
-    container.querySelectorAll("[data-page-idx]").forEach(p => observer.observe(p))
-    return () => observer.disconnect()
-  }, [pageTrees.length])
-
-  const scrollToPage = useCallback((idx: number) => {
-    const container = scrollContainerRef.current
-    if (!container) return
-    container.querySelector<HTMLElement>(`[data-page-idx="${idx}"]`)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" })
-  }, [])
-
-  // Show minimap as soon as content overflows the visible area, regardless of page count
-  const [isScrollable, setIsScrollable] = useState(false)
-  useEffect(() => {
-    const container = scrollContainerRef.current
-    if (!container) return
-    const check = () => setIsScrollable(container.scrollHeight > container.clientHeight)
-    check()
-    const ro = new ResizeObserver(check)
-    ro.observe(container)
-    return () => ro.disconnect()
-  }, [])
-
-  // 2. Tile Renderer with Width Invariant
-  // NOTE: implemented as a plain recursive function (not a React component) so that
-  // hoveredConnectionId state changes don't cause React to unmount/remount the tile
-  // tree (which would fire mouseleave and immediately clear the hover state).
-  const renderBSPNode = (node: BSPNode, pageBlocks: TextBlock[], parentDir?: 'h' | 'v'): React.ReactNode => {
-    if (!node) return null
-
-    if (node.type === 'leaf') {
-      const block = pageBlocks.find((b: TextBlock) => b.id === node.blockId)
-      if (!block) return null
-      const isDimmed = activeConnectionId !== null && !relatedIds.has(block.id)
-      return (
-        <div
-          key={block.id}
-          id={`tile-${block.id}`}
-          className="flex flex-1 p-0.5 overflow-hidden"
-        >
-          <div className={`flex flex-1 min-w-0 transition-[opacity,filter] duration-300 ${isDimmed ? 'opacity-15 saturate-0' : 'opacity-100'}`}>
-            <TileCard
-              block={block}
-              isCollapsed={false}
-              hideCollapse={true}
-              onDelete={onDelete}
-              onEdit={onEdit}
-              onEditAnnotation={onEditAnnotation}
-              onReEnrich={onReEnrich}
-              onChangeType={onChangeType}
-              onToggleCollapse={onToggleCollapse}
-              onTogglePin={onTogglePin}
-              onToggleSubTask={onToggleSubTask}
-              onDeleteSubTask={onDeleteSubTask}
-              isHighlighted={highlightedBlockId === block.id}
-              onHighlight={onHighlight}
-              onConnectionHover={handleConnectionHover}
-              onConnectionLock={handleConnectionLock}
-              isConnectionLocked={lockedConnectionId === block.id}
-              allBlocks={blocks}
-            />
-          </div>
-        </div>
-      )
-    }
-
-    const leftWeight = getWeight(node.left!)
-    const rightWeight = getWeight(node.right!)
-
-    return (
-      <div
-        key={node.id}
-        className={`flex flex-1 min-h-0 min-w-0 ${node.direction === 'v' ? 'flex-row' : 'flex-col'}`}
-      >
-        <div style={{ flex: leftWeight }} className="flex min-h-0 min-w-0">
-          {renderBSPNode(node.left!, pageBlocks, node.direction)}
-        </div>
-        <div style={{ flex: rightWeight }} className="flex min-h-0 min-w-0">
-          {renderBSPNode(node.right!, pageBlocks, node.direction)}
-        </div>
-      </div>
-    )
-  }
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const check = () =>
+      setIsScrollable(container.scrollHeight > container.clientHeight);
+    // Delay check to allow layout to settle
+    const timer = setTimeout(check, 100);
+    const ro = new ResizeObserver(check);
+    ro.observe(container);
+    return () => {
+      clearTimeout(timer);
+      ro.disconnect();
+    };
+  }, [masonryBlocks.length]);
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-background">
       {/* Task Header stays sticky at top */}
       {taskBlock && (
-        <div className={`w-full shrink-0 p-1 z-10 transition-[opacity,filter] duration-300 ${activeConnectionId && !relatedIds.has(taskBlock.id) ? 'opacity-15 saturate-0' : 'opacity-100'}`}>
-            <TileCard
-              block={taskBlock}
-              isCollapsed={collapsedIds.has(taskBlock.id)}
-              onDelete={onDelete}
-              onEdit={onEdit}
-              onEditAnnotation={onEditAnnotation}
-              onReEnrich={onReEnrich}
-              onChangeType={onChangeType}
-              onToggleCollapse={onToggleCollapse}
-              onTogglePin={onTogglePin}
-              onToggleSubTask={onToggleSubTask}
-              onDeleteSubTask={onDeleteSubTask}
-              isHighlighted={highlightedBlockId === taskBlock.id}
-              onHighlight={onHighlight}
-              onConnectionHover={handleConnectionHover}
-              onConnectionLock={handleConnectionLock}
-              isConnectionLocked={lockedConnectionId === taskBlock.id}
-              allBlocks={blocks}
-            />
+        <div
+          className={`w-full shrink-0 p-3 z-10 transition-[opacity,filter] duration-300 ${activeConnectionId && !relatedIds.has(taskBlock.id) ? "opacity-15 saturate-0" : "opacity-100"}`}
+        >
+          <TileCard
+            block={taskBlock}
+            isCollapsed={collapsedIds.has(taskBlock.id)}
+            onDelete={onDelete}
+            onEdit={onEdit}
+            onEditAnnotation={onEditAnnotation}
+            onReEnrich={onReEnrich}
+            onChangeType={onChangeType}
+            onToggleCollapse={onToggleCollapse}
+            onTogglePin={onTogglePin}
+            onToggleSubTask={onToggleSubTask}
+            onDeleteSubTask={onDeleteSubTask}
+            isHighlighted={highlightedBlockId === taskBlock.id}
+            onHighlight={onHighlight}
+            onConnectionHover={handleConnectionHover}
+            onConnectionLock={handleConnectionLock}
+            isConnectionLocked={lockedConnectionId === taskBlock.id}
+            allBlocks={blocks}
+          />
         </div>
       )}
 
-      {/* Paged Mosaic with Vertical Scroll */}
+      {/* Masonry Grid */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto custom-scrollbar p-0.5 relative"
-        onClick={e => {
-          // Clear connection lock when clicking the canvas background (not a tile)
-          if (e.target === e.currentTarget) setLockedConnectionId(null)
+        className="flex-1 overflow-y-auto custom-scrollbar p-4 relative"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setLockedConnectionId(null);
         }}
       >
-        {pageTrees.length > 0 && (
-          <div className="flex flex-col w-full">
-            {pageTrees.map((tree, idx) => {
-              const count = chunkedPages[idx].length
-              // Elastic height: if only 1 tile, don't take a whole screen
-              const heightClass = count <= 2 ? 'h-[300px]' : count <= 4 ? 'h-[60vh]' : 'h-screen'
+        {masonryBlocks.length > 0 ? (
+          <div
+            className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-4 space-y-4"
+            style={{
+              columnCount: "auto",
+              columnWidth: "280px",
+              columnGap: "16px",
+            }}
+          >
+            {masonryBlocks.map((block) => {
+              const isDimmed =
+                activeConnectionId !== null && !relatedIds.has(block.id);
               return (
                 <div
-                  key={idx}
-                  data-page-idx={idx}
-                  className={`flex w-full ${heightClass} border-b border-white/5 last:border-0`}
+                  key={block.id}
+                  id={`tile-${block.id}`}
+                  className="break-inside-avoid mb-4"
                 >
-                  {renderBSPNode(tree, chunkedPages[idx])}
+                  <div
+                    className={`transition-[opacity,filter] duration-300 ${isDimmed ? "opacity-15 saturate-0" : "opacity-100"}`}
+                  >
+                    <TileCard
+                      block={block}
+                      isCollapsed={false}
+                      hideCollapse={true}
+                      onDelete={onDelete}
+                      onEdit={onEdit}
+                      onEditAnnotation={onEditAnnotation}
+                      onReEnrich={onReEnrich}
+                      onChangeType={onChangeType}
+                      onToggleCollapse={onToggleCollapse}
+                      onTogglePin={onTogglePin}
+                      onToggleSubTask={onToggleSubTask}
+                      onDeleteSubTask={onDeleteSubTask}
+                      isHighlighted={highlightedBlockId === block.id}
+                      onHighlight={onHighlight}
+                      onConnectionHover={handleConnectionHover}
+                      onConnectionLock={handleConnectionLock}
+                      isConnectionLocked={lockedConnectionId === block.id}
+                      allBlocks={blocks}
+                    />
+                  </div>
                 </div>
-              )
+              );
             })}
+          </div>
+        ) : null}
+
+        {/* Empty state */}
+        {masonryBlocks.length === 0 && !taskBlock && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-background">
+            <div className="flex flex-col items-center text-center max-w-xl px-6">
+              <div className="mb-6 opacity-80 mix-blend-plus-lighter">
+                <img
+                  src="logo-icon.png"
+                  alt="FikrPad"
+                  className="h-14 w-14 object-contain"
+                />
+              </div>
+              <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary mb-8 shadow-sm">
+                <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-[pulse_3s_ease-in-out_infinite]"></span>
+                AI-Powered Spatial Thinking
+              </div>
+
+              <div className="flex flex-col gap-3 mb-6">
+                <h1 className="text-foreground text-[clamp(1.5rem,3vw,2.25rem)] font-bold tracking-tight leading-[1.2]">
+                  "If you think you know something, but don't write it down, you
+                  only think you know it."
+                </h1>
+                <a
+                  href="https://www.lamport.org/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-sm text-muted-foreground/50 hover:text-foreground/80 transition-colors pointer-events-auto"
+                >
+                  — Leslie Lamport
+                </a>
+              </div>
+
+              <p className="text-base sm:text-lg text-muted-foreground leading-relaxed mb-12 max-w-md mx-auto">
+                FikrPad transforms your thinking into an organised, spatial
+                workspace. Write freely, and let the AI categorise, connect, and
+                synthesise.
+              </p>
+
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-[12px] text-foreground/70 uppercase tracking-[0.15em] whitespace-nowrap font-mono bg-secondary/50 px-5 py-2.5 rounded-lg border border-border/80 shadow-sm">
+                  {`type anything · #type to classify · ${mod}K commands`}
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Empty state — absolutely positioned so it centers identically across all views */}
-      {pageTrees.length === 0 && !taskBlock && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-background">
-          <div className="flex flex-col items-center text-center max-w-xl px-6">
-            <div className="mb-6 opacity-80 mix-blend-plus-lighter">
-              <img src="logo-icon.png" alt="FikrPad" className="h-14 w-14 object-contain" />
-            </div>
-            <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary mb-8 shadow-sm">
-              <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-[pulse_3s_ease-in-out_infinite]"></span>
-              AI-Powered Spatial Thinking
-            </div>
-            
-            <div className="flex flex-col gap-3 mb-6">
-              <h1 className="text-foreground text-[clamp(1.5rem,3vw,2.25rem)] font-bold tracking-tight leading-[1.2]">
-                "If you think you know something, but don't write it down, you only think you know it."
-              </h1>
-              <a 
-                href="https://www.lamport.org/" 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="font-mono text-sm text-muted-foreground/50 hover:text-foreground/80 transition-colors pointer-events-auto"
-              >
-                — Leslie Lamport
-              </a>
-            </div>
 
-            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed mb-12 max-w-md mx-auto">
-              FikrPad transforms your thinking into an organised, spatial workspace. 
-              Write freely, and let the AI categorise, connect, and synthesise.
-            </p>
-
-            <div className="flex flex-col items-center gap-3">
-              <p className="text-[12px] text-foreground/70 uppercase tracking-[0.15em] whitespace-nowrap font-mono bg-secondary/50 px-5 py-2.5 rounded-lg border border-border/80 shadow-sm">
-                {`type anything · #type to classify · ${mod}K commands`}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Floating minimap — shown as soon as content overflows the visible area */}
-      {isScrollable && chunkedPages.length >= 1 && (
-        <div className="absolute right-4 bottom-4 pointer-events-none z-20">
-          <div className="pointer-events-auto">
-            <TilingMinimap
-              pages={chunkedPages}
-              activePageIdx={activePageIdx}
-              onPageClick={scrollToPage}
-            />
-          </div>
-        </div>
-      )}
     </div>
-  )
+  );
 }

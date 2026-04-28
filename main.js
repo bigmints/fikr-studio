@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
@@ -179,18 +180,12 @@ const sseSessions = new Map();
 const MCP_TOOLS = [
   {
     name: "create_note",
-    description: "Add a new note/thought to the active FikrPad canvas. Pre-processed attributes like type, category, and annotation can be provided.",
+    description: "Add a new note/thought to the active FikrPad canvas. The local AI will automatically classify and enrich it.",
     inputSchema: {
       type: "object",
       properties: {
-        text: { type: "string", description: "The text content of the note" },
+        text: { type: "string", description: "The raw text content of the note" },
         project_id: { type: "string", description: "Target project ID. Omit to use the first project." },
-        type: {
-          type: "string",
-          description: "Optional type hint: claim, question, idea, task, quote, reference, definition, opinion, reflection, narrative, comparison, thesis, entity, general",
-        },
-        category: { type: "string", description: "Optional broader topic or category (e.g., 'Architecture', 'Fixes')" },
-        annotation: { type: "string", description: "Optional concise AI summary or tagging label" },
       },
       required: ["text"],
     },
@@ -383,10 +378,8 @@ async function executeTool(name, args, mainWindow) {
         id: generateId(),
         text: args.text,
         timestamp: Date.now(),
-        contentType: args.type || "general",
-        category: args.category,
-        annotation: args.annotation,
-        isEnriching: false,
+        contentType: "general",
+        isEnriching: true, // Let the frontend auto-enrich
         fromMcp: true,
       };
       // Generate embedding synchronously before saving (MCP caller already waits)
@@ -699,6 +692,27 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
   mcpServer = startMcpServer(mainWindow);
+
+  // ─── OTA Updates ──────────────────────────────────────────────────────────────
+  autoUpdater.checkForUpdatesAndNotify();
+
+  autoUpdater.on("update-available", () => {
+    console.log("[FikrPad] Update available.");
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    console.log("[FikrPad] Update downloaded. Ready to install.");
+    dialog.showMessageBox({
+      type: "info",
+      title: "Update Ready",
+      message: "A new version of FikrPad has been downloaded. Quit and install now?",
+      buttons: ["Quit and Install", "Later"]
+    }).then(result => {
+      if (result.response === 0) {
+        autoUpdater.quitAndInstall();
+      }
+    });
+  });
 
   // Start loading the embedding model in the background immediately.
   // It resolves into `pipelineReady` so all tools can await it without blocking startup.

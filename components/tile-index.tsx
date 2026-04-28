@@ -80,7 +80,7 @@ export function TileIndex({ blocks, onHighlight, highlightedId, onClose, isOpen,
           {onClose && (
             <button 
               onClick={onClose}
-              className="p-1 px-1.5 hover:bg-white/5 rounded-sm transition-colors text-muted-foreground/30 hover:text-white"
+              className="p-1 px-1.5 hover:bg-white/5 rounded-sm transition-colors text-muted-foreground/30 hover:text-foreground"
               title="Close Index"
             >
               <X className="h-3.5 w-3.5" />
