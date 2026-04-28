@@ -47,7 +47,7 @@ export const AI_PROVIDER_PRESETS: AIProviderPreset[] = [
   {
     id: "custom",
     label: "OpenAI Compatible",
-    baseUrl: "http://100.77.38.96:8080/v1",
+    baseUrl: "",
     keyUrl: "#",
     keyPlaceholder: "Optional API Key",
   },
@@ -226,7 +226,9 @@ export interface AIConfig {
 
 export function loadAIConfig(): AIConfig | null {
   const s = loadSettings()
+  // For standard providers: require an API key. For custom: require a base URL.
   if (!s.apiKey && s.provider !== "custom") return null
+  if (s.provider === "custom" && !s.customBaseUrl?.trim()) return null
   const models = getModelsForProvider(s.provider)
   const model = models.find(m => m.id === s.modelId)
   // Use the matched model's id if found; otherwise fall back to the first model
@@ -244,6 +246,11 @@ export function loadAIConfig(): AIConfig | null {
 
 export function getBaseUrl(config: AIConfig): string {
   const custom = config.customBaseUrl?.trim()
+  if (!custom && config.provider === "custom") {
+    throw new Error(
+      "No base URL configured. Enter your OpenAI-compatible endpoint URL in Settings → Provider."
+    )
+  }
   return custom || getPreset(config.provider).baseUrl
 }
 

@@ -289,29 +289,67 @@ export function SettingsModal({
                 </p>
               </div>
 
-              {/* Custom Base URL */}
-              <div className="flex flex-col gap-2">
-                <label className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
-                  Custom Base URL
-                </label>
-                <div className="flex items-center gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2.5 focus-within:border-primary/50 transition-colors">
-                  <input
-                    type="text"
-                    value={draft.customBaseUrl ?? ""}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, customBaseUrl: e.target.value }))
-                    }
-                    placeholder="Optional — for local/self-hosted endpoints"
-                    className="flex-1 bg-transparent font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
+              {/* Base URL — Required for custom, optional override for others */}
+              {draft.provider === "custom" ? (
+                <div className="flex flex-col gap-2">
+                  <label className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-foreground flex items-center gap-1.5">
+                    Base URL
+                    <span className="text-red-400">*</span>
+                    <span className="text-[10px] text-muted-foreground font-normal normal-case tracking-normal ml-1">
+                      required
+                    </span>
+                  </label>
+                  <div className={`flex items-center gap-2 rounded-md border px-3 py-2.5 focus-within:border-primary/50 transition-colors ${
+                    !draft.customBaseUrl?.trim()
+                      ? "border-red-500/40 bg-red-500/5"
+                      : "border-border/40 bg-muted/30"
+                  }`}>
+                    <input
+                      type="url"
+                      value={draft.customBaseUrl ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, customBaseUrl: e.target.value }))
+                      }
+                      placeholder="https://your-server/v1"
+                      className="flex-1 bg-transparent font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/40"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <p className="font-mono text-xs text-muted-foreground leading-relaxed">
+                    Base URL of your OpenAI-compatible server. Must end with{" "}
+                    <code className="text-foreground/70">/v1</code> (e.g.{" "}
+                    <code className="text-foreground/70">http://localhost:8080/v1</code>).
+                    Supports Ollama, LM Studio, vLLM, and any OpenAI-compatible API.
+                  </p>
                 </div>
-                <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-                  Override the provider URL. Useful for Ollama, LM Studio, vLLM,
-                  or other OpenAI-compatible endpoints.
-                </p>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <label className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                    Custom Base URL
+                    <span className="text-[10px] font-normal normal-case tracking-normal ml-1.5 opacity-70">
+                      — optional override
+                    </span>
+                  </label>
+                  <div className="flex items-center gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2.5 focus-within:border-primary/50 transition-colors">
+                    <input
+                      type="url"
+                      value={draft.customBaseUrl ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, customBaseUrl: e.target.value }))
+                      }
+                      placeholder="Leave blank to use the provider default"
+                      className="flex-1 bg-transparent font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <p className="font-mono text-xs text-muted-foreground leading-relaxed">
+                    Override the provider URL. Useful for Ollama, LM Studio, vLLM,
+                    or other OpenAI-compatible endpoints.
+                  </p>
+                </div>
+              )}
 
               {/* Model Selector */}
               <div className="flex flex-col gap-2">
@@ -448,18 +486,30 @@ export function SettingsModal({
               {/* API Status */}
               <div
                 className={`flex items-center gap-2 rounded-md px-3 py-2.5 font-mono text-xs ${
-                  draft.apiKey || draft.provider === "custom"
+                  (draft.apiKey && draft.provider !== "custom") ||
+                  (draft.provider === "custom" && draft.customBaseUrl?.trim())
                     ? "bg-primary/10 border border-primary/20 text-primary"
-                    : "bg-muted/30 border border-border/30 text-muted-foreground"
+                    : draft.provider === "custom" && !draft.customBaseUrl?.trim()
+                      ? "bg-amber-500/10 border border-amber-500/20 text-amber-500"
+                      : "bg-muted/30 border border-border/30 text-muted-foreground"
                 }`}
               >
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${draft.apiKey || draft.provider === "custom" ? "bg-primary animate-pulse" : "bg-muted-foreground/30"}`}
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    (draft.apiKey && draft.provider !== "custom") ||
+                    (draft.provider === "custom" && draft.customBaseUrl?.trim())
+                      ? "bg-primary animate-pulse"
+                      : draft.provider === "custom" && !draft.customBaseUrl?.trim()
+                        ? "bg-amber-500"
+                        : "bg-muted-foreground/30"
+                  }`}
                 />
-                {draft.apiKey
-                  ? `${currentPreset.label} — API key configured`
-                  : draft.provider === "custom"
-                    ? "Custom endpoint configured"
+                {draft.provider === "custom"
+                  ? draft.customBaseUrl?.trim()
+                    ? `Custom endpoint — ${draft.customBaseUrl.trim()}`
+                    : "Enter a Base URL to enable AI"
+                  : draft.apiKey
+                    ? `${currentPreset.label} — API key configured`
                     : "No API key — AI disabled"}
               </div>
             </div>
