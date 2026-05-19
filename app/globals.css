@@ -12,41 +12,41 @@
      * BRAND PALETTE — fikr.one canonical tokens
      * Primary:    #3CA6A6  (brand teal)
      * Foreground: #102B24  (deep forest / ink)
-     * Background: #F7F5F0  (warm parchment)
-     * Muted fg:   #5B7D7F  (slate teal)
-     * Sidebar:    #102B24  (dark forest rail)
+     * Background: #EDEAE2  (warm stone canvas)
+     * Muted fg:   #4A6B6E  (deeper slate teal)
+     * Sidebar:    #0F2420  (dark forest rail — high contrast)
      * See: fikr.one/brand.md + fikr.one/src/app/globals.css
      * ─────────────────────────────────────────────────────── */
 
     /* Surfaces */
-    --background: #F7F5F0;
-    --foreground: #102B24;
-    --card: #ffffff;
-    --card-foreground: #102B24;
-    --popover: #ffffff;
-    --popover-foreground: #102B24;
+    --background: #EBE7DD;
+    --foreground: #091811;
+    --card: #FFFFFF;
+    --card-foreground: #091811;
+    --popover: #FFFFFF;
+    --popover-foreground: #091811;
 
     /* Primary: Brand Teal */
     --primary: #3CA6A6;
     --primary-foreground: #ffffff;
 
     /* Secondary: soft teal tint surface */
-    --secondary: #EEF7F7;
-    --secondary-foreground: #102B24;
+    --secondary: #D2E4E4;
+    --secondary-foreground: #091811;
 
-    /* Accent: deep forest (ink) — used for strong emphasis */
-    --accent: #EEF7F7;
-    --accent-foreground: #102B24;
+    /* Accent */
+    --accent: #D2E4E4;
+    --accent-foreground: #091811;
 
     /* Muted tones */
-    --muted: #EEF7F7;
-    --muted-foreground: #5B7D7F;
+    --muted: #DFDBD0;
+    --muted-foreground: #2A4042;
 
     /* Borders & inputs */
     --destructive: #EF4444;
     --destructive-foreground: #ffffff;
-    --border: rgba(16, 43, 36, 0.10);
-    --input: #E5EBE9;
+    --border: rgba(16, 43, 36, 0.20);
+    --input: #CEDAD7;
     --ring: #3CA6A6;
 
     /* Charts — teal-forest palette */
@@ -56,14 +56,14 @@
     --chart-4: #EEF7F7;
     --chart-5: #8B6E6B;
 
-    /* Sidebar — warm neutral elevated surface (light mode) */
-    --sidebar: #EDE9E2;
-    --sidebar-foreground: #102B24;
+    /* Sidebar — DARK FOREST RAIL for real chrome / contrast */
+    --sidebar: #061210;
+    --sidebar-foreground: #ffffff;
     --sidebar-primary: #3CA6A6;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #E4DFD7;
-    --sidebar-accent-foreground: #102B24;
-    --sidebar-border: rgba(16, 43, 36, 0.08);
+    --sidebar-accent: rgba(255, 255, 255, 0.1);
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: rgba(255, 255, 255, 0.07);
     --sidebar-ring: #3CA6A6;
 
     --font-sans: var(--font-geist-sans);
@@ -74,16 +74,16 @@
     --shadow-y: 1px;
     --shadow-blur: 4px;
     --shadow-spread: 0px;
-    --shadow-opacity: 0.05;
+    --shadow-opacity: 0.10;
     --shadow-color: #000000;
-    --shadow-2xs: 0px 1px 4px 0px rgba(16, 43, 36, 0.03);
-    --shadow-xs:  0px 1px 4px 0px rgba(16, 43, 36, 0.04);
-    --shadow-sm:  0px 1px 2px 0px rgba(16, 43, 36, 0.05);
-    --shadow:     0px 2px 8px 0px rgba(16, 43, 36, 0.07);
-    --shadow-md:  0px 4px 16px 0px rgba(16, 43, 36, 0.09);
-    --shadow-lg:  0px 8px 24px 0px rgba(16, 43, 36, 0.11);
-    --shadow-xl:  0px 12px 32px 0px rgba(16, 43, 36, 0.13);
-    --shadow-2xl: 0px 16px 48px 0px rgba(16, 43, 36, 0.15);
+    --shadow-2xs: 0px 1px 3px 0px rgba(16, 43, 36, 0.07);
+    --shadow-xs:  0px 1px 4px 0px rgba(16, 43, 36, 0.10);
+    --shadow-sm:  0px 1px 3px 0px rgba(16, 43, 36, 0.12), 0px 1px 2px -1px rgba(16, 43, 36, 0.08);
+    --shadow:     0px 2px 8px 0px rgba(16, 43, 36, 0.14), 0px 1px 3px -1px rgba(16, 43, 36, 0.10);
+    --shadow-md:  0px 4px 16px 0px rgba(16, 43, 36, 0.16), 0px 2px 6px -2px rgba(16, 43, 36, 0.12);
+    --shadow-lg:  0px 8px 24px 0px rgba(16, 43, 36, 0.18), 0px 4px 10px -4px rgba(16, 43, 36, 0.14);
+    --shadow-xl:  0px 12px 32px 0px rgba(16, 43, 36, 0.20), 0px 6px 14px -6px rgba(16, 43, 36, 0.16);
+    --shadow-2xl: 0px 16px 48px 0px rgba(16, 43, 36, 0.26);
     --tracking-normal: 0rem;
     --spacing: 0.25rem;
 
@@ -142,14 +142,14 @@
     --chart-4: oklch(0.627 0.265 185);
     --chart-5: oklch(0.645 0.246 16.439);
 
-    /* Sidebar: very slightly elevated from background, not green */
-    --sidebar: oklch(0.11 0 0);
-    --sidebar-foreground: oklch(0.92 0 0);
+    /* Sidebar: matched to light mode for brand consistency */
+    --sidebar: #061210;
+    --sidebar-foreground: #ffffff;
     --sidebar-primary: #3CA6A6;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: oklch(0.18 0 0);
-    --sidebar-accent-foreground: oklch(0.92 0 0);
-    --sidebar-border: oklch(0.20 0 0);
+    --sidebar-accent: rgba(255, 255, 255, 0.1);
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: rgba(255, 255, 255, 0.07);
     --sidebar-ring: #3CA6A6;
 
     --font-sans: var(--font-geist-sans);
@@ -468,7 +468,7 @@
     flex-direction: column;
     height: 100%;
     background: var(--sidebar);
-    border-right: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
+    border-right: 1px solid var(--sidebar-border);
     overflow: hidden;
 }
 
@@ -484,7 +484,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+    color: color-mix(in oklch, var(--sidebar-foreground) 45%, transparent);
     font-family: var(--font-mono);
     padding: 0 16px;
     margin-bottom: 6px;
@@ -500,7 +500,7 @@
     margin: 0 8px;
     cursor: pointer;
     transition: background 0.1s, color 0.1s;
-    color: color-mix(in oklch, var(--foreground) 70%, transparent);
+    color: color-mix(in oklch, var(--sidebar-foreground) 70%, transparent);
     font-size: 13px;
     font-weight: 500;
     text-decoration: none;
@@ -511,12 +511,12 @@
 }
 
 .studio-sidebar__item:hover {
-    background: color-mix(in oklch, var(--foreground) 5%, transparent);
-    color: var(--foreground);
+    background: color-mix(in oklch, var(--sidebar-foreground) 8%, transparent);
+    color: var(--sidebar-foreground);
 }
 
 .studio-sidebar__item.active {
-    background: color-mix(in oklch, var(--primary) 10%, transparent);
+    background: color-mix(in oklch, var(--primary) 18%, transparent);
     color: var(--primary);
     font-weight: 600;
 }
@@ -562,7 +562,7 @@
     font-size: 1rem;
     line-height: 1.7;
     margin-bottom: 1.25rem;
-    color: rgba(16, 43, 36, 0.80);  /* Ink 80 from design.md §1.2 */
+    color: rgba(13, 35, 25, 0.85);  /* Ink 85 — sharpened for light mode */
 }
 
 /* Dark mode body text */
@@ -645,7 +645,7 @@
 }
 .studio-sidebar__footer {
     padding: 12px;
-    border-top: 1px solid color-mix(in oklch, var(--border) 30%, transparent);
+    border-top: 1px solid var(--sidebar-border);
     flex-shrink: 0;
     margin-top: auto;
 }

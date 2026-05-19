@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "bootstrap"
-  host: "local"
-  task: "initial-scaffold"
+  last_seen: "2026-05-19T13:00:06Z"
+  host: "BigMac-2"
+  task: "Committed: fix(workspace): bypass CORS for word usage and stabilize embedding queue"
   status: alive
