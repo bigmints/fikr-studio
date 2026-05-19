@@ -39,3 +39,7 @@ migrate-*.js
 test-marked.js
 empty.js
 layout.md
+
+# Firebase Data Connect (abandoned — using local SQLite)
+dataconnect/
+dataconnect-generated/
