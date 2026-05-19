@@ -1,7 +1,8 @@
 "use client"
 
-import { loadAIConfig, getBaseUrl, getProviderHeaders } from "@/lib/ai-settings"
+import { loadAIConfig, getBaseUrl, getProviderHeaders, resolveModel, getManagedAuthStatus } from "@/lib/ai-settings"
 import { parseProviderError } from "@/lib/ai-enrich"
+import { LOCAL_AI_CONFIG } from "@/local-ai.config"
 
 export interface GhostContext {
   text: string
@@ -18,11 +19,26 @@ export async function generateGhostClient(
   context: GhostContext[],
   previousSyntheses: string[] = [],
 ): Promise<GhostResult> {
+  const { isManaged, token } = await getManagedAuthStatus()
   const config = loadAIConfig()
-  if (!config) throw new Error("No API key configured")
+  
+  const isDevOverride = LOCAL_AI_CONFIG.enabled;
+  if (!isDevOverride && !isManaged && (!config || !config.apiKey)) throw new Error("No API key configured")
 
-  // Ghost falls back to a lighter model if none is set
-  const model = config.modelId || "google/gemini-2.0-flash-lite-001"
+  // Ghost falls back to a lighter model if none is set (when unmanaged)
+  let model = isManaged ? "managed" : resolveModel(config!, "analysis");
+  let actualBaseUrl = config ? getBaseUrl(config) : "";
+  let actualHeaders = config ? getProviderHeaders(config) : {};
+
+  if (isDevOverride) {
+    actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
+    model = LOCAL_AI_CONFIG.model;
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dev_local_model");
+      if (stored) model = stored;
+    }
+    actualHeaders = { "Content-Type": "application/json" };
+  }
 
   const categories = [...new Set(context.map(c => c.category).filter(Boolean))]
 
@@ -55,35 +71,67 @@ Return ONLY valid JSON:
   // Cap output to keep cost low and avoid 402 on limited-credit accounts.
   const MAX_GHOST_OUTPUT_TOKENS = 220
 
-  const baseUrl = getBaseUrl(config)
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: getProviderHeaders(config),
-    body: JSON.stringify({
-      model,
-      max_tokens: MAX_GHOST_OUTPUT_TOKENS,
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-    }),
-  })
+  let rawContent: string | undefined;
 
-  if (!response.ok) {
-    throw new Error(await parseProviderError(response))
+  if (isManaged && !isDevOverride) {
+    const response = await fetch("https://fikr.one/api/ai/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        systemPrompt: prompt,
+        userMessage: "Proceed with synthesis based on the system instructions."
+      })
+    })
+
+    if (!response.ok) {
+      let errMessage = "Unknown error";
+      try {
+        const body = await response.json();
+        errMessage = body.error || errMessage;
+      } catch {}
+      throw new Error(`Fikr Cloud Pro Ghost Error (${response.status}): ${errMessage}`);
+    }
+
+    const data = await response.json();
+    rawContent = data.response;
+  } else {
+    const response = await fetch(`${actualBaseUrl}/chat/completions`, {
+      method: "POST",
+      headers: actualHeaders,
+      body: JSON.stringify({
+        model,
+        max_tokens: MAX_GHOST_OUTPUT_TOKENS,
+        messages: [{ role: "user", content: prompt }],
+        // Local models don't support response_format — rely on prompt instructions instead
+        ...(isDevOverride ? {} : { response_format: { type: "json_object" } }),
+        temperature: 0.7,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(await parseProviderError(response))
+    }
+
+    let data: Record<string, unknown>
+    try {
+      data = await response.json()
+    } catch {
+      throw new Error(
+        `AI ghost error (${config!.provider}): response was not valid JSON. The provider may have timed out or returned a truncated response.`
+      )
+    }
+    rawContent = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content
+    if (!rawContent) {
+      const finishReason = (data.choices as Array<{ finish_reason?: string }>)?.[0]?.finish_reason;
+      throw new Error(`The model returned an empty response (finish_reason: ${finishReason || "unknown"}). Try running the model with a different response_format or check its logs.`);
+    }
   }
 
-  let data: Record<string, unknown>
-  try {
-    data = await response.json()
-  } catch {
-    throw new Error(
-      `AI ghost error (${config.provider}): response was not valid JSON. The provider may have timed out or returned a truncated response.`
-    )
-  }
-  const rawContent = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content
   if (!rawContent) {
-    const finishReason = (data.choices as Array<{ finish_reason?: string }>)?.[0]?.finish_reason;
-    throw new Error(`The local model returned an empty response (finish_reason: ${finishReason || "unknown"}). Try running the model with a different response_format or check its logs.`);
+    throw new Error("The model returned an empty response. Check logs or response_format.")
   }
 
   // Defensive parse

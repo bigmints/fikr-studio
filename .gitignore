@@ -23,3 +23,19 @@ out/
 build/
 dist/
 *.log
+lib/fikr-apps-firebase-adminsdk-*.json
+
+# Electron app bundles (binary artifacts — use dist/ for releases)
+*.app/
+*.app
+
+# Scratch / temp files
+runs/
+curl_out.txt
+*.tmp
+diagnose-db.js
+cleanup-studio-notes.js
+migrate-*.js
+test-marked.js
+empty.js
+layout.md

@@ -35,7 +35,7 @@ export interface ContentTypeConfig {
   label: string
   icon: LucideIcon
   accentVar: string
-  bodyStyle?: "blockquote" | "italic" | "checkbox" | "confidence" | "muted-italic"
+  bodyStyle?: "thesis"
 }
 
 export const CONTENT_TYPE_CONFIG: Record<ContentType, ContentTypeConfig> = {
@@ -48,7 +48,6 @@ export const CONTENT_TYPE_CONFIG: Record<ContentType, ContentTypeConfig> = {
     label: "Claim",
     icon: Zap,
     accentVar: "var(--type-claim)",
-    bodyStyle: "confidence",
   },
   question: {
     label: "Question",
@@ -59,7 +58,6 @@ export const CONTENT_TYPE_CONFIG: Record<ContentType, ContentTypeConfig> = {
     label: "Task",
     icon: CheckSquare,
     accentVar: "var(--type-task)",
-    bodyStyle: "checkbox",
   },
   idea: {
     label: "Idea",
@@ -75,25 +73,21 @@ export const CONTENT_TYPE_CONFIG: Record<ContentType, ContentTypeConfig> = {
     label: "Quote",
     icon: Quote,
     accentVar: "var(--type-quote)",
-    bodyStyle: "blockquote",
   },
   definition: {
     label: "Definition",
     icon: BookOpen,
     accentVar: "var(--type-definition)",
-    bodyStyle: "blockquote",
   },
   opinion: {
     label: "Opinion",
     icon: MessageCircle,
     accentVar: "var(--type-opinion)",
-    bodyStyle: "italic",
   },
   reflection: {
     label: "Reflection",
     icon: Sparkles,
     accentVar: "var(--type-reflection)",
-    bodyStyle: "muted-italic",
   },
   narrative: {
     label: "Narrative",

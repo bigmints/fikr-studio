@@ -1,0 +1,621 @@
+# FikrPad UX Fix Queue — 8 independent tasks
+# Run with: pi --queue queue.yaml --workdir . --approval-mode auto_edit
+
+queue:
+  # ─────────────────────────────────────────────────────────────────────
+  # 1. P0 — Stop type flicker by caching last AI classification
+  # ─────────────────────────────────────────────────────────────────────
+  - name: "Fix type flicker: cache lastContentType during enrichment"
+    prompt: |
+      You are editing a Next.js + React codebase for FikrPad (a spatial thinking tool).
+
+      PROBLEM:
+      When a user edits a note, the card shows type "general" while AI enrichment runs (see
+      page.tsx lines 941-943 where `initialDisplayType` is set to "general" for ambiguous types).
+      This causes a visible flicker: general → claim → idea → etc. The same happens on every
+      edit because `editBlock` at line 1023 sets `isEnriching: true` without preserving the
+      current type.
+
+      FILES TO MODIFY:
+      1. `components/tile-card.tsx` — The `TextBlock` interface (line 25) needs a new optional field:
+         `lastContentType?: ContentType` — stores the last AI-classified type.
+
+      2. `app/page.tsx` — In `addBlock` (around line 889), when creating a new block, if the
+         heuristic type is high-confidence, also store it as `lastContentType`. In `editBlock`
+         (around line 1023), preserve the current block's contentType as `lastContentType` when
+         setting `isEnriching: true`. The line that currently reads:
+         `{ ...b, text: newText, isEnriching: true, isError: false }`
+         Should become:
+         `{ ...b, text: newText, isEnriching: true, isError: false, lastContentType: b.contentType }`
+
+      3. `app/page.tsx` — In `enrichBlock` (around line 750), when the AI returns a new contentType,
+         store the PREVIOUS contentType as `lastContentType` on the block:
+         When updating block at line 753, add `lastContentType: b.contentType` to the result.
+         ALSO update the `initialDisplayType` logic (line 941): when `isEnriching` is true,
+         use `block.lastContentType ?? "general"` instead of just `"general"`.
+
+      4. `lib/nodepad-format.ts` — Add `lastContentType` to the `NodepadBlock` interface and
+         serialization so it persists across sessions.
+
+      IMPLEMENTATION:
+      - Add `lastContentType?: ContentType` to TextBlock in tile-card.tsx
+      - Preserve it on every edit/enrich call in page.tsx
+      - Use it as the display type during enrichment instead of "general"
+      - Persist it in nodepad-format.ts serialization
+      - Do NOT change any AI logic, only the display behavior during loading state
+
+      Verify: after the change, editing a "claim" note should keep showing "claim" (with shimmer)
+      while enrichment runs, instead of flickering to "general" first.
+    workdir: /Users/pretheesh/Projects/fikr-workspace/fikr-pad
+    model: gemini-2.5-pro
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 2. P0 — Progressive disclosure: quiet card mode
+  # ─────────────────────────────────────────────────────────────────────
+  - name: "Progressive disclosure: quiet card mode with hover-only metadata"
+    prompt: |
+      You are editing FikrPad's tile card component to reduce visual noise.
+
+      PROBLEM:
+      Each tile card displays 12+ visual signals simultaneously: type dot, icon, label,
+      timestamp, connection indicator, refresh button, pin button, type-change button,
+      delete button, confidence bar, category tag, influence count, merge suggestion.
+      In a 5-column masonry grid with 20+ cards, this is overwhelming.
+
+      CURRENT STATE:
+      - `components/tile-card.tsx` — The TileCard component renders ALL metadata visible by default
+      - Header (line 308-489): type dot + icon + label + timestamp + 5 action buttons
+      - Body (line 573-728): text/annotation + confidence bar on hover
+      - Footer (line 760-908): category tag + influence count + merge suggestion
+
+      GOAL: Implement progressive disclosure — "quiet card" as default, metadata on interaction.
+
+      IMPLEMENTATION PLAN:
+      1. HEADER — Hide action buttons (pin, type-change, refresh, delete) behind a hover state.
+         Use the existing `isHovered` state. Add a new `···` overflow menu button for actions
+         that aren't needed at a glance. Keep visible: type dot + icon + label + timestamp.
+         The overflow menu should contain: pin, type-change, refresh (for thesis), delete.
+         Only show the overflow button on hover.
+
+      2. CONFIDENCE BAR — Already on hover (line 731-758: `isHovered ? "opacity-100" : "opacity-0"`).
+         Keep as-is. This is correct.
+
+      3. FOOTER — Collapse to show ONLY the category tag by default. Hide the influence
+         indicator and merge suggestion behind the existing expand button.
+         Modify line 797-908: the influence indicator and merge suggestion should only render
+         when `isFooterExpanded` is true OR when the card is hovered.
+         Actually — simplify: show category tag always. Show influence count only when hovered.
+         Show merge suggestion always but as a subtle banner (not a separate section).
+
+      4. NEW — Add a "quiet mode" CSS class that further reduces the default state:
+         - No type label text (icon + dot only)
+         - Annotation preview on collapsed state
+         - Footer shows only category
+
+      IMPLEMENTATION RULES:
+      - Use the existing `isHovered` state — don't add new state
+      - Keep ALL functionality, just move it behind hover states
+      - The `whileHover={{ scale: 1.005 }}` framer-motion is already there — leverage it
+      - Do NOT change the collapsed/expanded (isCollapsed) state — that's separate
+      - Use `className` with `group-hover:` Tailwind utilities for the hover reveals
+      - Test: a card at rest should show type dot, annotation text, and category tag. Nothing else.
+
+      FILES TO MODIFY: `components/tile-card.tsx` only.
+    workdir: /Users/pretheesh/Projects/fikr-workspace/fikr-pad
+    model: gemini-2.5-pro
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 3. P1 — Global enrichment queue indicator in status bar
+  # ─────────────────────────────────────────────────────────────────────
+  - name: "Enrichment queue indicator in status bar"
+    prompt: |
+      You are adding a background processing indicator to FikrPad's status bar.
+
+      PROBLEM:
+      AI enrichment runs silently in the background. When a user adds multiple notes, they
+      don't know the system is working. The shimmer animation on individual cards is too
+      subtle to notice across a grid of 20+ cards. Users think the AI is broken.
+
+      GOAL:
+      Show a thin, non-intrusive indicator in the status bar: "AI is processing 3 notes…"
+      that disappears when all enrichment is complete.
+
+      CURRENT STATE:
+      - `components/status-bar.tsx` — Header bar at the top with menu, search, view toggles
+      - `app/page.tsx` — `blocks` array has `isEnriching` flag on each block
+      - Blocks get `isEnriching: true` on add/edit, then `isEnriching: false` when done
+
+      IMPLEMENTATION:
+      1. In `app/page.tsx`, derive a count of enriching blocks from the active project:
+         `const enrichingCount = activeProject?.blocks.filter(b => b.isEnriching).length ?? 0`
+
+      2. Pass `enrichingCount` as a prop to `StatusBar` in `components/status-bar.tsx`.
+
+      3. In the status bar, add a small indicator between the ghost panel button and
+         the system menu (·) button. Position it after the Insights button but before
+         the divider at line 205.
+
+         Render as a thin pill that appears only when enrichingCount > 0:
+         ```
+         <AnimatePresence>
+           {enrichingCount > 0 && (
+             <motion.div
+               initial={{ opacity: 0, x: -8 }}
+               animate={{ opacity: 1, x: 0 }}
+               exit={{ opacity: 0, x: -8 }}
+               className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/8 text-primary text-[10px] font-medium"
+             >
+               <motion.div
+                 animate={{ rotate: 360 }}
+                 transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                 className="h-2 w-2"
+               >
+                 <div className="h-full w-full rounded-full border-[1.5px] border-current border-t-transparent" />
+               </motion.div>
+               <span>{enrichingCount} processing…</span>
+             </motion.div>
+           )}
+         </AnimatePresence>
+         ```
+
+      4. Also show the same indicator as a subtle toast near the VimInput when count > 2:
+         In `app/page.tsx`, add a small overlay between the main content and VimInput:
+         ```
+         {enrichingCount > 2 && (
+           <motion.div
+             initial={{ opacity: 0, y: 4 }}
+             animate={{ opacity: 1, y: 0 }}
+             exit={{ opacity: 0, y: 4 }}
+             className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-[130] pointer-events-none"
+           >
+             <div className="px-3 py-1.5 rounded-full bg-card/90 border border-border/40 backdrop-blur-md shadow-lg">
+               <span className="text-[11px] text-muted-foreground/70">AI processing {enrichingCount} notes…</span>
+             </div>
+           </motion.div>
+         )}
+         ```
+
+      STYLING NOTES:
+      - Use existing CSS variables: `--primary`, `--card`, `--border`
+      - Keep it compact — the status bar is only `h-10`
+      - The spinner should use the existing `RefreshCw` icon or a simple CSS spinner
+      - Do NOT add new imports beyond what's already in status-bar.tsx (motion is already imported)
+
+      FILES TO MODIFY:
+      - `components/status-bar.tsx` (add enrichingCount prop + indicator)
+      - `app/page.tsx` (derive enrichingCount + pass to StatusBar, add toast overlay)
+    workdir: /Users/pretheesh/Projects/fikr-workspace/fikr-pad
+    model: gemini-2.5-pro
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 4. P1 — Replace one-shot intro with guided 3-step onboarding
+  # ─────────────────────────────────────────────────────────────────────
+  - name: "Guided 3-step onboarding replacing one-shot modal"
+    prompt: |
+      You are replacing the one-shot intro modal with a contextual, 3-step onboarding flow.
+
+      PROBLEM:
+      `components/intro-modal.tsx` shows a single modal on first launch, then disappears
+      forever. FikrPad has 14 content types, graph view, ghost synthesis, semantic search,
+      MCP integration, and more. A single modal cannot onboard users to this complexity.
+
+      GOAL:
+      Replace `IntroModal` with a contextual onboarding system that guides users through
+      3 steps as they use the app for the first time. Steps unlock as the user takes actions.
+
+      CURRENT STATE:
+      - `components/intro-modal.tsx` — Single intro modal with video/tutorial
+      - `app/page.tsx` — `isIntroOpen` state, `handleIntroClose` sets `introSeen` flag
+      - Intro is dismissed via IPC: `window.fikrpad.setIntroSeen()` or localStorage
+
+      NEW ONBOARDING DESIGN:
+      Create a new component `components/onboarding.tsx` with a lightweight overlay system.
+
+      The onboarding has 3 steps that trigger based on user state:
+
+      STEP 1 — "First Note" (triggers when user has 0 blocks on a fresh install):
+      - Show a thin overlay at the bottom above the VimInput
+      - Content: "Type any thought, observation, or idea. AI will automatically classify it."
+      - Include example: "Try: 'What causes redshift in distant galaxies?'"
+      - Dismiss when user adds their first note (blocks.length >= 1)
+
+      STEP 2 — "First Enrichment" (triggers after first note completes enrichment):
+      - Show a toast-style notification
+      - Content: "AI classified your note. Try writing more notes — it will find connections between them."
+      - Dismiss after 5 seconds or on click
+
+      STEP 3 — "First Connections" (triggers when any note has influencedBy > 0):
+      - Show a guided tooltip pointing to the connection indicator on the card
+      - Content: "Your notes are connected! Hover the link indicator to see relationships."
+      - Dismiss when user clicks a connection indicator
+
+      IMPLEMENTATION:
+      1. Create `components/onboarding.tsx`:
+         ```
+         interface OnboardingState {
+           step: 0 | 1 | 2 | 3; // 0 = not started, 3 = complete
+         }
+
+         export function OnboardingOverlay({
+           blockCount,
+           enrichedCount,
+           connectedCount,
+           onDismiss,
+           onComplete,
+         }: OnboardingOverlayProps) {
+           // Render based on state
+         }
+         ```
+
+      2. In `app/page.tsx`:
+         - Track onboarding state: `const [onboardingStep, setOnboardingStep] = useState<number>(0)`
+         - Determine step from data:
+           - 0 blocks → step 1
+           - 1+ blocks but 0 connected → step 2
+           - 1+ connected blocks → step 3
+           - introSeen && blocks.length > 3 → skip entirely
+         - Pass appropriate counts to OnboardingOverlay
+
+      3. Persist onboarding completion:
+         - Store in localStorage: `fikrpad-onboarding-step`
+         - On load, restore step from localStorage
+         - When step 3 completes, set `fikrpad-onboarding-complete: true`
+
+      4. UI Design:
+         - Step 1: Bottom overlay, above VimInput. Dark backdrop with frosted glass.
+           Animated arrow pointing to input bar. Text: "Start thinking →"
+         - Step 2: Top-right toast. "✨ AI found: [category]" with a brief explanation.
+         - Step 3: Center toast with connection icon. "🔗 Your notes are linked!"
+         - All steps: Dismissible via ✕ button. "Skip" option.
+         - Style: Match existing toast at line 1458 (bg-black/90, rounded-sm, font-mono text-[10px])
+
+      5. Keep the existing IntroModal as a fallback — if onboarding hasn't started and
+         intro is not seen, show the modal. But once onboarding starts, the modal closes.
+
+      STYLING:
+      - Use motion/AnimatePresence for enter/exit animations
+      - Step overlays should use `z-[200]` to float above everything
+      - Match the existing dark theme: `bg-card/90 border border-border/40 backdrop-blur-xl`
+      - Keep text concise: 1-2 sentences max per step
+
+      FILES TO MODIFY:
+      - Create: `components/onboarding.tsx`
+      - Modify: `app/page.tsx` (add onboarding state + integrate)
+      - Modify: `components/intro-modal.tsx` (keep as fallback, wire to onboarding)
+    workdir: /Users/pretheesh/Projects/fikr-workspace/fikr-pad
+    model: gemini-2.5-pro
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 5. P2 — Graph view as first-class toggle in status bar
+  # ─────────────────────────────────────────────────────────────────────
+  - name: "Promote graph view to first-class status bar toggle"
+    prompt: |
+      You are adding graph view as a third option in the status bar view toggle.
+
+      PROBLEM:
+      The status bar has a Masonry/List view toggle pill (status-bar.tsx lines 157-182).
+      A graph view exists (`components/graph-area.tsx`) but is not accessible from the status
+      bar — users have no way to switch to it. The graph is a core feature for 20+ note projects
+      but is hidden.
+
+      CURRENT STATE:
+      - `components/status-bar.tsx` — View mode toggle with `LayoutGrid` (Masonry) and `AlignJustify` (List)
+      - `app/page.tsx` — `viewMode` state is `"tiling" | "list"`. No graph mode.
+      - `components/graph-area.tsx` — Exists but isn't rendered in the main page view
+      - `components/graph-detail-panel.tsx` — Companion panel for graph node details
+
+      IMPLEMENTATION:
+      1. In `app/page.tsx`:
+         - Extend viewMode type: `"tiling" | "list" | "graph"`
+         - Add a GraphArea render path in the main content area (after the list view,
+           around line 1435):
+           ```
+           ) : viewMode === "graph" ? (
+             <GraphArea
+               key={`graph-${activeProjectId}`}
+               blocks={activeProject.blocks}
+               allBlocks={projects.flatMap(p => p.blocks)}
+               onOpenDetail={setSelectedNoteId}
+               onHighlight={setHighlightedBlockId}
+               highlightedBlockId={highlightedBlockId}
+             />
+           ) : (
+      ```
+         - Import GraphArea from `@/components/graph-area`
+
+      2. In `components/status-bar.tsx`:
+         - Add `"graph"` to the view mode type in the props
+         - Add a third button to the view toggle pill (after List, before the Insights button):
+           Import `Share2` or `GitBranch` icon from lucide-react for the graph.
+           ```
+           <button onClick={() => onViewModeChange("graph")}
+             className={`flex items-center gap-1.5 px-2 py-1 rounded-sm text-[10px] font-semibold transition-all duration-150 ${
+               viewMode === "graph" ? "bg-primary/15 text-primary shadow-sm"
+                 : "text-muted-foreground hover:text-foreground"
+             }`}
+             title="Graph view"
+           >
+             <GitBranch className="h-3 w-3" />
+             <span className="hidden sm:block">Graph</span>
+           </button>
+           ```
+
+      3. In `components/status-bar.tsx` props:
+         - Update `onViewModeChange` type to accept `"tiling" | "list" | "graph"`
+
+      4. Smart default: In `app/page.tsx`, when a project has 20+ blocks, default to graph view
+         on first selection. When < 20 blocks, default to tiling.
+
+      GRAPH AREA INTEGRATION:
+      - Check `components/graph-area.tsx` for the component's existing props and adapt
+        the import accordingly. Don't add props the component doesn't accept.
+      - If GraphArea needs specific props not shown above, match its actual interface.
+
+      FILES TO MODIFY:
+      - `app/page.tsx` (extend viewMode, add graph render path, import GraphArea)
+      - `components/status-bar.tsx` (add graph button to toggle pill)
+    workdir: /Users/pretheesh/Projects/fikr-workspace/fikr-pad
+    model: gemini-2.5-pro
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 6. P2 — Communication: ghost synthesis limits visible to user
+  # ─────────────────────────────────────────────────────────────────────
+  - name: "Communicate ghost synthesis requirements to user"
+    prompt: |
+      You are making the ghost synthesis gating conditions visible to users.
+
+      PROBLEM:
+      Ghost synthesis (AI-generated cross-note themes) is silently gated behind conditions
+      (page.tsx lines 483-511): 5 enriched blocks, 5 new blocks since last generation,
+      5 minutes since last generation, 2 distinct categories. When conditions aren't met,
+      `generateGhostNote` returns early with no feedback. Users think the feature is broken.
+
+      GOAL: Show a status message explaining what's needed.
+
+      CURRENT STATE:
+      - `app/page.tsx` — `generateGhostNote` function silently checks conditions and returns
+      - `components/ghost-panel.tsx` — Displays ghost notes, has a "Generate" button
+
+      IMPLEMENTATION:
+      1. In `app/page.tsx`, compute ghost status as derived state:
+         ```
+         const ghostStatus = useMemo(() => {
+           if (!activeProject) return null;
+           const enriched = activeProject.blocks.filter(b => !b.isEnriching && b.category);
+           const categories = new Set(enriched.map(b => b.category));
+           const lastCount = activeProject.lastGhostBlockCount || 0;
+           const lastTime = activeProject.lastGhostTimestamp || 0;
+           const timeSinceLast = Date.now() - lastTime;
+
+           if (enriched.length < 5) {
+             return { ready: false, message: `Need ${5 - enriched.length} more notes to generate insights` };
+           }
+           if (categories.size < 2) {
+             return { ready: false, message: "Need notes from 2+ different categories" };
+           }
+           if (enriched.length < lastCount + 5) {
+             return { ready: false, message: `Add ${lastCount + 5 - enriched.length} more notes since last insight` };
+           }
+           if (timeSinceLast < 5 * 60 * 1000) {
+             const remaining = Math.ceil((5 * 60 * 1000 - timeSinceLast) / 1000);
+             return { ready: false, message: `Available in ${remaining}s` };
+           }
+           return { ready: true };
+         }, [activeProject, blocks]);
+         ```
+
+      2. Pass `ghostStatus` to `GhostPanel` in `components/ghost-panel.tsx`.
+
+      3. In the ghost panel, when the "Generate" button is disabled, show the status message:
+         Below the existing generate button, add:
+         ```
+         {ghostStatus && !ghostStatus.ready && (
+           <p className="text-[11px] text-muted-foreground/50 mt-2">
+             {ghostStatus.message}
+           </p>
+         )}
+         ```
+
+      4. The ghost panel's generate button should be `disabled={!ghostStatus?.ready}` instead
+         of relying on the silent early return in `generateGhostNote`.
+
+      FILES TO MODIFY:
+      - `app/page.tsx` (add ghostStatus computation + pass to GhostPanel)
+      - `components/ghost-panel.tsx` (accept ghostStatus prop, display status message)
+    workdir: /Users/pretheesh/Projects/fikr-workspace/fikr-pad
+    model: gemini-2.5-pro
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 7. P3 — 24-hour trash with destructive action confirmations
+  # ─────────────────────────────────────────────────────────────────────
+  - name: "24-hour trash + destructive action confirmations"
+    prompt: |
+      You are adding a soft-delete trash system and confirmation dialogs for destructive actions.
+
+      PROBLEM:
+      Delete is instant and irreversible (page.tsx line 972-980: `deleteBlock` just filters out
+      the block). Project deletion (line 1196) and block clearing (line 1173) are equally
+      destructive. A user with 100 notes in a project can lose everything with one click.
+
+      GOAL: 24-hour trash with recovery + confirmation for destructive actions.
+
+      CURRENT STATE:
+      - `app/page.tsx` — `deleteBlock`, `deleteProject`, `clearBlocks` are instant
+      - `components/project-sidebar.tsx` — Project management sidebar with delete
+      - No trash concept exists
+
+      IMPLEMENTATION:
+
+      1. TRASH DATA MODEL — Add to the Project type in `app/page.tsx`:
+         ```
+         interface TrashedBlock extends TextBlock {
+           trashedAt: number;
+         }
+         ```
+         Add `trashedBlocks: TrashedBlock[]` to the Project interface.
+
+      2. MODIFY `deleteBlock` — Instead of filtering, move to trash:
+         ```
+         const deleteBlock = useCallback((id: string) => {
+           pushHistory(activeProjectId, blocksRef.current);
+           updateActiveProject((p) => ({
+             ...p,
+             blocks: p.blocks.filter((b) => b.id !== id),
+             trashedBlocks: [...(p.trashedBlocks || []), { ...p.blocks.find(b => b.id === id), trashedAt: Date.now() }],
+           }));
+           showUndoToast("Moved to trash");
+         }, [activeProjectId, pushHistory, updateActiveProject, showUndoToast]);
+         ```
+
+      3. AUTO-CLEANUP — Add a useEffect that purges trash older than 24 hours:
+         ```
+         useEffect(() => {
+           setProjects((prev) =>
+             prev.map((p) => ({
+               ...p,
+               trashedBlocks: (p.trashedBlocks || []).filter(
+                 (b) => Date.now() - (b.trashedAt || 0) < 24 * 60 * 60 * 1000
+               ),
+             }))
+           );
+         }, []); // Run once on mount
+         ```
+
+      4. TRASH UI — Add a "Trash" section in `components/project-sidebar.tsx`:
+         At the bottom of the sidebar, after the project list, add a collapsible "Trash" section
+         that shows trashed blocks for the active project. Each item shows the truncated text
+         and a "Restore" button. Also show "Empty Trash" for bulk delete.
+         - Show trash count as a badge: "Trash (3)"
+         - Each item: truncated text + "24h ago" timestamp + restore/delete buttons
+         - Use existing sidebar styling: `text-sm text-muted-foreground/60`
+
+      5. CONFIRM DIALOG — Create a lightweight confirm modal in `components/confirm-dialog.tsx`:
+         Simple modal with title, message, confirm/cancel buttons. Use for:
+         - Delete project: "Delete 'Project Name' and all {N} notes?"
+         - Clear blocks: "Clear all {N} notes from this space?"
+         - Empty trash: "Permanently delete {N} trashed items?"
+
+         ```
+         export function ConfirmDialog({
+           open, title, message, confirmText = "Delete", onConfirm, onCancel, destructive = true
+         }) {
+           return (
+             <dialog open={open} className="...">
+               <h3>{title}</h3>
+               <p>{message}</p>
+               <div className="flex justify-end gap-2">
+                 <button onClick={onCancel}>Cancel</button>
+                 <button onClick={onConfirm} className={destructive ? "bg-red-600" : ""}>{confirmText}</button>
+               </div>
+             </dialog>
+           );
+         }
+         ```
+
+      6. WIRE CONFIRM DIALOG — In `app/page.tsx`:
+         - Add state for pending confirmation: `const [confirmState, setConfirmState] = useState<{...} | null>(null)`
+         - Modify `deleteProject` to set confirmState instead of deleting immediately
+         - Same for `clearBlocks`
+         - Render `ConfirmDialog` at the bottom of the page
+
+      PERSISTENCE:
+      - Add `trashedBlocks` to the `serialiseProject` function in `lib/nodepad-format.ts`
+      - Add it to `NodepadFile` interface and `parseNodepadFile`
+      - When saving to disk via IPC (main.js), include trashedBlocks
+
+      FILES TO MODIFY:
+      - `app/page.tsx` (modify deleteBlock, add trash logic, add confirm state)
+      - `components/project-sidebar.tsx` (add trash section)
+      - `lib/nodepad-format.ts` (persist trashedBlocks)
+      - Create: `components/confirm-dialog.tsx`
+    workdir: /Users/pretheesh/Projects/fikr-workspace/fikr-pad
+    model: gemini-2.5-pro
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 8. P3 — Accessibility pass: contrast + ARIA + focus-visible
+  # ─────────────────────────────────────────────────────────────────────
+  - name: "Accessibility: ARIA groups, contrast fixes, focus-visible"
+    prompt: |
+      You are performing an accessibility pass on FikrPad's tile cards and status bar.
+
+      PROBLEM:
+      - Screen readers read each tile card as individual buttons without semantic grouping
+      - Elements at 40% opacity of muted-foreground fail WCAG AA contrast
+      - No focus-visible outlines for keyboard navigation
+      - Confidence bar, connection indicators, and category tags lack ARIA attributes
+
+      GOAL: Make cards readable as semantic units, ensure contrast passes, add keyboard focus.
+
+      IMPLEMENTATION:
+
+      1. TILE CARD (`components/tile-card.tsx`):
+         - Wrap the entire motion.div (line 277) with semantic attributes:
+           ```
+           role="article"
+           aria-labelledby={`card-title-${block.id}`}
+           tabIndex={0}
+           ```
+         - Add `aria-describedby` pointing to the annotation text
+         - Confidence bar (line 731): Add `role="meter"` with `aria-valuenow` and `aria-label`:
+           ```
+           role="meter"
+           aria-label={`AI confidence: ${Math.round(block.confidence)}%`}
+           aria-valuenow={Math.round(block.confidence)}
+           aria-valuemin={0}
+           aria-valuemax={100}
+           ```
+         - Connection indicator (line 378): Add `title` and `aria-label`:
+           ```
+           aria-label={`${block.influencedBy.length} connected notes`}
+           ```
+         - All buttons in header: Add `aria-label` if they don't have one (delete has it, pin has it)
+
+      2. CONTRAST FIXES — In `components/tile-card.tsx` and `components/status-bar.tsx`:
+         - Replace `text-muted-foreground/40` with `text-muted-foreground/55` for readable text
+         - Replace `text-muted-foreground/50` with `text-muted-foreground/60` for secondary text
+         - Affected elements: timestamp (line 373), connection dots (line 393), type label (line 342),
+           category tag (line 784), influence count (line 809), confidence labels (line 740)
+         - DON'T change decorative elements (dividers, icons) — only text content
+         - In the status bar (status-bar.tsx), the search placeholder at line 141 uses
+           `text-muted-foreground/60` which is fine. But the menu items at line 85 use
+           `opacity-60` on icons — bump to `opacity-75`
+
+      3. FOCUS-VISIBLE — Add global focus styles to `app/globals.css`:
+         ```css
+         /* Focus-visible outlines — only show for keyboard navigation */
+         :focus-visible {
+           outline: 2px solid hsl(var(--primary));
+           outline-offset: 2px;
+           border-radius: 4px;
+         }
+
+         /* Don't show focus ring for mouse users */
+         :focus:not(:focus-visible) {
+           outline: none;
+         }
+
+         /* Tile card focus ring */
+         [role="article"]:focus-visible {
+           outline-color: hsl(var(--primary));
+           outline-width: 2px;
+         }
+         ```
+
+      4. KEYBOARD NAVIGATION — In `components/tiling-area.tsx`:
+         - The masonry grid currently has no keyboard navigation between cards
+         - Add `role="list"` to the grid container and `role="listitem"` to each card wrapper
+         - This enables screen readers to navigate card-by-card
+
+      RULES:
+      - Do NOT change visual appearance for mouse users — only add ARIA/contrast/focus
+      - Keep all existing functionality intact
+      - The contrast changes should be subtle (40% → 55% is barely visible)
+      - Test: a screen reader should announce "Claim: [text] — 85% confidence" as a unit
+
+      FILES TO MODIFY:
+      - `components/tile-card.tsx` (ARIA attributes)
+      - `components/status-bar.tsx` (contrast fixes)
+      - `app/globals.css` (focus-visible styles, list roles)
+      - `components/tiling-area.tsx` (role="list" / role="listitem")
+    workdir: /Users/pretheesh/Projects/fikr-workspace/fikr-pad
+    model: gemini-2.5-pro

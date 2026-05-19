@@ -32,9 +32,16 @@ export function getRelatedIds(hoveredId: string, blocks: TextBlock[]): Set<strin
   const related = new Set<string>([hoveredId])
   blocks.forEach(b => {
     if (b.id === hoveredId) return
-    const hoveredPointsToB = hovered.influencedBy?.includes(b.id) ?? false
-    const bPointsToHovered = b.influencedBy?.includes(hoveredId) ?? false
+    const hoveredPointsToB = hovered.influencedBy?.some((e: any) => e.id === b.id) ?? false
+    const bPointsToHovered = b.influencedBy?.some((e: any) => e.id === hoveredId) ?? false
     if (hoveredPointsToB || bPointsToHovered) related.add(b.id)
   })
   return related
+}
+
+export function limitWords(str: string, limit: number): string {
+  if (!str) return str;
+  const words = str.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= limit) return str;
+  return words.slice(0, limit).join(' ');
 }

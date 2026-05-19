@@ -1,0 +1,30 @@
+[
+  {
+    "id": "linkedin-post",
+    "name": "LinkedIn Post",
+    "platform": "linkedin",
+    "maxLength": 400,
+    "enableHashtags": true
+  },
+  {
+    "id": "linkedin-article",
+    "name": "LinkedIn Article",
+    "platform": "linkedin",
+    "maxLength": 2000,
+    "enableHashtags": false
+  },
+  {
+    "id": "substack-post",
+    "name": "Substack Post",
+    "platform": "substack",
+    "maxLength": 2500,
+    "enableHashtags": false
+  },
+  {
+    "id": "substack-note",
+    "name": "Substack Note",
+    "platform": "substack",
+    "maxLength": 150,
+    "enableHashtags": false
+  }
+]

@@ -1,0 +1,51 @@
+project:
+  name: fikr-studio
+  status: in-development
+  created: "2026-01-01"
+  last_updated: "2026-05-19"
+  last_commit: "see git log"
+
+stack:
+  desktop: Electron
+  frontend: React + TypeScript
+  bundler: Vite
+  styling: "Tailwind CSS + Shadcn/UI (Radix)"
+  state: Zustand
+  database: "SQLite (better-sqlite3)"
+  vector_store: "SQLite (keyword BM25 index)"
+  local_llm: "@mlc-ai/web-llm (WebGPU, IndexedDB cache)"
+  language: TypeScript
+
+agentic:
+  context_format: TOON
+  skills_dir: .agents/skills/
+  workflows_dir: .agents/workflows/
+  context_dir: .agents/context/
+  task_manager: .agents/skills/task-manager/manage.sh
+  validate: .agents/skills/validate-code/validate.sh
+  heartbeat: .agents/skills/heartbeat/pulse.sh
+
+architecture:
+  philosophy: "The LLM is the runtime. Code is just the execution boundary."
+  renderer: "Next.js static export loaded by Electron (next build && next export → out/)"
+  ipc: "All OS access via preload.js context bridge + electron/ipc/handlers.ts"
+  state: "Zustand stores in renderer — never import better-sqlite3 in renderer"
+  mcp_local: "localhost:3025/sse — free tier, requires Studio open"
+  mcp_cloud: "fikr.one/api/mcp/sse — Plus/Pro, Firestore-backed, Studio optional"
+
+key_decisions[6]{id,decision,adr}:
+  001,Next.js static export loaded inside Electron — two layers with strict IPC boundary,.agents/context/adrs/001-nextjs-electron-hybrid-architecture.md
+  002,Local-first SQLite via better-sqlite3 in main process — renderer never touches DB directly,.agents/context/adrs/002-local-first-sqlite-data-model.md
+  003,Two-tier MCP (local SSE + cloud Firestore relay) with fikr-studio-mcp NPM proxy,.agents/context/adrs/003-mcp-two-tier-architecture.md
+  004,Auth via fikr.one deep link (fikr-studio://auth) + signInWithCustomToken — no standalone auth,.agents/context/adrs/004-sso-deeplink-auth.md
+  005,Spatial UI with four views (Canvas/Kanban/Graph/Studio) all reading shared Zustand store,.agents/context/adrs/005-spatial-ui-architecture.md
+  006,AI pipeline: BM25 search + note synthesis (contentType/category/annotation) + Ghost Notes + WebLLM,.agents/context/adrs/006-ai-pipeline.md
+
+key_rules:
+  - "Renderer never imports better-sqlite3 — all DB access via IPC"
+  - "Auth always via fikr.one SSO deep link — no standalone Firebase auth"
+  - "npm run lint && npx tsc --noEmit must pass before every commit"
+  - "create_note_synthesized preferred over create_note for agent writes"
+  - "NPM tokens for fikr-studio-mcp never committed to git"
+
+# Active tasks tracked in .agents/skills/task-manager/todo.toon

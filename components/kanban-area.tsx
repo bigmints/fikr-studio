@@ -198,7 +198,7 @@ export function KanbanArea({
             <div className="opacity-80 mix-blend-plus-lighter">
               <img
                 src="logo-icon.png"
-                alt="FikrPad"
+                alt="Fikr Studio"
                 className="h-14 w-14 object-contain"
               />
             </div>

@@ -1,0 +1,7 @@
+skills[6]{name,path,description}:
+  heartbeat,.agents/skills/heartbeat/pulse.sh,"Write a liveness timestamp before each task and after each commit"
+  task-manager,.agents/skills/task-manager/manage.sh,"Central task lifecycle: list / add / start / complete tasks in todo.toon"
+  validate-code,.agents/skills/validate-code/validate.sh,"Run lint + type check. Must pass before any git commit"
+  auto-context,.agents/skills/auto-context/update-context.sh,"Append a timestamped entry to worklog.toon in TOON format"
+  compress-worklog,.agents/skills/compress-worklog/compress.sh,"Archive old worklog entries to keep context token count under 64k"
+  minions,.agents/skills/minions/scripts/minions,"Run a YAML prompt queue sequentially against the pi/Gemini CLI"

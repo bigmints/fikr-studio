@@ -1,296 +1,290 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { getFirebaseAuth, getFirebaseDb } from "./firebase"
+import { doc, getDoc } from "firebase/firestore"
 
-export interface AIModel {
-  id: string
-  label: string
-  shortLabel: string
-  description: string
-  supportsGrounding: boolean
-  /** For OpenAI models: the search-preview variant to use when grounding is enabled */
-  groundingModelId?: string
+// ── Provider types ────────────────────────────────────────────────────────────
+
+export type AIProvider = "openai" | "gemini" | "openrouter"
+
+// ── Task presets ──────────────────────────────────────────────────────────────
+// Named @preset/fikr-<task>. Holds cost-effective recommended model IDs
+// for each provider. null = not applicable (custom uses customModelName).
+
+export type AITask = "analysis" | "tools" | "transcription" | "vision" | "embedding"
+
+export const TASK_PRESET_NAMES: Record<AITask, string> = {
+  analysis:      "@preset/fikr-analysis",
+  tools:         "@preset/fikr-tools",
+  transcription: "@preset/fikr-transcription",
+  vision:        "@preset/fikr-vision",
+  embedding:     "@preset/fikr-embedding",
 }
 
-export type AIProvider = "openrouter" | "openai" | "zai" | "custom"
+/** Recommended cost-effective model per task per provider. */
+export const PRESET_MODELS: Record<AITask, Record<AIProvider, string>> = {
+  analysis: {
+    openai:     "gpt-4o-mini",
+    gemini:     "gemini-2.0-flash-lite",
+    openrouter: "google/gemini-2.0-flash-lite-001",
+  },
+  tools: {
+    openai:     "gpt-4o-mini",
+    gemini:     "gemini-2.0-flash-lite",
+    openrouter: "google/gemini-2.0-flash-lite-001",
+  },
+  transcription: {
+    openai:     "whisper-1",
+    gemini:     "gemini-2.0-flash",
+    openrouter: "openai/whisper-large-v3",
+  },
+  vision: {
+    openai:     "gpt-4o-mini",
+    gemini:     "gemini-2.0-flash",
+    openrouter: "google/gemini-2.0-flash-lite-001",
+  },
+  embedding: {
+    openai:     "text-embedding-3-small",
+    gemini:     "text-embedding-004",
+    openrouter: "openai/text-embedding-3-small",
+  },
+}
+
+/** Available model IDs per task per provider (for the settings picker). */
+export const AVAILABLE_MODELS: Record<AITask, Partial<Record<AIProvider, string[]>>> = {
+  analysis: {
+    openai:     ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini", "o4-mini"],
+    gemini:     ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-pro-preview-03-25", "gemini-1.5-pro"],
+    openrouter: [
+      "google/gemini-2.0-flash-lite-001",
+      "google/gemini-2.5-pro-preview-03-25",
+      "anthropic/claude-sonnet-4-5",
+      "openai/gpt-4o",
+      "openai/gpt-4o-mini",
+      "deepseek/deepseek-chat",
+      "mistralai/mistral-small-3.2-24b-instruct",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+    ],
+  },
+  tools: {
+    openai:     ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
+    gemini:     ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
+    openrouter: ["google/gemini-2.0-flash-lite-001", "openai/gpt-4o-mini", "deepseek/deepseek-chat"],
+  },
+  transcription: {
+    openai:     ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"],
+    gemini:     ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"],
+    openrouter: ["openai/whisper-large-v3", "openai/gpt-4o-transcribe"],
+  },
+  vision: {
+    openai:     ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
+    gemini:     ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-pro-preview-03-25"],
+    openrouter: [
+      "google/gemini-2.0-flash-lite-001",
+      "google/gemini-2.0-flash-001",
+      "openai/gpt-4o-mini",
+      "anthropic/claude-sonnet-4-5",
+    ],
+  },
+  embedding: {
+    openai:     ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
+    gemini:     ["text-embedding-004", "gemini-embedding-exp-03-07"],
+    openrouter: ["openai/text-embedding-3-small", "openai/text-embedding-3-large"],
+  },
+}
+
+// ── Provider presets ──────────────────────────────────────────────────────────
 
 export interface AIProviderPreset {
-  id: AIProvider
-  label: string
-  baseUrl: string
-  keyUrl: string
+  id:             AIProvider
+  label:          string
+  baseUrl:        string
+  keyUrl:         string
   keyPlaceholder: string
 }
 
 export const AI_PROVIDER_PRESETS: AIProviderPreset[] = [
   {
-    id: "openrouter",
-    label: "OpenRouter",
-    baseUrl: "https://openrouter.ai/api/v1",
-    keyUrl: "https://openrouter.ai/settings/keys",
+    id:             "openrouter",
+    label:          "OpenRouter",
+    baseUrl:        "https://openrouter.ai/api/v1",
+    keyUrl:         "https://openrouter.ai/settings/keys",
     keyPlaceholder: "sk-or-v1-...",
   },
   {
-    id: "openai",
-    label: "OpenAI",
-    baseUrl: "https://api.openai.com/v1",
-    keyUrl: "https://platform.openai.com/api-keys",
+    id:             "openai",
+    label:          "OpenAI",
+    baseUrl:        "https://api.openai.com/v1",
+    keyUrl:         "https://platform.openai.com/api-keys",
     keyPlaceholder: "sk-...",
   },
   {
-    id: "zai",
-    label: "Z.ai",
-    baseUrl: "https://api.z.ai/api/paas/v4",
-    keyUrl: "https://z.ai/manage-apikey/apikey-list",
-    keyPlaceholder: "Your Z.ai API key",
-  },
-  {
-    id: "custom",
-    label: "OpenAI Compatible",
-    baseUrl: "",
-    keyUrl: "#",
-    keyPlaceholder: "Optional API Key",
+    id:             "gemini",
+    label:          "Google Gemini",
+    baseUrl:        "https://generativelanguage.googleapis.com/v1beta",
+    keyUrl:         "https://aistudio.google.com/app/apikey",
+    keyPlaceholder: "AIza...",
   },
 ]
 
 export function getPreset(provider: AIProvider): AIProviderPreset {
-  return AI_PROVIDER_PRESETS.find(p => p.id === provider) || AI_PROVIDER_PRESETS[0]
+  return AI_PROVIDER_PRESETS.find(p => p.id === provider) ?? AI_PROVIDER_PRESETS[0]
 }
 
-export const AI_MODELS: AIModel[] = [
-  {
-    id: "anthropic/claude-sonnet-4-5",
-    label: "Claude Sonnet 4.5",
-    shortLabel: "Claude",
-    description: "Best reasoning & annotation quality",
-    supportsGrounding: false,
-  },
-  {
-    id: "openai/gpt-4o",
-    label: "GPT-4o",
-    shortLabel: "GPT-4o",
-    description: "Strong structured output, broad knowledge",
-    supportsGrounding: true,
-  },
-  {
-    id: "google/gemini-2.5-pro-preview-03-25",
-    label: "Gemini 2.5 Pro",
-    shortLabel: "Gemini",
-    description: "Long-context, web grounding available",
-    supportsGrounding: true,
-  },
-  {
-    id: "deepseek/deepseek-chat",
-    label: "DeepSeek V3",
-    shortLabel: "DeepSeek",
-    description: "Cost-efficient frontier model",
-    supportsGrounding: false,
-  },
-  {
-    id: "mistralai/mistral-small-3.2-24b-instruct",
-    label: "Mistral Small 3.2",
-    shortLabel: "Mistral",
-    description: "Fast, excellent structured outputs",
-    supportsGrounding: false,
-  },
-  // ── Free tier (no credits required, ~200 req/day limit) ─────────────────
-  {
-    id: "nvidia/nemotron-3-nano-30b-a3b:free",
-    label: "Nemotron 30B · Free",
-    shortLabel: "Nemotron",
-    description: "Free · no credits · ~200 req/day · Nvidia-hosted",
-    supportsGrounding: false,
-  },
-  {
-    id: "nvidia/nemotron-3-super-120b-a12b:free",
-    label: "Nemotron 120B · Free",
-    shortLabel: "Nemotron",
-    description: "Free · no credits · ~200 req/day · Nvidia-hosted · MoE",
-    supportsGrounding: false,
-  },
-]
+// ── Per-task model overrides ──────────────────────────────────────────────────
+// null → use the preset default for the active provider.
 
-export const OPENAI_MODELS: AIModel[] = [
-  {
-    id: "gpt-4o",
-    label: "GPT-4o",
-    shortLabel: "GPT-4o",
-    description: "Strong structured output, broad knowledge",
-    supportsGrounding: true,
-    groundingModelId: "gpt-4o-search-preview",
-  },
-  {
-    id: "gpt-4o-mini",
-    label: "GPT-4o Mini",
-    shortLabel: "GPT-4o Mini",
-    description: "Fast and capable, web grounding available",
-    supportsGrounding: true,
-    groundingModelId: "gpt-4o-mini-search-preview",
-  },
-  {
-    id: "gpt-4.1",
-    label: "GPT-4.1",
-    shortLabel: "GPT-4.1",
-    description: "Latest GPT-4, improved instruction following",
-    supportsGrounding: false,
-  },
-  {
-    id: "gpt-4.1-mini",
-    label: "GPT-4.1 Mini",
-    shortLabel: "GPT-4.1 Mini",
-    description: "Fast and capable, good balance",
-    supportsGrounding: false,
-  },
-  {
-    id: "o4-mini",
-    label: "o4-mini",
-    shortLabel: "o4-mini",
-    description: "Fast reasoning model",
-    supportsGrounding: false,
-  },
-]
-
-export const ZAI_MODELS: AIModel[] = [
-  {
-    id: "glm-4.5",
-    label: "GLM-4.5",
-    shortLabel: "GLM-4.5",
-    description: "Fast, cost-efficient Z.ai model",
-    supportsGrounding: false,
-  },
-  {
-    id: "glm-4.7",
-    label: "GLM-4.7",
-    shortLabel: "GLM-4.7",
-    description: "Strong reasoning, 200K context",
-    supportsGrounding: false,
-  },
-  {
-    id: "glm-5",
-    label: "GLM-5",
-    shortLabel: "GLM-5",
-    description: "Z.ai flagship model",
-    supportsGrounding: false,
-  },
-  {
-    id: "glm-5-turbo",
-    label: "GLM-5 Turbo",
-    shortLabel: "GLM-5 Turbo",
-    description: "Fast, capable, community tested",
-    supportsGrounding: false,
-  },
-]
-
-export function getModelsForProvider(provider: AIProvider): AIModel[] {
-  if (provider === "openai") return OPENAI_MODELS
-  if (provider === "zai")    return ZAI_MODELS
-  if (provider === "custom") return [] // Allow manual entry of model name
-  return AI_MODELS // openrouter + safe fallback for any stale localStorage value
+export interface AITaskModels {
+  analysis:      string | null
+  tools:         string | null
+  transcription: string | null
+  vision:        string | null
+  embedding:     string | null
 }
 
-export const DEFAULT_MODEL_ID = "openai/gpt-4o"
-export const DEFAULT_PROVIDER: AIProvider = "openrouter"
+const DEFAULT_TASK_MODELS: AITaskModels = {
+  analysis:      null,
+  tools:         null,
+  transcription: null,
+  vision:        null,
+  embedding:     null,
+}
+
+// ── Settings shape ────────────────────────────────────────────────────────────
 
 export interface AISettings {
-  apiKey: string
-  modelId: string
-  webGrounding: boolean
-  provider: AIProvider
-  customBaseUrl: string
-  /** Per-provider key store so switching back to a provider restores its key */
-  providerKeys?: Partial<Record<AIProvider, string>>
+  provider:        AIProvider
+  apiKey:          string
+  taskModels:      AITaskModels
+  webGrounding:    boolean
 }
 
-const STORAGE_KEY = "nodepad-ai-settings"
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+const STORAGE_KEY = "fikr-ai-settings"
+
+const DEFAULT_SETTINGS: AISettings = {
+  provider:        "openrouter",
+  apiKey:          "",
+  taskModels:      DEFAULT_TASK_MODELS,
+  webGrounding:    false,
+}
+
+/** Migrate from old settings shape (flat modelId, zai provider, providerKeys). */
+function migrate(raw: Record<string, any>): AISettings {
+  let provider = raw.provider as AIProvider
+  // zai was removed → fall back to openrouter
+  if ((provider as string) === "zai") provider = "openrouter"
+  // Legacy 'google' from old Flutter-side naming
+  if ((provider as string) === "google") provider = "gemini"
+
+  return {
+    provider:        provider || DEFAULT_SETTINGS.provider,
+    // Prefer new field; fall back to old providerKeys store, then bare apiKey
+    apiKey:          raw.apiKey || raw.providerKeys?.[raw.provider] || "",
+    taskModels:      raw.taskModels ? { ...DEFAULT_TASK_MODELS, ...raw.taskModels } : DEFAULT_TASK_MODELS,
+    webGrounding:    raw.webGrounding ?? false,
+  }
+}
 
 function loadSettings(): AISettings {
-  if (typeof window === "undefined") {
-    return { apiKey: "", modelId: DEFAULT_MODEL_ID, webGrounding: false, provider: DEFAULT_PROVIDER, customBaseUrl: "" }
-  }
+  if (typeof window === "undefined") return DEFAULT_SETTINGS
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { apiKey: "", modelId: DEFAULT_MODEL_ID, webGrounding: false, provider: DEFAULT_PROVIDER, customBaseUrl: "" }
-    return { apiKey: "", modelId: DEFAULT_MODEL_ID, webGrounding: false, provider: DEFAULT_PROVIDER, customBaseUrl: "", ...JSON.parse(raw) }
+    // Try new key, then old key for migration
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("nodepad-ai-settings")
+    if (!raw) return DEFAULT_SETTINGS
+    return migrate(JSON.parse(raw))
   } catch {
-    return { apiKey: "", modelId: DEFAULT_MODEL_ID, webGrounding: false, provider: DEFAULT_PROVIDER, customBaseUrl: "" }
+    return DEFAULT_SETTINGS
   }
 }
 
+// ── Resolved config (ready to use in AI calls) ────────────────────────────────
+
 export interface AIConfig {
-  apiKey: string
-  modelId: string
+  provider:        AIProvider
+  apiKey:          string
+  taskModels:      AITaskModels
   supportsGrounding: boolean
-  provider: AIProvider
-  customBaseUrl: string
 }
 
 export function loadAIConfig(): AIConfig | null {
   const s = loadSettings()
-  // For standard providers: require an API key. For custom: require a base URL.
-  if (!s.apiKey && s.provider !== "custom") return null
-  if (s.provider === "custom" && !s.customBaseUrl?.trim()) return null
-  const models = getModelsForProvider(s.provider)
-  const model = models.find(m => m.id === s.modelId)
-  // Use the matched model's id if found; otherwise fall back to the first model
-  // for this provider.  This handles the case where localStorage still holds an
-  // OpenRouter-prefixed id (e.g. "openai/gpt-4o") after switching to OpenAI —
-  // that string won't match any entry in OPENAI_MODELS so we fall back to "gpt-4o".
-  const modelId = model?.id ?? models[0]?.id ?? s.modelId ?? DEFAULT_MODEL_ID
-  // Z.ai does not support grounding; only openrouter and openai do
-  const supportsGrounding =
-    (s.provider === "openrouter" || s.provider === "openai") &&
-    s.webGrounding &&
-    (model?.supportsGrounding ?? false)
-  return { apiKey: s.apiKey, modelId, supportsGrounding, provider: s.provider, customBaseUrl: s.customBaseUrl }
+  if (!s.apiKey) return null
+  return {
+    provider:        s.provider,
+    apiKey:          s.apiKey,
+    taskModels:      s.taskModels,
+    // Grounding only supported on openrouter for now
+    supportsGrounding: s.provider === "openrouter" && s.webGrounding,
+  }
+}
+
+/**
+ * Resolve the effective model ID for a given task.
+ * Priority: explicit task override → preset default → custom model name.
+ */
+export function resolveModel(config: AIConfig, task: AITask): string {
+  const override = config.taskModels[task]
+  if (override) return override
+  return PRESET_MODELS[task][config.provider] ?? ""
 }
 
 export function getBaseUrl(config: AIConfig): string {
-  const custom = config.customBaseUrl?.trim()
-  if (!custom && config.provider === "custom") {
-    throw new Error(
-      "No base URL configured. Enter your OpenAI-compatible endpoint URL in Settings → Provider."
-    )
-  }
-  return custom || getPreset(config.provider).baseUrl
+  return getPreset(config.provider).baseUrl
 }
 
 export function getProviderHeaders(config: AIConfig): Record<string, string> {
-  const base: Record<string, string> = {
-    "Content-Type": "application/json",
-  }
-  if (config.apiKey) {
-    base["Authorization"] = `Bearer ${config.apiKey}`
-  }
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`
   if (config.provider === "openrouter") {
-    base["HTTP-Referer"] = "https://nodepad.space"
-    base["X-Title"] = "FikrPad"
+    headers["HTTP-Referer"] = "https://fikr.one"
+    headers["X-Title"] = "Fikr Studio"
   }
-  return base
+  // Gemini REST uses ?key= query param — caller handles auth separately.
+  // We still pass the header for completeness but Gemini ignores it gracefully.
+  return headers
 }
 
-/** @deprecated Use loadAIConfig() for direct browser → provider calls.
- *  Kept for any remaining server-route usage during transition. */
-export function getAIHeaders(): Record<string, string> {
-  const config = loadAIConfig()
-  if (!config) return {}
-  const models = getModelsForProvider(config.provider)
-  const model = models.find(m => m.id === config.modelId) || AI_MODELS.find(m => m.id === DEFAULT_MODEL_ID)!
-  return {
-    "x-or-key": config.apiKey,
-    "x-or-model": config.modelId,
-    "x-or-supports-grounding": model.supportsGrounding ? "true" : "false",
+// ── Legacy shim (used by components not yet migrated) ────────────────────────
+// Returns the analysis model + metadata in the shape that page.tsx expects.
+
+export function getModelsForProvider(_provider: AIProvider) {
+  // Returns an empty array — settings modal now renders per-task pickers.
+  return []
+}
+
+// ── Fikr Cloud Pro Managed Auth ───────────────────────────────────────────────
+
+export async function getManagedAuthStatus(): Promise<{ isManaged: boolean; token: string | null }> {
+  try {
+    const auth = getFirebaseAuth()
+    const user = auth.currentUser
+    if (!user) return { isManaged: false, token: null }
+    
+    const db = getFirebaseDb()
+    const userDoc = await getDoc(doc(db, "users", user.uid))
+    if (!userDoc.exists()) return { isManaged: false, token: null }
+    
+    const plan = (userDoc.data()?.plan as string) || "Free"
+    const isPro = plan.toLowerCase().includes("pro")
+    
+    if (isPro) {
+      const token = await user.getIdToken()
+      return { isManaged: true, token }
+    }
+    return { isManaged: false, token: null }
+  } catch (e) {
+    console.warn("Fikr Cloud managed auth check failed:", e)
+    return { isManaged: false, token: null }
   }
 }
+
+// ── useAISettings hook ────────────────────────────────────────────────────────
 
 export function useAISettings() {
-  // Always start with the SSR-safe default so server and client render identically.
-  // Load the real localStorage value after mount to avoid hydration mismatches
-  // caused by settings.apiKey toggling conditional DOM blocks (API key banner,
-  // modelLabel prop, etc.) between the server render and client hydration.
-  const [settings, setSettings] = useState<AISettings>({
-    apiKey: "", modelId: DEFAULT_MODEL_ID, webGrounding: false,
-    provider: DEFAULT_PROVIDER, customBaseUrl: "",
-  })
+  const [settings, setSettings] = useState<AISettings>(DEFAULT_SETTINGS)
   const [isHydrated, setIsHydrated] = useState(false)
 
   useEffect(() => {
@@ -306,24 +300,24 @@ export function useAISettings() {
     })
   }, [])
 
-  const models = getModelsForProvider(settings.provider)
-
+  // Backwards-compat: resolvedModelId → analysis model for the status bar
   const resolvedModelId = (() => {
-    const model = models.find(m => m.id === settings.modelId) || models[0]
-    if (!model) return settings.modelId
-    if (settings.provider === "openrouter" && settings.webGrounding && model.supportsGrounding) {
-      return `${model.id}:online`
-    }
-    return model.id
+    const cfg = loadAIConfig()
+    if (!cfg) return ""
+    return resolveModel(cfg, "analysis")
   })()
 
-  const currentModel: AIModel = models.find(m => m.id === settings.modelId) || models[0] || {
-    id: settings.modelId,
-    label: settings.modelId,
-    shortLabel: settings.modelId.split("/").pop() || settings.modelId,
-    description: "Custom model",
-    supportsGrounding: false,
+  // Backwards-compat: currentModel shape used by page.tsx for display
+  const currentModel = {
+    id:              resolvedModelId,
+    label:           resolvedModelId.split("/").pop() ?? resolvedModelId,
+    shortLabel:      resolvedModelId.split("/").pop() ?? resolvedModelId,
+    description:     `${TASK_PRESET_NAMES.analysis} · ${getPreset(settings.provider).label}`,
+    supportsGrounding: settings.provider === "openrouter" || settings.provider === "openai",
   }
 
-  return { settings, updateSettings, resolvedModelId, currentModel, models, isHydrated }
+  // Kept for any code that still reads settings.modelId
+  const models = getModelsForProvider(settings.provider)
+
+  return { settings, updateSettings, isHydrated, resolvedModelId, currentModel, models }
 }
