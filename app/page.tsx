@@ -17,6 +17,7 @@ import { useSearchEffect } from "@/components/search-panel";
 import { SearchModal } from "@/components/search-modal";
 import { TileCard, type TextBlock } from "@/components/tile-card";
 import { NoteDetailPanel } from "@/components/note-detail-panel";
+import { BulkActionPanel } from "@/components/bulk-action-panel";
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
 
 function GlobalSearchEngine({ projects }: { projects: any[] }) {
@@ -82,6 +83,7 @@ export default function Page() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [jumpToSettings, setJumpToSettings] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("account");
@@ -95,12 +97,19 @@ export default function Page() {
 
   const fetchWordUsage = useCallback(async (token: string) => {
     try {
-      const res = await fetch("https://www.fikr.one/api/user/usage", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data && data.wordsLimit > 0) {
+      let data;
+      if (typeof window !== "undefined" && (window as any).fikrStudio?.getUsage) {
+        data = await (window as any).fikrStudio.getUsage(token);
+      } else {
+        // Fallback for non-Electron contexts (if any)
+        const res = await fetch("https://fikr.one/api/user/usage", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        data = await res.json();
+      }
+      
+      if (data && data.wordsLimit !== undefined) {
         setWordUsage({
           wordsUsed: data.wordsUsed,
           wordsLimit: data.wordsLimit,
@@ -124,7 +133,7 @@ export default function Page() {
         (window as any).fikrStudio.setUser(user?.uid ?? null, idToken ?? null);
       }
       if (usagePollRef.current) clearInterval(usagePollRef.current);
-      if (idToken && (plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro"))) {
+      if (idToken) {
         fetchWordUsage(idToken);
         usagePollRef.current = setInterval(() => fetchWordUsage(idToken), 5 * 60 * 1000);
       } else {
@@ -1433,9 +1442,33 @@ export default function Page() {
         ...p,
         blocks: p.blocks.filter((b) => b.id !== id),
       }));
+      if (selectedNoteId === id) setSelectedNoteId(null);
+      setSelectedNoteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     },
-    [activeProjectId, pushHistory, updateActiveProject],
+    [activeProjectId, pushHistory, updateActiveProject, selectedNoteId],
   );
+
+  const handleSelectNote = useCallback((id: string, multiSelect?: boolean) => {
+    if (multiSelect) {
+      setSelectedNoteIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
+      setSelectedNoteId(null);
+    } else {
+      setSelectedNoteIds(new Set());
+      setSelectedNoteId(id);
+    }
+  }, []);
 
   const editBlock = useCallback(
     (id: string, newText: string) => {
@@ -1522,6 +1555,63 @@ export default function Page() {
     },
     [activeProjectId, updateActiveProject, enrichBlock],
   );
+
+  const handleBulkDelete = useCallback(() => {
+    if (selectedNoteIds.size === 0) return;
+    pushHistory(activeProjectId, blocksRef.current);
+    updateActiveProject((p) => ({
+      ...p,
+      blocks: p.blocks.filter((b) => !selectedNoteIds.has(b.id)),
+    }));
+    setSelectedNoteIds(new Set());
+  }, [activeProjectId, pushHistory, updateActiveProject, selectedNoteIds]);
+
+  const handleBulkResynthesize = useCallback(() => {
+    if (selectedNoteIds.size === 0) return;
+    const ids = Array.from(selectedNoteIds);
+    ids.forEach((id) => reEnrichBlock(id));
+    setSelectedNoteIds(new Set());
+  }, [selectedNoteIds, reEnrichBlock]);
+
+  const handleBulkRecategorize = useCallback((newCategory: string) => {
+    if (selectedNoteIds.size === 0 || !newCategory.trim()) return;
+    const ids = Array.from(selectedNoteIds);
+    ids.forEach((id) => {
+      const block = blocksRef.current.find(b => b.id === id);
+      if (block) {
+        updateActiveProject((p) => ({
+          ...p,
+          blocks: p.blocks.map((b) =>
+            b.id === id ? { ...b, category: newCategory.trim(), isEnriching: true } : b
+          ),
+        }));
+        enrichBlock(activeProjectId, id, block.text, newCategory.trim(), block.contentType, 0, true).catch(console.error);
+      }
+    });
+    setSelectedNoteIds(new Set());
+  }, [selectedNoteIds, activeProjectId, updateActiveProject, enrichBlock]);
+
+  const handleBulkMove = useCallback((targetProjectId: string) => {
+    if (selectedNoteIds.size === 0) return;
+    const target = projects.find(p => p.id === targetProjectId);
+    if (!target) return;
+
+    const blocksToMove = blocksRef.current.filter(b => selectedNoteIds.has(b.id));
+    
+    pushHistory(activeProjectId, blocksRef.current);
+    updateActiveProject((p) => ({
+      ...p,
+      blocks: p.blocks.filter((b) => !selectedNoteIds.has(b.id)),
+    }));
+
+    setProjects(prev => prev.map(p => 
+      p.id === targetProjectId 
+        ? { ...p, blocks: [...p.blocks, ...blocksToMove] }
+        : p
+    ));
+
+    setSelectedNoteIds(new Set());
+  }, [selectedNoteIds, projects, activeProjectId, pushHistory, updateActiveProject]);
 
   const editAnnotation = useCallback(
     (id: string, newAnnotation: string) => {
@@ -1979,7 +2069,8 @@ export default function Page() {
                     highlightedBlockId={highlightedBlockId}
                     onHighlight={setHighlightedBlockId}
                     selectedBlockId={selectedNoteId}
-                    onOpenDetail={setSelectedNoteId}
+                    selectedBlockIds={selectedNoteIds}
+                    onOpenDetail={handleSelectNote}
                   />
                 )
               ) : (
@@ -2006,6 +2097,18 @@ export default function Page() {
               onDelete={deleteBlock}
               onTogglePin={handleTogglePin}
               onChangeType={handleChangeType}
+            />
+
+            <BulkActionPanel
+              isOpen={selectedNoteIds.size > 0}
+              selectedCount={selectedNoteIds.size}
+              projects={projects.map(p => ({ id: p.id, name: p.name }))}
+              activeProjectId={activeProjectId}
+              onClose={() => setSelectedNoteIds(new Set())}
+              onDelete={handleBulkDelete}
+              onResynthesize={handleBulkResynthesize}
+              onRecategorize={handleBulkRecategorize}
+              onMove={handleBulkMove}
             />
           </div>
 

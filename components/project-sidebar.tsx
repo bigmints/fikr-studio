@@ -313,15 +313,15 @@ export function ProjectSidebar({
         <div className="px-4 pb-3 shrink-0 border-b border-border/10 mb-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center w-full hover:bg-foreground/5 p-1.5 -ml-1.5 rounded-md transition-colors text-left group gap-2 focus:outline-none">
+              <button className="flex items-center w-full hover:bg-sidebar-foreground/10 p-1.5 -ml-1.5 rounded-md transition-colors text-left group gap-2 focus:outline-none text-sidebar-foreground">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg shadow-sm overflow-hidden bg-primary/20">
                   <img src="./logo-icon.png" alt="Fikr Logo" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none flex-1">
                   <span className="font-semibold text-sm">{activeApp}</span>
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Workspace</span>
+                  <span className="text-[10px] text-sidebar-foreground/60 uppercase tracking-widest font-mono">Workspace</span>
                 </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                <ChevronDown className="h-4 w-4 text-sidebar-foreground/50 group-hover:text-sidebar-foreground transition-colors" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[248px] border-border/50 bg-background/95 backdrop-blur-md" align="start" side="bottom" sideOffset={8}>
@@ -356,16 +356,16 @@ export function ProjectSidebar({
           <>
             {/* Title & Search */}
             <div className="px-4 pb-3 shrink-0 flex flex-col gap-3">
-              <h2 className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 select-none">
+              <h2 className="font-mono text-[10px] font-bold uppercase tracking-widest text-sidebar-foreground/60 select-none">
                 Spaces
               </h2>
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-sidebar-foreground/50" />
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Find a space..."
-                  className="w-full bg-secondary/40 border border-border/40 rounded-md py-1.5 pl-8 pr-3 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors placeholder:text-muted-foreground/40"
+                  className="w-full bg-sidebar-foreground/5 border border-sidebar-border rounded-md py-1.5 pl-8 pr-3 text-[12px] text-sidebar-foreground focus:outline-none focus:border-primary/50 transition-colors placeholder:text-sidebar-foreground/40"
                 />
               </div>
             </div>
@@ -378,7 +378,7 @@ export function ProjectSidebar({
                   className={`group relative rounded-sm transition-all duration-150 ${
                     activeProjectId === project.id
                       ? "bg-primary/10 shadow-sm"
-                      : "hover:bg-foreground/5"
+                      : "hover:bg-sidebar-foreground/10"
                   }`}
                 >
                   <div className="flex items-center p-2 px-2.5">
@@ -396,20 +396,20 @@ export function ProjectSidebar({
                             if (e.key === "Escape") setEditingId(null);
                           }}
                           onBlur={() => handleRename(project.id)}
-                          className="bg-transparent font-mono text-xs font-bold text-foreground focus:outline-none w-full border-b border-primary/50 py-0"
+                          className="bg-transparent font-mono text-xs font-bold text-sidebar-foreground focus:outline-none w-full border-b border-primary/50 py-0"
                         />
                       ) : (
                         <span
                           className={`font-mono text-[12px] font-bold truncate ${
                             activeProjectId === project.id
                               ? "text-primary"
-                              : "text-foreground/80 group-hover:text-foreground"
+                              : "text-sidebar-foreground/80 group-hover:text-sidebar-foreground"
                           }`}
                         >
                           {project.name}
                         </span>
                       )}
-                      <span className="font-mono text-[8px] text-muted-foreground uppercase tracking-tighter font-bold">
+                      <span className="font-mono text-[8px] text-sidebar-foreground/60 uppercase tracking-tighter font-bold">
                         {project.blocks?.length || 0}{" "}
                         {(project.blocks?.length || 0) === 1 ? "node" : "nodes"}
                       </span>
@@ -424,7 +424,7 @@ export function ProjectSidebar({
                               setEditName(project.name);
                               setEditingId(project.id);
                             }}
-                            className="p-1 hover:bg-foreground/10 rounded-sm text-muted-foreground hover:text-primary transition-colors"
+                            className="p-1 hover:bg-sidebar-foreground/10 rounded-sm text-sidebar-foreground/60 hover:text-primary transition-colors"
                           >
                             <Edit3 className="h-3 w-3" />
                           </button>
@@ -479,7 +479,7 @@ export function ProjectSidebar({
             </div>
 
             {/* Footer */}
-            <div className="p-3 bg-foreground/5 shrink-0">
+            <div className="p-3 border-t border-sidebar-border shrink-0">
               <div className="flex flex-col gap-1.5">
                 <button
                   onClick={onCreateProject}
@@ -493,9 +493,8 @@ export function ProjectSidebar({
           </>
         ) : (
           <>
-            {/* Fikr Studio Sidebar Content */}
             <div className="px-4 pb-3 shrink-0 flex flex-col gap-3">
-              <h2 className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 select-none">
+              <h2 className="font-mono text-[10px] font-bold uppercase tracking-widest text-sidebar-foreground/60 select-none">
                 Studio Projects
               </h2>
             </div>
@@ -507,7 +506,7 @@ export function ProjectSidebar({
                   className={`group relative rounded-sm transition-all duration-150 ${
                     activeStudioProjectId === project.id
                       ? "bg-primary/10 shadow-sm"
-                      : "hover:bg-foreground/5"
+                      : "hover:bg-sidebar-foreground/10"
                   }`}
                 >
                   <div className="flex items-center p-2 px-2.5">
@@ -519,12 +518,12 @@ export function ProjectSidebar({
                         className={`font-mono text-[12px] font-bold truncate ${
                           activeStudioProjectId === project.id
                             ? "text-primary"
-                            : "text-foreground/80 group-hover:text-foreground"
+                            : "text-sidebar-foreground/80 group-hover:text-sidebar-foreground"
                         }`}
                       >
                         {limitWords(project.name || "Untitled", 3)}
                       </span>
-                      <span className="font-mono text-[8px] text-muted-foreground uppercase tracking-tighter font-bold">
+                      <span className="font-mono text-[8px] text-sidebar-foreground/60 uppercase tracking-tighter font-bold">
                         {activeStudioProjectId === project.id && activeStudioWordCount
                           ? `${activeStudioWordCount.toLocaleString()} words • ${project.platform}`
                           : `${project.mode} • ${project.platform}`}
@@ -543,7 +542,7 @@ export function ProjectSidebar({
             </div>
 
             {/* Footer */}
-            <div className="p-3 bg-foreground/5 shrink-0">
+            <div className="p-3 border-t border-sidebar-border shrink-0">
               <div className="flex flex-col gap-1.5">
                 <button
                   onClick={onCreateStudioProject}
@@ -559,11 +558,11 @@ export function ProjectSidebar({
           </div>
 
         {/* User Profile */}
-        <div className="p-3 shrink-0 border-t border-border/10 mt-auto">
+        <div className="p-3 shrink-0 border-t border-sidebar-border mt-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center w-full hover:bg-foreground/5 p-1.5 -ml-1.5 rounded-md transition-colors text-left group gap-2 focus:outline-none">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-muted overflow-hidden shrink-0">
+              <button className="flex items-center w-full hover:bg-sidebar-foreground/10 p-1.5 -ml-1.5 rounded-md transition-colors text-left group gap-2 focus:outline-none text-sidebar-foreground">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-muted/20 overflow-hidden shrink-0">
                   {user?.photoURL ? (
                     <img src={user.photoURL} alt={user.displayName || "User"} className="h-full w-full object-cover" />
                   ) : (
@@ -574,9 +573,9 @@ export function ProjectSidebar({
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none flex-1 overflow-hidden">
                   <span className="font-semibold text-sm truncate">{user?.displayName || "Fikr User"}</span>
-                  <span className="text-[10px] text-muted-foreground truncate">{user?.email || "Not signed in"}</span>
+                  <span className="text-[10px] text-sidebar-foreground/60 truncate">{user?.email || "Not signed in"}</span>
                 </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0" />
+                <ChevronDown className="h-4 w-4 text-sidebar-foreground/50 group-hover:text-sidebar-foreground transition-colors shrink-0" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[240px] border-border/50 bg-background/95 backdrop-blur-md rounded-xl p-1 shadow-xl" align="start" side="right" sideOffset={12}>

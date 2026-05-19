@@ -194,9 +194,30 @@ function cosineSimilarity(a, b) {
 /**
  * Background embedding queue.
  * Re-embeds any note in the workspace that is missing an embedding.
- * Called after every save so new notes created by the React app get embedded too.
+ * Debounced — runs at most once every 30 s regardless of how many saves fire.
  */
 let embedQueueRunning = false;
+let embedQueueTimer = null;
+
+function scheduleEmbedQueue() {
+  // If already scheduled or running, do nothing — it will pick up the latest disk state
+  if (embedQueueTimer || embedQueueRunning) return;
+
+  // Quick pre-check: does anything actually need embedding?
+  const ws = loadProjectsFromDisk();
+  if (!ws) return;
+  const projects = Array.isArray(ws) ? ws : (ws.projects || []);
+  const needsEmbedding = projects.some(p =>
+    (p.blocks || []).some(b => !b.embedding && b.text)
+  );
+  if (!needsEmbedding) return;  // nothing to do — skip silently
+
+  embedQueueTimer = setTimeout(() => {
+    embedQueueTimer = null;
+    runEmbedQueue().catch(console.error);
+  }, 30_000);  // 30-second cooldown
+}
+
 async function runEmbedQueue() {
   if (embedQueueRunning) return;
   embedQueueRunning = true;
@@ -253,7 +274,9 @@ async function triggerServerEmbed(workspace) {
     });
 
     if (!res.ok) {
-      console.warn('[Fikr Studio] Server embed request failed:', res.status);
+      if (res.status !== 404) {
+        console.warn('[Fikr Studio] Server embed request failed:', res.status);
+      }
       return;
     }
 
@@ -327,7 +350,7 @@ ipcMain.handle("fikr-studio:load-projects", async () => {
  */
 ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
   const ok = saveProjectsToDisk(data);  // always write local cache
-  runEmbedQueue().catch(console.error);
+  scheduleEmbedQueue();  // debounced — at most once per 30s
   // Plus/Pro: background sync to Data Connect
   if (currentUserId) {
     dc.saveWorkspace(currentUserId, data)
@@ -554,10 +577,6 @@ ipcMain.handle("fikr-studio:set-intro-seen", () => {
     }
   });
 
-  /**
-   * Test whether the MCP SSE endpoint is reachable.
-   * Returns { ok: boolean, status?: number, error?: string }
-   */
   ipcMain.handle("fikr-studio:test-mcp", async (_event, client) => {
     // First check config is installed
     const configPath = getMcpConfigPath(client);
@@ -583,6 +602,23 @@ ipcMain.handle("fikr-studio:set-intro-seen", () => {
       req.on("timeout",   () => { req.destroy(); resolve({ ok: false, error: "timeout" }); });
       req.end();
     });
+  });
+
+  ipcMain.handle("fikr-studio:get-usage", async (_event, token) => {
+    try {
+      const fetchModule = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+      // Using global fetch if available (Node 18+), fallback to node-fetch if we imported it in another way or it's not available
+      const doFetch = typeof fetch !== 'undefined' ? fetch : fetchModule;
+      
+      const res = await doFetch("https://fikr.one/api/user/usage", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error("[Fikr Studio] Failed to fetch usage:", e.message);
+      return null;
+    }
   });
 
 // ─── MCP Server ───────────────────────────────────────────────────────────────
@@ -717,7 +753,7 @@ async function executeTool(name, args, mainWindow) {
   const save = () => {
     const data = Array.isArray(workspace) ? projects : { ...workspace, projects };
     saveProjectsToDisk(data);  // always write local cache
-    runEmbedQueue().catch(console.error);
+    scheduleEmbedQueue();  // debounced
     // Plus/Pro: background sync to Data Connect
     if (currentUserId) {
       dc.saveWorkspace(currentUserId, data).catch((err) => {

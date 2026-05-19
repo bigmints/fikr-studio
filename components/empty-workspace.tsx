@@ -11,9 +11,9 @@ export function EmptyWorkspace({ title }: EmptyWorkspaceProps) {
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-background z-0">
       <div className="flex flex-col items-center text-center max-w-xl px-6">
-        <div className="mb-6 opacity-80 mix-blend-plus-lighter">
+        <div className="mb-6">
           <img
-            src="./logo-icon.png"
+            src="/logo.svg"
             alt="Fikr Studio"
             className="h-14 w-14 object-contain"
           />
@@ -43,12 +43,6 @@ export function EmptyWorkspace({ title }: EmptyWorkspaceProps) {
           workspace. Write freely, and let the AI categorise, connect, and
           synthesise.
         </p>
-
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-[12px] text-foreground/70 uppercase tracking-[0.15em] whitespace-nowrap font-mono bg-secondary/50 px-5 py-2.5 rounded-lg border border-border/80 shadow-sm">
-            {`type anything · #type to classify · ${mod}K commands`}
-          </p>
-        </div>
       </div>
     </div>
   );
