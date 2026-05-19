@@ -71,7 +71,7 @@ export default function RootLayout({
           {/* Umami analytics — Fikr Studio.space only. Remove or replace with your
               own data-website-id if self-hosting. Safe to delete entirely. */}
           <Script
-            src="https://cloud.umami.is/p/gWmIQgCHm"
+            src="https://cloud.umami.is/script.js"
             data-website-id="e292316e-48ff-4e1b-ac45-353ea9783dea"
             strategy="afterInteractive"
           />

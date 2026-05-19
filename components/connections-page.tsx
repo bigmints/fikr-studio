@@ -380,17 +380,18 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
     docsUrl: "https://www.make.com/en/integrations/http",
     primaryActionLabel: "Copy Endpoint",
   },
-];
+  ];
+};
 
 const CATEGORIES = ["All", "MCP Clients", "Webhooks", "Automation & REST"];
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// -- Helpers --
 function useIpc() {
   if (typeof window === "undefined") return null;
   return (window as any).fikrStudio ?? null;
 }
 
-// ── Upgrade Wall ─────────────────────────────────────────────────────────────
+// -- Upgrade Wall --
 function UpgradeWall({ category, integrations }: { category: string; integrations: Integration[] }) {
   return (
     <div className="relative rounded-2xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/[0.04] to-violet-500/[0.03] overflow-hidden">
@@ -550,7 +551,7 @@ function CodeSnippet({ code }: { code: string }) {
   );
 }
 
-// ── Agent Prompt Card ────────────────────────────────────────────────────────
+// -- Agent Prompt Card --
 function AgentPromptCard({ mcpPort, plan, relayApiKey }: { mcpPort: number | null; plan: string; relayApiKey: string }) {
   const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
   const port = mcpPort ?? 3025;
@@ -559,7 +560,7 @@ function AgentPromptCard({ mcpPort, plan, relayApiKey }: { mcpPort: number | nul
   return <SnippetBox label="Agent Prompt" code={agentPrompt} mono={false} />;
 }
 
-// ── Snippet Box ───────────────────────────────────────────────────────────────
+// -- Snippet Box --
 function SnippetBox({ label, code, mono = true, children }: { label: string; code: string; mono?: boolean; children?: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -596,7 +597,7 @@ function SnippetBox({ label, code, mono = true, children }: { label: string; cod
   );
 }
 
-// ── Detail Sheet ─────────────────────────────────────────────────────────────
+// -- Detail Sheet --
 function IntegrationSheet({
   integration,
   open,
@@ -756,7 +757,7 @@ function IntegrationSheet({
   );
 }
 
-// ── Row Item ─────────────────────────────────────────────────────────────────
+// -- Row Item --
 function IntegrationRow({
   integration,
   status,
@@ -840,7 +841,7 @@ function IntegrationRow({
   );
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// -- Page Component --
 export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageProps) {
   const ipc = useIpc();
   const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
@@ -849,6 +850,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
 
+  const INTEGRATIONS = getIntegrations(mcpPort);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
 
   // Auto-check 1-click integrations on mount

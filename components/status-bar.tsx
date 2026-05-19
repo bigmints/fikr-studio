@@ -125,18 +125,16 @@ export function StatusBar({
   );
 
   // ── Word count pill ──────────────────────────────────────────────────────
-  const showUsage =
-    wordUsage &&
-    wordUsage.wordsLimit > 0 &&
-    (wordUsage.plan.toLowerCase().includes("plus") ||
-      wordUsage.plan.toLowerCase().includes("pro"));
+  const showUsage = !!wordUsage;
 
-  const pct = showUsage
+  const isUnlimited = showUsage && wordUsage!.wordsLimit === -1;
+
+  const pct = showUsage && wordUsage!.wordsLimit > 0
     ? Math.min(1, wordUsage!.wordsUsed / wordUsage!.wordsLimit)
     : 0;
 
-  const isNear = showUsage && wordUsage!.percentUsed >= 80 && wordUsage!.percentUsed < 100;
-  const isAtLimit = showUsage && wordUsage!.percentUsed >= 100;
+  const isNear = showUsage && !isUnlimited && wordUsage!.percentUsed >= 80 && wordUsage!.percentUsed < 100;
+  const isAtLimit = showUsage && !isUnlimited && wordUsage!.percentUsed >= 100;
 
   const pillColor = isAtLimit
     ? { bar: "#EF4444", text: "text-red-400", border: "border-red-500/30", bg: "bg-red-500/10" }
@@ -151,38 +149,29 @@ export function StatusBar({
     >
       {/* ── Left: Menu + Brand + Space name ── */}
       <div className="studio-toolbar__left">
-        <div className="flex items-center gap-2">
-          <img
-            src="./logo-icon.png"
-            alt="Fikr Studio"
-            className="h-5 w-5 object-contain"
-          />
-          {activeProjectName && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground/40 text-[10px]">·</span>
-              <span className="text-[11px] font-medium text-foreground truncate max-w-[120px]">
-                {activeProjectName}
-              </span>
-            </div>
-          )}
-        </div>
+        {activeProjectName && (
+          <div className="flex items-center">
+            <span className="text-[11px] font-medium text-foreground truncate max-w-[150px]">
+              {activeProjectName}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* ── Center: Search button (Intel only) ── */}
       <div className="studio-toolbar__center">
         {onSearchClick && (
           <button
             onClick={onSearchClick}
             style={{ WebkitAppRegion: "no-drag" } as any}
             className="flex-1 max-w-xs flex items-center gap-2 h-7 px-3 rounded-md bg-secondary/40 border border-border/30 text-muted-foreground/60 hover:text-foreground hover:bg-secondary/60 hover:border-border/60 transition-all duration-200 group"
-            title="Search notes (⌘F)"
+            title="Search workspace (⌘K)"
           >
             <Search className="h-3 w-3 shrink-0" />
             <span className="text-[11px] font-medium flex-1 text-left truncate">
-              Search notes...
+              Search workspace...
             </span>
             <span className="font-mono text-[9px] opacity-50 shrink-0 group-hover:opacity-70 transition-opacity">
-              ⌘F
+              ⌘K
             </span>
           </button>
         )}
@@ -200,7 +189,7 @@ export function StatusBar({
             onMouseEnter={() => setPillHovered(true)}
             onMouseLeave={() => setPillHovered(false)}
             className={`relative flex items-center gap-1.5 h-7 px-2.5 rounded-md border transition-all duration-200 group ${pillColor.border} ${pillColor.bg} hover:opacity-90`}
-            title={`${fmtWords(wordUsage!.wordsUsed)} / ${fmtWords(wordUsage!.wordsLimit)} words used — click to manage`}
+            title={isUnlimited ? `${fmtWords(wordUsage!.wordsUsed)} words used (BYOK)` : `${fmtWords(wordUsage!.wordsUsed)} / ${fmtWords(wordUsage!.wordsLimit)} words used — click to manage`}
             style={{ WebkitAppRegion: "no-drag" } as any}
           >
             {/* Icon */}
@@ -214,6 +203,8 @@ export function StatusBar({
             <span className={`text-[10px] font-semibold font-mono ${pillColor.text} whitespace-nowrap`}>
               {isAtLimit && !pillHovered
                 ? "Limit reached"
+                : isUnlimited
+                ? `${fmtWords(wordUsage!.wordsUsed)} words`
                 : `${fmtWords(wordUsage!.wordsUsed)} / ${fmtWords(wordUsage!.wordsLimit)}`}
             </span>
 

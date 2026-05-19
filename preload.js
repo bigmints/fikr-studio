@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld("fikrStudio", {
    */
   setUser: (uid, idToken) => ipcRenderer.invoke("fikr-studio:set-user", { uid, idToken }),
 
+  /** Proxy fetch for usage API to bypass renderer CORS */
+  getUsage: (token) => ipcRenderer.invoke("fikr-studio:get-usage", token),
+
   /**
    * Full logout flow — syncs data to cloud, shows a native keep/clear dialog,
    * and optionally wipes the local workspace cache.

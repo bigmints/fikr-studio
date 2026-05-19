@@ -11,7 +11,8 @@ interface ListAreaProps {
   highlightedBlockId?: string | null;
   onHighlight: (id: string | null) => void;
   selectedBlockId?: string | null;
-  onOpenDetail?: (id: string) => void;
+  selectedBlockIds?: Set<string>;
+  onOpenDetail?: (id: string, multiSelect?: boolean) => void;
 }
 
 export function ListArea({
@@ -19,6 +20,7 @@ export function ListArea({
   highlightedBlockId,
   onHighlight,
   selectedBlockId,
+  selectedBlockIds,
   onOpenDetail,
 }: ListAreaProps) {
   // ── Filter + Sort state ──────────────────
@@ -103,13 +105,13 @@ export function ListArea({
         <div
           className="flex items-center gap-2 px-6 py-2 shrink-0 border-b border-border/30"
         >
-          <div className="flex items-center gap-1.5 flex-1 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-4 flex-1 overflow-x-auto no-scrollbar px-2">
             {filterType && (
               <button
                 onClick={() => setFilterType(null)}
-                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.15em] px-2 py-1 rounded-full transition-all text-primary bg-primary/10"
+                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
               >
-                <X className="w-2.5 h-2.5" />
+                <X className="w-3 h-3" />
                 Clear
               </button>
             )}
@@ -120,16 +122,10 @@ export function ListArea({
                 <button
                   key={type}
                   onClick={() => setFilterType(isActive ? null : type)}
-                  className={`text-[10px] font-semibold uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all whitespace-nowrap ${
-                    !isActive && "text-muted-foreground/60 hover:text-foreground"
+                  className={`text-[10px] font-bold uppercase tracking-widest transition-colors whitespace-nowrap ${
+                    isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                   }`}
-                  style={isActive ? {
-                    color: cfg.accentVar,
-                    background: `color-mix(in oklch, ${cfg.accentVar} 12%, transparent)`,
-                    border: `1px solid color-mix(in oklch, ${cfg.accentVar} 25%, transparent)`,
-                  } : {
-                    border: "1px solid transparent"
-                  }}
+                  style={isActive ? { color: cfg.accentVar } : {}}
                 >
                   {cfg.label}
                 </button>
@@ -159,12 +155,12 @@ export function ListArea({
           blocks.length === 0 ? <EmptyWorkspace title="list view" /> : <div className="flex items-center justify-center h-40 text-muted-foreground/40 text-sm">No notes match filter</div>
         ) : (
           <div className="flex flex-col w-full text-sm">
-            <div className="sticky top-0 bg-background z-10 shadow-[0_1px_0_0_hsl(var(--border)_/_0.1)] flex items-center px-6 py-4">
-              <div className="flex-1 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/40">Note</div>
-              <div className="w-32 hidden lg:block text-left text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/40 shrink-0">Type</div>
-              <div className="w-40 hidden md:block text-left text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/40 shrink-0">Category</div>
-              <div className="w-28 hidden xl:block text-right text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/40 shrink-0 pr-4">Confidence</div>
-              <div className="w-28 hidden sm:block text-right text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/40 shrink-0">Added</div>
+            <div className="sticky top-0 bg-background z-10 shadow-[0_1px_0_0_hsl(var(--border)_/_0.2)] flex items-center px-6 py-4">
+              <div className="flex-1 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Note</div>
+              <div className="w-32 hidden lg:block text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 shrink-0">Type</div>
+              <div className="w-40 hidden md:block text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 shrink-0">Category</div>
+              <div className="w-28 hidden xl:block text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 shrink-0 pr-4">Confidence</div>
+              <div className="w-28 hidden sm:block text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 shrink-0">Added</div>
             </div>
             <div className="flex flex-col">
               {listBlocks.map((block) => {
@@ -184,47 +180,47 @@ export function ListArea({
                   <div
                     key={block.id}
                     id={`list-item-${block.id}`}
-                    onClick={() => onOpenDetail?.(block.id)}
+                    onClick={(e) => onOpenDetail?.(block.id, e.shiftKey || e.metaKey || e.ctrlKey)}
                     onMouseEnter={() => onHighlight(block.id)}
-                    className={`flex items-center px-6 py-4 border-b border-border/10 cursor-pointer transition-all duration-200 group ${
-                      isHighlighted
+                    style={{ userSelect: "none" }}
+                    className={`flex items-center px-6 py-3.5 border-b border-border/20 cursor-pointer transition-all duration-200 group ${
+                      selectedBlockIds?.has(block.id) || selectedBlockId === block.id
+                        ? "bg-primary/10 shadow-[inset_2px_0_0_0_hsl(var(--primary))]"
+                        : isHighlighted
                         ? "bg-primary/5 shadow-[inset_2px_0_0_0_hsl(var(--primary))]"
-                        : "hover:bg-foreground/[0.02]"
+                        : "hover:bg-foreground/[0.03]"
                     }`}
                   >
                     <div className="flex-1 flex items-center gap-3 min-w-0 pr-6">
                       <span 
-                        className="w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_0_currentColor] opacity-80 group-hover:opacity-100 transition-opacity"
-                        style={{ 
-                          backgroundColor: block.isEnriching ? "hsl(var(--muted-foreground))" : config.accentVar,
-                          color: block.isEnriching ? "hsl(var(--muted-foreground))" : config.accentVar
-                        }}
+                        className="w-1.5 h-1.5 rounded-full shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"
+                        style={{ backgroundColor: block.isEnriching ? "hsl(var(--muted-foreground))" : config.accentVar }}
                       />
-                      <p className="text-[14px] text-foreground/80 group-hover:text-foreground transition-colors truncate font-semibold tracking-tight">
-                        {block.title || block.text || <span className="text-muted-foreground/30 italic font-normal">Untitled</span>}
+                      <p className="text-[14px] text-foreground/90 group-hover:text-foreground transition-colors truncate font-semibold tracking-tight">
+                        {block.title || block.text || <span className="text-muted-foreground/50 italic font-normal">Untitled</span>}
                       </p>
                     </div>
 
                     <div className="w-32 hidden lg:flex items-center shrink-0 pr-4 min-w-0">
-                      <span className="text-[12px] font-medium truncate" style={{ color: config.accentVar }}>
+                      <span className="text-[11px] font-medium truncate" style={{ color: config.accentVar }}>
                         {config.label}
                       </span>
                     </div>
                     
                     <div className="w-40 hidden md:flex items-center shrink-0 pr-4 min-w-0">
-                      <div className="inline-flex items-center px-2.5 py-1 rounded-md bg-secondary/40 border border-border/40 text-[11px] font-semibold text-muted-foreground/70 uppercase tracking-wider truncate max-w-full">
-                        <span className="truncate">{block.category || "General"}</span>
-                      </div>
+                      <span className="text-[11px] font-medium text-muted-foreground/80 truncate">
+                        {block.category || "General"}
+                      </span>
                     </div>
 
-                    <div className="w-28 hidden xl:block text-right shrink-0 pr-4 min-w-0">
-                      <span className="text-[12px] font-bold text-muted-foreground/40">
+                    <div className="w-28 hidden xl:flex items-center justify-end shrink-0 pr-4 min-w-0">
+                      <span className="text-[11px] font-medium text-muted-foreground/60">
                         {block.confidence ? `${block.confidence}%` : "—"}
                       </span>
                     </div>
 
                     <div className="w-28 hidden sm:block text-right shrink-0 min-w-0">
-                      <span className="text-[11px] font-bold text-muted-foreground/40 uppercase tracking-widest whitespace-nowrap">{ago}</span>
+                      <span className="text-[11px] font-medium text-muted-foreground/50 whitespace-nowrap">{ago}</span>
                     </div>
                   </div>
                 );
