@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-19T12:12:59Z"
+  last_seen: "2026-05-19T13:00:06Z"
   host: "BigMac-2"
-  task: "Implemented Multi-Selection and Bulk Actions panel"
+  task: "Committed: fix(workspace): bypass CORS for word usage and stabilize embedding queue"
   status: alive
