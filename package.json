@@ -13,7 +13,8 @@
     "lint": "eslint app/ components/ lib/ --ext .ts,.tsx",
     "electron:dev": "NODE_PATH=./node_modules concurrently -k -n NEXT,ELECTRON -c cyan,yellow \"next dev -p 3741 --webpack\" \"wait-on http://localhost:3741 && cross-env ELECTRON_IS_DEV=1 electron .\"",
     "electron:prod": "npm run build && NODE_ENV=production electron .",
-    "electron:build": "npm run build && electron-builder build --mac"
+    "electron:build": "npm run build && electron-builder build --mac",
+    "deploy": "./scripts/deploy.sh"
   },
   "dependencies": {
     "@lobehub/icons": "^5.6.0",
