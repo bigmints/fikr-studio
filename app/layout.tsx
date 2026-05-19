@@ -11,8 +11,18 @@ import "./globals.css";
 //   preload: false,
 // });
 
-// removed next/font/google due to relative assetPrefix conflict in Electron
-// using standard stylesheet links below instead
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+  preload: false,
+});
+
+const vazirmatn = Vazirmatn({
+  subsets: ["arabic"],
+  variable: "--font-vazirmatn",
+  display: "swap",
+  preload: false,
+});
 
 export const metadata: Metadata = {
   title: "Fikr Studio",
@@ -46,13 +56,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Vazirmatn:wght@100..900&display=swap" rel="stylesheet" />
-      </head>
       <body
-        className="font-sans antialiased"
+        className={`${geistMono.variable} ${vazirmatn.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
         <ThemeProvider
