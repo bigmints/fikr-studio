@@ -14,11 +14,15 @@ import {
   Sparkles,
   Tag,
   Quote,
+  PanelRight,
+  MoreHorizontal,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { MarkdownComponents } from "./markdown-components";
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
+import { analytics } from "@/lib/analytics";
 
 export interface TextBlock {
   id: string;
@@ -26,16 +30,23 @@ export interface TextBlock {
   timestamp: number;
   contentType: ContentType;
   category?: string;
+  title?: string;
   isEnriching?: boolean;
   statusText?: string;
   isError?: boolean;
   annotation?: string;
   confidence?: number | null;
   sources?: { url: string; title: string; siteName: string }[];
-  influencedBy?: string[];
+  influencedBy?: { id: string; type: string }[];
   isUnrelated?: boolean;
   isPinned?: boolean;
   subTasks?: { id: string; text: string; isDone: boolean; timestamp: number }[];
+  /** True when the note was created by an MCP client (agent/tool) */
+  fromMcp?: boolean;
+  /** True when the note arrived pre-synthesized via create_note_synthesized.
+   *  These notes skip the UI enrichment pass and are stored with full annotation. */
+  fromSkill?: boolean;
+  mergeSuggestion?: { targetId: string };
 }
 
 interface TileCardProps {
@@ -57,48 +68,10 @@ interface TileCardProps {
   isConnectionLocked?: boolean;
   allBlocks?: TextBlock[];
   onChangeType?: (id: string, newType: ContentType) => void;
+  onOpenDetail?: (id: string) => void;
+  onMerge?: (sourceId: string, targetId: string) => void;
+  onDismissMerge?: (id: string) => void;
 }
-
-// Custom Markdown components for styling
-const MarkdownComponents = {
-  p: ({ children }: any) => <p className="mb-3 last:mb-0">{children}</p>,
-  ul: ({ children }: any) => (
-    <ul className="mb-3 list-disc pl-4 last:mb-0">{children}</ul>
-  ),
-  ol: ({ children }: any) => (
-    <ol className="mb-3 list-decimal pl-4 last:mb-0">{children}</ol>
-  ),
-  li: ({ children }: any) => <li className="mb-1">{children}</li>,
-  h1: ({ children }: any) => (
-    <h1 className="mb-2 text-base font-bold">{children}</h1>
-  ),
-  h2: ({ children }: any) => (
-    <h2 className="mb-2 text-base font-bold">{children}</h2>
-  ),
-  h3: ({ children }: any) => (
-    <h3 className="mb-1 text-sm font-bold">{children}</h3>
-  ),
-  a: ({ href, children }: any) => {
-    let displayDomain = href;
-    try {
-      displayDomain = new URL(href).hostname.replace("www.", "");
-    } catch {}
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-0.5 text-primary hover:underline"
-      >
-        <LinkIcon className="h-2.5 w-2.5" />
-        {children || displayDomain}
-      </a>
-    );
-  },
-  strong: ({ children }: any) => (
-    <strong className="font-bold text-foreground">{children}</strong>
-  ),
-};
 
 // Simple heuristic to detect RTL text (Arabic/Hebrew)
 function isRTL(text: string): boolean {
@@ -125,18 +98,14 @@ export const TileCard = memo(function TileCard({
   allBlocks,
   hideCollapse = false,
   onChangeType,
+  onOpenDetail,
+  onMerge,
+  onDismissMerge,
 }: TileCardProps) {
   const effectiveCollapsed = hideCollapse ? false : isCollapsed;
-  const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState(block.text);
   const [isHovered, setIsHovered] = useState(false);
-  const [isEditingAnnotation, setIsEditingAnnotation] = useState(false);
-  const [editAnnotation, setEditAnnotation] = useState(block.annotation || "");
   const [isMounted, setIsMounted] = useState(false);
   const [isFooterExpanded, setIsFooterExpanded] = useState(false);
-  const [editingMinHeight, setEditingMinHeight] = useState<number | undefined>(
-    undefined,
-  );
   // Toggle between synthesized (annotation) and raw text view
   const [showRawText, setShowRawText] = useState(false);
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
@@ -166,28 +135,6 @@ export const TileCard = memo(function TileCard({
   const accent = config.accentVar;
   const isTask = block.contentType === "task";
 
-  // Auto-size + focus for the main text editing textarea
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      const el = textareaRef.current;
-      el.focus();
-      el.selectionStart = el.value.length;
-      el.style.height = "auto";
-      el.style.height = el.scrollHeight + "px";
-    }
-  }, [isEditing]);
-
-  // Auto-size + focus for annotation editing textarea
-  useEffect(() => {
-    if (isEditingAnnotation && annotationRef.current) {
-      const el = annotationRef.current;
-      el.focus();
-      el.selectionStart = el.value.length;
-      el.style.height = "auto";
-      el.style.height = el.scrollHeight + "px";
-    }
-  }, [isEditingAnnotation]);
-
   // Close type picker on outside click or Escape.
   useEffect(() => {
     if (!isTypePickerOpen) return;
@@ -211,66 +158,18 @@ export const TileCard = memo(function TileCard({
     };
   }, [isTypePickerOpen]);
 
-  const handleSave = useCallback(() => {
-    if (editText.trim() && editText !== block.text) {
-      onEdit(block.id, editText);
-    }
-    setIsEditing(false);
-    setEditingMinHeight(undefined);
-  }, [editText, block.id, block.text, onEdit]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSave();
-      }
-      if (e.key === "Escape") {
-        setEditText(block.text);
-        setIsEditing(false);
-        setEditingMinHeight(undefined);
-      }
-    },
-    [handleSave, block.text],
-  );
-
-  const handleAnnotationSave = useCallback(() => {
-    onEditAnnotation(block.id, editAnnotation);
-    setIsEditingAnnotation(false);
-    setEditingMinHeight(undefined);
-  }, [editAnnotation, block.id, onEditAnnotation]);
-
-  const handleAnnotationKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleAnnotationSave();
-      }
-      if (e.key === "Escape") {
-        setEditAnnotation(block.annotation || "");
-        setIsEditingAnnotation(false);
-        setEditingMinHeight(undefined);
-      }
-    },
-    [handleAnnotationSave, block.annotation],
-  );
-
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if (effectiveCollapsed) return;
       const target = e.target as HTMLElement;
       if (target.closest("a") || target.closest("button")) return;
-      
-      setEditingMinHeight(cardRef.current?.offsetHeight);
-      if (target.closest(".annotation-area")) {
-        setEditAnnotation(block.annotation || "");
-        setIsEditingAnnotation(true);
-        return;
+
+      if (onOpenDetail) {
+        analytics.track("note_open_detail", { blockId: block.id });
+        onOpenDetail(block.id);
       }
-      setEditText(block.text);
-      setIsEditing(true);
     },
-    [block.text, block.annotation, effectiveCollapsed],
+    [effectiveCollapsed, onOpenDetail, block.id],
   );
 
   const isTextRTL = useMemo(() => isRTL(block.text), [block.text]);
@@ -283,16 +182,8 @@ export const TileCard = memo(function TileCard({
     (e: React.MouseEvent) => {
       e.stopPropagation();
       onToggleCollapse(block.id);
-      if (isEditing) {
-        setIsEditing(false);
-        setEditingMinHeight(undefined);
-      }
-      if (isEditingAnnotation) {
-        setIsEditingAnnotation(false);
-        setEditingMinHeight(undefined);
-      }
     },
-    [block.id, onToggleCollapse, isEditing, isEditingAnnotation],
+    [block.id, onToggleCollapse],
   );
 
   // Derive dimmed state from connection lock
@@ -310,27 +201,28 @@ export const TileCard = memo(function TileCard({
         damping: 28,
         layout: { duration: 0.3 },
       }}
-      className={`group relative flex h-auto w-full flex-col overflow-hidden rounded-[16px] border-0 bg-card shadow-sm hover:shadow-md transition-shadow duration-200 ${
-        isHighlighted ? "z-10 bg-primary/[0.04]" : ""
-      } ${isDimmed ? "opacity-30 saturate-50" : ""}`}
+      className={`group relative flex h-auto w-full flex-col overflow-hidden rounded-[12px] border bg-card transition-all duration-200 ${
+        isHighlighted
+          ? "z-10 border-[rgba(60,166,166,0.30)] bg-[rgba(60,166,166,0.03)] shadow-[0_2px_12px_rgba(60,166,166,0.08)]"
+          : "border-[rgba(16,43,36,0.07)] hover:border-[rgba(16,43,36,0.13)] shadow-none"
+      } ${isDimmed ? "opacity-25 saturate-0" : ""} ${onOpenDetail ? "cursor-pointer" : ""}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
-        if (effectiveCollapsed && !hideCollapse) {
+        if (onHighlight) {
+          onHighlight(block.id);
+        }
+        if (onOpenDetail) {
+          onOpenDetail(block.id);
+        } else if (effectiveCollapsed && !hideCollapse) {
           onToggleCollapse(block.id);
         }
       }}
       onDoubleClick={handleDoubleClick}
-      style={{
-        minHeight:
-          (isEditing || isEditingAnnotation) && editingMinHeight
-            ? editingMinHeight
-            : undefined,
-      }}
     >
       {/* Header */}
       <div
-        className={`relative flex items-center justify-between px-5 pt-3 pb-1.5 shrink-0 ${isTextRTL ? "flex-row-reverse" : ""}`}
+        className={`relative flex items-center justify-between px-4 pt-3 pb-1 shrink-0 ${isTextRTL ? "flex-row-reverse" : ""}`}
       >
         <div
           className={`flex items-center gap-2 overflow-hidden ${isTextRTL ? "flex-row-reverse" : ""}`}
@@ -356,17 +248,17 @@ export const TileCard = memo(function TileCard({
             </button>
           )}
 
-          {/* Type indicator — colored dot + icon + label */}
-          <span className="flex items-center gap-1.5" style={{ color: accent }}>
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: accent }}
-            />
-            <Icon className="h-3 w-3 shrink-0" />
-            <span className="text-[11px] font-medium" style={{ color: accent }}>
-              {config.label}
-            </span>
-          </span>
+          {/* Type indicator — dot opacity encodes confidence (high=solid, low=faint) */}
+          <span
+            className="w-1.5 h-1.5 rounded-full shrink-0 transition-opacity"
+            style={{
+              backgroundColor: accent,
+              opacity: block.confidence != null
+                ? Math.max(0.2, block.confidence / 100) * 0.85
+                : 0.6,
+            }}
+            title={config.label + (block.confidence != null ? ` · ${Math.round(block.confidence)}% confidence` : "")}
+          />
 
           {block.isUnrelated && !effectiveCollapsed && (
             <span className="rounded-md px-2 py-0.5 text-[10px] font-medium text-muted-foreground/50 bg-secondary/50 ">
@@ -375,15 +267,10 @@ export const TileCard = memo(function TileCard({
           )}
         </div>
 
-        {/* Header right: timestamp + action buttons */}
+        {/* Header right: action buttons */}
         <div
-          className={`flex items-center gap-1.5 shrink-0 ${isTextRTL ? "flex-row-reverse" : ""}`}
+          className={`flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${isTextRTL ? "flex-row-reverse" : ""}`}
         >
-          {/* Timestamp */}
-          <span className="text-[10px] text-muted-foreground/50 mr-1">
-            {formattedTime}
-          </span>
-
           {/* Connection indicator */}
           {block.influencedBy && block.influencedBy.length > 0 && (
             <button
@@ -570,7 +457,7 @@ export const TileCard = memo(function TileCard({
       {effectiveCollapsed && (
         <div className="px-6 py-4 overflow-hidden">
           <p className="text-[14px] leading-relaxed text-foreground/50 line-clamp-1 font-sans">
-            {showRawText ? block.text : block.annotation || block.text}
+            {block.title || (showRawText ? block.text : block.annotation || block.text)}
           </p>
         </div>
       )}
@@ -580,248 +467,90 @@ export const TileCard = memo(function TileCard({
         <div className="flex flex-col overflow-hidden">
           {/* Body */}
           <div
-            className={`flex flex-col overflow-y-auto overflow-x-hidden px-6 py-4 custom-scrollbar ${isTextRTL ? "rtl-text" : ""}`}
+            className={`flex flex-col overflow-y-auto overflow-x-hidden px-4 pt-2 pb-3 custom-scrollbar ${isTextRTL ? "rtl-text" : ""}`}
           >
             <div className="flex flex-col">
-              {isEditing ? (
-                <div className="flex w-full flex-col gap-3">
-                  <textarea
-                    ref={textareaRef}
-                    value={editText}
-                    onChange={(e) => {
-                      setEditText(e.target.value);
-                      e.target.style.height = "auto";
-                      e.target.style.height = e.target.scrollHeight + "px";
-                    }}
-                    onKeyDown={handleKeyDown}
-                    onBlur={handleSave}
-                    className={`w-full resize-none rounded-lg bg-background border border-border/80 px-3 py-2.5 text-[14px] leading-relaxed text-foreground/90 focus:border-primary/50 focus:ring-2 focus:ring-primary/10 focus:outline-none transition-all ${isTextRTL ? "rtl-text" : ""}`}
-                    style={{ minHeight: "3rem" }}
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground/50">
-                      Enter to save · Shift+Enter for newline · Esc to cancel
-                    </span>
-                    <button
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleSave();
-                      }}
-                      className="ml-auto rounded-md p-1.5 transition-all hover:opacity-80 active:scale-95"
-                      style={{
-                        backgroundColor: accent,
-                        color: "var(--background)",
-                      }}
-                      aria-label="Save edit"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full">
-                  {block.isError && (
-                    <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
-                      <span className="text-[12px] text-red-400/80 leading-relaxed flex-1">
-                        {block.statusText === "no-api-key" ? (
-                          <>
-                            AI enrichment failed — no API key. Open the{" "}
-                            <strong className="text-red-300">
-                              ☰ sidebar → Settings
-                            </strong>{" "}
-                            to add your API key.
-                          </>
-                        ) : block.statusText ? (
-                          <>{block.statusText}</>
-                        ) : (
-                          "Enrichment failed."
-                        )}
-                      </span>
-                      {block.statusText !== "no-api-key" && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onReEnrich(block.id);
-                          }}
-                          className="shrink-0 rounded-md p-1.5 text-red-400/80 hover:bg-red-500/20 hover:text-red-400 transition-colors"
-                          title="Retry enrichment"
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        </button>
+              <div className="w-full">
+                {block.isError && (
+                  <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
+                    <span className="text-[12px] text-red-400/80 leading-relaxed flex-1">
+                      {block.statusText === "no-api-key" ? (
+                        <>
+                          AI enrichment failed — no API key. Open the{" "}
+                          <strong className="text-red-300">
+                            ☰ sidebar → Settings
+                          </strong>{" "}
+                          to add your API key.
+                        </>
+                      ) : block.statusText ? (
+                        <>{block.statusText}</>
+                      ) : (
+                        "Enrichment failed."
                       )}
-                    </div>
-                  )}
-                  <div className={block.isEnriching ? "shimmer-body" : ""}>
-                    {isTask && block.subTasks ? (
-                      <div className="flex flex-col gap-2">
-                        {block.subTasks.map((st) => (
-                          <div
-                            key={st.id}
-                            className="group/task flex items-start gap-3 rounded-lg bg-secondary/30 p-3 transition-colors hover:bg-secondary/60"
-                          >
-                            <button
-                              onClick={() => onToggleSubTask?.(block.id, st.id)}
-                              className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-all"
-                              style={{
-                                backgroundColor: st.isDone
-                                  ? "var(--type-task)"
-                                  : "transparent",
-                                borderColor: st.isDone
-                                  ? "var(--type-task)"
-                                  : "color-mix(in oklch, var(--type-task) 50%, transparent)",
-                              }}
-                            >
-                              {st.isDone && (
-                                <Check className="h-2.5 w-2.5 text-white" />
-                              )}
-                            </button>
-                            <span
-                              className={`flex-1 text-[13px] leading-relaxed transition-all ${
-                                st.isDone
-                                  ? "text-foreground/40 line-through"
-                                  : "text-foreground/90"
-                              }`}
-                            >
-                              {st.text}
-                            </span>
-                            <button
-                              onClick={() => {
-                                if (confirm("Delete this task?")) {
-                                  onDeleteSubTask?.(block.id, st.id);
-                                }
-                              }}
-                              className="opacity-0 group-hover/task:opacity-100 rounded-md p-1 hover:bg-red-500/20 transition-all text-red-400"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      renderBody(
-                        showRawText
-                          ? block.text
-                          : block.annotation || block.text,
-                        config.bodyStyle,
-                        accent,
-                      )
+                    </span>
+                    {block.statusText !== "no-api-key" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReEnrich(block.id);
+                        }}
+                        className="shrink-0 rounded-md p-1.5 text-red-400/80 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                        title="Retry enrichment"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </button>
                     )}
                   </div>
+                )}
+                {block.title && !showRawText && (
+                  <h3 className={`text-[15px] font-bold mb-2 leading-tight text-foreground ${block.isEnriching ? "shimmer-text" : ""}`}>
+                    {block.title}
+                  </h3>
+                )}
+                <div>
+                  {renderBody(
+                    showRawText ? block.text : block.annotation || block.text,
+                    config.bodyStyle,
+                    accent,
+                    block.isEnriching,
+                    config.icon,
+                  )}
                 </div>
-              )}
+              </div>
 
               {/* Raw text toggle hint + Annotation (shown when in raw mode) */}
-              {!isEditing && (
-                <div
-                  className={`annotation-area flex flex-col ${showRawText && block.annotation ? "mt-4 pt-4 " : ""}`}
-                >
-                  {showRawText && block.annotation && (
-                    <div className="flex flex-col gap-2">
-                      <div
-                        className={`prose-sm prose-invert max-w-none text-[12px] leading-snug text-muted-foreground/60 italic ${
-                          block.isEnriching ? "shimmer-body" : ""
-                        } ${isAnnotationRTL ? "rtl-text" : ""}`}
+              <div
+                className={`annotation-area flex flex-col ${showRawText && block.annotation ? "mt-4 pt-4 " : ""}`}
+              >
+                {showRawText && block.annotation && (
+                  <div className="flex flex-col gap-2">
+                    <div
+                      className={`prose-sm dark:prose-invert max-w-none text-[12px] leading-snug text-muted-foreground/60 italic ${
+                        block.isEnriching ? "shimmer-body" : ""
+                      } ${isAnnotationRTL ? "rtl-text" : ""}`}
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={MarkdownComponents as any}
                       >
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={MarkdownComponents as any}
-                        >
-                          {block.annotation}
-                        </ReactMarkdown>
-                      </div>
+                        {block.annotation}
+                      </ReactMarkdown>
                     </div>
-                  )}
-                </div>
-              )}
-              {/* Annotation editing (when triggered via footer button) */}
-              {!isEditing && isEditingAnnotation && (
-                <div
-                  className={`annotation-area mt-4 pt-4  flex flex-col ${
-                    isEditingAnnotation ? "flex-1" : ""
-                  }`}
-                >
-                  {isEditingAnnotation ? (
-                    <div className="flex flex-1 w-full flex-col gap-3">
-                      <textarea
-                        ref={annotationRef}
-                        value={editAnnotation}
-                        onChange={(e) => setEditAnnotation(e.target.value)}
-                        onKeyDown={handleAnnotationKeyDown}
-                        onBlur={handleAnnotationSave}
-                        className={`flex-1 w-full resize-none rounded-lg bg-background border border-border/80 px-3 py-2.5 text-[13px] leading-relaxed text-foreground/90 focus:border-primary/50 focus:ring-2 focus:ring-primary/10 focus:outline-none transition-all ${
-                          isAnnotationRTL ? "rtl-text" : ""
-                        }`}
-                        placeholder="Start writing..."
-                      />
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-[10px] text-muted-foreground/50">
-                          Enter to save · Shift+Enter for newline · Esc to
-                          cancel
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      <div
-                        className={`prose-sm prose-invert max-w-none text-[12px] leading-snug text-muted-foreground/60 italic ${
-                          block.isEnriching ? "shimmer-body" : ""
-                        } ${isAnnotationRTL ? "rtl-text" : ""}`}
-                      >
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={MarkdownComponents as any}
-                        >
-                          {block.annotation || ""}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Confidence bar */}
-          {block.confidence !== undefined &&
-            block.confidence !== null &&
-            !isEditing && (
-              <div
-                className={`px-5 pb-3 shrink-0 transition-opacity duration-300 ${
-                  isHovered ? "opacity-100" : "opacity-0"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] text-muted-foreground/50">
-                    Confidence
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/50">
-                    {Math.round(block.confidence)}%
-                  </span>
-                </div>
-                <div className="h-0.5 w-full overflow-hidden rounded-full bg-secondary/60">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.max(5, block.confidence)}%`,
-                      background: accent,
-                      opacity: 0.5,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+
 
           {/* Footer */}
           <div
             ref={footerRef}
-            className={`relative flex shrink-0 flex-col transition-all duration-300 ease-in-out ${
-              isFooterExpanded ? "bg-secondary/[0.06]" : "bg-secondary/[0.03]"
-            }`}
+            className="relative flex shrink-0 flex-col"
           >
             <div
-              className={`flex items-start justify-between px-6 py-3 ${
-                isFooterExpanded ? "gap-3" : "items-center"
-              }`}
+              className="flex items-center justify-between px-5 py-2"
             >
               <div
                 className={`flex flex-1 items-start gap-2 overflow-hidden ${
@@ -833,34 +562,34 @@ export const TileCard = memo(function TileCard({
                     isFooterExpanded ? "flex-wrap mb-1" : ""
                   }`}
                 >
-                  {/* Category tag */}
-                  <span
-                    className="rounded-md px-2.5 py-1 text-[11px] font-medium flex items-center gap-1.5 shrink-0"
-                    style={{
-                      background: `color-mix(in oklch, ${accent} 10%, transparent)`,
-                      color: accent,
-                    }}
-                  >
-                    <span className="opacity-50">#</span>
-                    <span className="truncate max-w-30">
-                      {block.category || "no-topic"}
-                    </span>
+                  {/* Timestamp */}
+                  <span className="text-[10px] text-muted-foreground/30 self-center mr-1 tabular-nums">
+                    {formattedTime}
+                  </span>
+
+                  {/* Category tag — plain muted text, no pill background */}
+                  <span className="text-[10px] text-muted-foreground/40 shrink-0 tracking-wide">
+                    #{block.category || "no-topic"}
                   </span>
 
                   {/* Influences */}
                   {block.influencedBy && block.influencedBy.length > 0 && (
                     <div className="group/influences relative">
                       <div
-                        className="flex items-center gap-1.5 rounded-md px-2.5 py-1 bg-secondary/50  cursor-help transition-all hover:bg-secondary/80"
+                        className="flex items-center gap-1.5 rounded-md px-2.5 py-1 bg-secondary/50 cursor-help transition-all hover:bg-secondary/80 shrink-0"
                         onMouseEnter={() =>
-                          block.influencedBy?.forEach((id) => onHighlight?.(id))
+                          block.influencedBy?.forEach((edge) =>
+                            onHighlight?.(
+                              typeof edge === "string" ? edge : edge.id,
+                            ),
+                          )
                         }
                         onMouseLeave={() =>
                           block.influencedBy?.forEach(() => onHighlight?.(null))
                         }
                       >
-                        <Sparkles className="h-3 w-3 text-muted-foreground/50" />
-                        <span className="text-[10px] font-medium text-muted-foreground/60">
+                        <Sparkles className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                        <span className="text-[10px] font-medium text-muted-foreground/60 whitespace-nowrap">
                           {block.influencedBy.length}{" "}
                           {block.influencedBy.length === 1 ? "link" : "links"}
                         </span>
@@ -872,8 +601,14 @@ export const TileCard = memo(function TileCard({
                           Connected nodes
                         </h5>
                         <div className="flex flex-col gap-1.5">
-                          {block.influencedBy.slice(0, 5).map((id, i) => {
-                            const linked = allBlocks?.find((b) => b.id === id);
+                          {block.influencedBy.slice(0, 5).map((edge, i) => {
+                            const linkId =
+                              typeof edge === "string" ? edge : edge.id;
+                            const linkType =
+                              typeof edge === "string" ? "related" : edge.type;
+                            const linked = allBlocks?.find(
+                              (b) => b.id === linkId,
+                            );
                             return (
                               <div
                                 key={i}
@@ -885,14 +620,17 @@ export const TileCard = memo(function TileCard({
                                 />
                                 <span
                                   className="text-[11px] text-foreground/70 truncate leading-tight"
-                                  title={linked ? linked.text || "" : id}
+                                  title={linked ? linked.text || "" : linkId}
                                 >
                                   {linked
                                     ? (linked.text || "").substring(0, 48) +
                                       ((linked.text || "").length > 48
                                         ? "…"
                                         : "")
-                                    : `#${id.slice(0, 8)}`}
+                                    : `#${linkId.slice(0, 8)}`}
+                                </span>
+                                <span className="text-[9px] text-muted-foreground/40 ml-auto pt-0.5 shrink-0 uppercase tracking-wider">
+                                  {linkType}
                                 </span>
                               </div>
                             );
@@ -928,6 +666,37 @@ export const TileCard = memo(function TileCard({
                 )}
               </div>
             </div>
+
+            {block.mergeSuggestion && (
+              <div className="mt-3 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500/70" />
+                  <span className="text-amber-500/90 text-[11px] font-medium">
+                    Similar note detected
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMerge?.(block.id, block.mergeSuggestion!.targetId);
+                    }}
+                    className="text-[11px] font-medium text-amber-600 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                  >
+                    Merge
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDismissMerge?.(block.id);
+                    }}
+                    className="p-1 rounded-md text-amber-500/50 hover:text-amber-500 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -975,86 +744,39 @@ function renderBody(
   text: string,
   bodyStyle: string | undefined,
   accent: string,
+  isEnriching?: boolean,
+  Icon?: React.ElementType,
 ) {
+  const shimmerClass = isEnriching ? "shimmer-text" : "";
   switch (bodyStyle) {
-    case "blockquote":
-      return (
-        <div
-          className="pl-3"
-          style={{ borderLeft: `2px solid ${accent}`, opacity: 0.9 }}
-        >
-          <p className="text-base italic leading-relaxed text-foreground/90">
-            {linkifyText(text)}
-          </p>
-        </div>
-      );
-    case "italic":
-      return (
-        <p className="text-base italic leading-relaxed text-foreground/90">
-          {linkifyText(text)}
-        </p>
-      );
-    case "muted-italic":
-      return (
-        <div className="relative pl-6">
-          <Quote 
-            className="absolute -top-1 left-0 h-5 w-5 opacity-30" 
-            style={{ color: accent, fill: accent }} 
-          />
-          <p className="text-base leading-relaxed text-foreground/80">
-            {linkifyText(text)}
-          </p>
-        </div>
-      );
-    case "checkbox": {
-      const isDone = text.toLowerCase().startsWith("[x]");
-      const displayText = text
-        .replace(/^\[[\sx]?\]\s*/i, "")
-        .replace(/^(todo|fixme|hack)\s*/i, "");
-      return (
-        <div
-          className={`flex items-start gap-2 ${isRTL(text) ? "flex-row-reverse" : ""}`}
-        >
-          <div
-            className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-md border"
-            style={{
-              borderColor: accent,
-              background: isDone ? accent : "transparent",
-            }}
-          >
-            {isDone && (
-              <Check
-                className="h-2.5 w-2.5"
-                style={{ color: "var(--background)" }}
-              />
-            )}
-          </div>
-          <p
-            className="text-sm leading-relaxed text-foreground/90"
-            style={{
-              textDecoration: isDone ? "line-through" : "none",
-              opacity: isDone ? 0.6 : 1,
-            }}
-          >
-            {linkifyText(displayText)}
-          </p>
-        </div>
-      );
-    }
     case "thesis":
       return (
         <div className="flex flex-col gap-4">
-          <p className="text-lg font-medium leading-relaxed tracking-tight text-foreground prose-invert">
-            {linkifyText(text)}
-          </p>
+          <div
+            className={`prose-sm dark:prose-invert max-w-none text-lg font-medium leading-relaxed tracking-tight text-foreground ${shimmerClass}`}
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={MarkdownComponents as any}
+            >
+              {text}
+            </ReactMarkdown>
+          </div>
           <div className="h-px w-full bg-linear-to-r from-transparent via-primary/20 to-transparent" />
         </div>
       );
     default:
       return (
-        <p className="text-[14px] leading-relaxed text-foreground/90 font-sans">
-          {linkifyText(text)}
-        </p>
+        <div
+          className={`prose-sm dark:prose-invert max-w-none text-[14px] leading-relaxed text-foreground/90 font-sans ${shimmerClass}`}
+        >
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={MarkdownComponents as any}
+          >
+            {text}
+          </ReactMarkdown>
+        </div>
       );
   }
 }

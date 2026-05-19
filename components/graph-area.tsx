@@ -4,8 +4,8 @@ import * as React from "react";
 import * as d3 from "d3";
 import { CONTENT_TYPE_CONFIG } from "@/lib/content-types";
 import type { TextBlock } from "@/components/tile-card";
-import { GraphDetailPanel } from "./graph-detail-panel";
 import { useModKey } from "@/lib/utils";
+import { EmptyWorkspace } from "@/components/empty-workspace";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,8 @@ interface GraphAreaProps {
   onEditAnnotation: (id: string, annotation: string) => void;
   highlightedBlockId?: string | null;
   onHighlight?: (id: string | null) => void;
+  selectedBlockId?: string | null;
+  onOpenDetail?: (id: string | null) => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -64,10 +66,10 @@ function calcDegrees(
   for (const b of blocks) {
     ensure(b.id);
     if (!b.influencedBy?.length) continue;
-    for (const tid of b.influencedBy) {
-      ensure(tid);
+    for (const edge of b.influencedBy) {
+      ensure(edge.id);
       deg.set(b.id, (deg.get(b.id) ?? 0) + 1);
-      deg.set(tid, (deg.get(tid) ?? 0) + 1);
+      deg.set(edge.id, (deg.get(edge.id) ?? 0) + 1);
     }
   }
 
@@ -156,7 +158,8 @@ function buildGraph(
   // ── Links ────────────────────────────────────────────────────────────────
   for (const b of blocks) {
     if (!b.influencedBy?.length) continue;
-    for (const tid of b.influencedBy) {
+    for (const edge of b.influencedBy) {
+      const tid = edge.id;
       if (!blockSet.has(tid)) continue;
       const key = [b.id, tid].sort().join("§");
       if (edgeSet.has(key)) continue;
@@ -206,6 +209,8 @@ export function GraphArea({
   onEditAnnotation,
   highlightedBlockId,
   onHighlight,
+  selectedBlockId = null,
+  onOpenDetail,
 }: GraphAreaProps) {
   const mod = useModKey();
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -217,7 +222,6 @@ export function GraphArea({
 
   const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
   const [dims, setDims] = React.useState({ w: 900, h: 600 });
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
   const [tooltip, setTooltip] = React.useState<{
     id: string;
@@ -279,7 +283,7 @@ export function GraphArea({
     return () => {
       simRef.current?.stop();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   // ── Rebuild graph when data changes ─────────────────────────────────────
   React.useEffect(() => {
@@ -338,7 +342,7 @@ export function GraphArea({
 
     const isNew = blocks.length > prevBlockCount;
     sim.alpha(isNew ? 0.45 : 0.2).restart();
-  }, [blocks, ghostNote]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [blocks, ghostNote]);  
 
   // ── Re-anchor radial centre on resize ────────────────────────────────────
   React.useEffect(() => {
@@ -367,11 +371,10 @@ export function GraphArea({
   // ── Escape key to clear selection ────────────────────────────────────────
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectedId(null);
+      if (e.key === "Escape" && onOpenDetail) onOpenDetail(null);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // Let page.tsx handle Escape closing NoteDetailPanel! So we can remove this or keep it.
+  }, [onOpenDetail]);
 
   // ── Zoom ─────────────────────────────────────────────────────────────────
   const handleWheel = React.useCallback((e: React.WheelEvent) => {
@@ -441,9 +444,7 @@ export function GraphArea({
   }, []);
 
   // ── Hover / index-highlight / selection: connected set ───────────────────
-  // selectedId is included so selecting a node keeps its connections lit even
-  // after the cursor moves away; hover and index-highlight take priority.
-  const focalId = hoveredId ?? selectedId ?? highlightedBlockId ?? null;
+  const focalId = hoveredId ?? selectedBlockId ?? highlightedBlockId ?? null;
 
   const connectedToFocal = React.useMemo(() => {
     if (!focalId) return null;
@@ -452,16 +453,16 @@ export function GraphArea({
       for (const n of nodesRef.current) ids.add(n.id);
     } else {
       const b = blocks.find((x) => x.id === focalId);
-      if (b?.influencedBy) for (const id of b.influencedBy) ids.add(id);
+      if (b?.influencedBy) for (const edge of b.influencedBy) ids.add(edge.id);
       for (const x of blocks)
-        if (x.influencedBy?.includes(focalId)) ids.add(x.id);
+        if (x.influencedBy?.some(e => e.id === focalId)) ids.add(x.id);
     }
     return ids;
   }, [focalId, blocks]);
 
   const selectedBlock = React.useMemo(
-    () => blocks.find((b) => b.id === selectedId) ?? null,
-    [blocks, selectedId],
+    () => blocks.find((b) => b.id === selectedBlockId) ?? null,
+    [blocks, selectedBlockId],
   );
 
   // Derive maxDeg for render (so node sizes are consistent between ticks)
@@ -480,67 +481,9 @@ export function GraphArea({
       {/* ── Graph canvas ─────────────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        style={{ width: selectedId ? "70%" : "100%" }}
-        className="relative h-full transition-all duration-300 overflow-hidden"
+        className="w-full relative h-full transition-all duration-300 overflow-hidden"
       >
-        {blocks.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="flex flex-col items-center gap-8 w-[420px]">
-              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/35">
-                force-directed graph view
-              </p>
-
-              <div className="flex flex-col gap-5 w-full">
-                {(
-                  [
-                    {
-                      color: "var(--type-claim)",
-                      label: "claim",
-                      text: "Caffeine improves short-term recall by ~15%",
-                    },
-                    {
-                      color: "var(--type-entity)",
-                      label: "entity",
-                      text: "Adam Grant — organisational psychologist",
-                    },
-                    {
-                      color: "var(--type-question)",
-                      label: "question",
-                      text: "Does creativity require periods of solitude?",
-                    },
-                    {
-                      color: "var(--type-idea)",
-                      label: "idea",
-                      text: "Collaboration refines ideas, solitude generates them",
-                    },
-                  ] as const
-                ).map(({ color, label, text }) => (
-                  <div key={label} className="flex items-start gap-4">
-                    <div
-                      className="w-0.5 self-stretch rounded-full shrink-0 mt-0.5"
-                      style={{ background: color }}
-                    />
-                    <div className="flex flex-col gap-1">
-                      <span
-                        className="font-mono text-[10px] uppercase tracking-[0.2em]"
-                        style={{ color }}
-                      >
-                        {label}
-                      </span>
-                      <p className="text-[14px] leading-snug text-foreground/50">
-                        {text}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <p className="text-[13px] text-foreground/50 uppercase tracking-[0.15em] whitespace-nowrap">
-                {`type anything · #type to classify · ${mod}K for commands`}
-              </p>
-            </div>
-          </div>
-        )}
+        {blocks.length === 0 && <EmptyWorkspace title="force-directed graph view" />}
 
         <svg
           ref={svgRef}
@@ -554,7 +497,7 @@ export function GraphArea({
           onMouseUp={handleSvgMouseUp}
           onMouseLeave={handleSvgMouseUp}
           onClick={() => {
-            if (!didPan.current) setSelectedId(null);
+            if (!didPan.current && onOpenDetail) onOpenDetail(null); // clear selection
           }}
         >
           <defs>
@@ -599,8 +542,8 @@ export function GraphArea({
             textAnchor="middle"
             dominantBaseline="central"
             fontSize={Math.max(11, 11 * tk)}
-            fontFamily="monospace"
-            fill="white"
+            fontFamily="var(--font-mono)"
+            fill="var(--foreground)"
             fillOpacity={Math.max(0, 0.06 - nodesRef.current.length * 0.002)}
             style={{
               pointerEvents: "none",
@@ -634,7 +577,7 @@ export function GraphArea({
                   <path
                     key={i}
                     d={d}
-                    stroke="white"
+                    stroke="var(--foreground)"
                     strokeWidth={isSynth ? 0.5 : highlighted ? 2 : 1.2}
                     strokeDasharray={isSynth ? "3 7" : undefined}
                     strokeOpacity={
@@ -654,7 +597,7 @@ export function GraphArea({
               {nodesRef.current.map((node) => {
                 if (node.x == null || node.y == null) return null;
 
-                const isSelected = node.id === selectedId;
+                const isSelected = node.id === selectedBlockId;
                 const isHovered = node.id === hoveredId;
                 const isDimmed =
                   focalId != null &&
@@ -708,9 +651,7 @@ export function GraphArea({
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedId((prev) =>
-                        prev === node.id ? null : node.id,
-                      );
+                      if (onOpenDetail) onOpenDetail(node.id);
                     }}
                     onMouseEnter={(e) => {
                       setHoveredId(node.id);
@@ -897,7 +838,7 @@ export function GraphArea({
             const accent = config?.accentVar ?? "var(--type-thesis)";
             const tipX = Math.min(
               tooltip.x + 14,
-              (selectedId ? dims.w * 0.7 : dims.w) - 300,
+              dims.w - 300,
             );
             const tipY = tooltip.y - 16;
             return (
@@ -910,7 +851,7 @@ export function GraphArea({
                 }}
               >
                 <div
-                  className="rounded-sm shadow-[0_4px_24px_rgba(0,0,0,0.55)] border border-white/10 overflow-hidden"
+                  className="rounded-sm shadow-[0_4px_24px_rgba(0,0,0,0.55)] border border-border/40 overflow-hidden"
                   style={{ minWidth: 190, maxWidth: 300 }}
                 >
                   <div
@@ -943,7 +884,7 @@ export function GraphArea({
                   </div>
                 </div>
                 <div
-                  className="mx-4 h-2 w-2 rotate-45 border-b border-r border-white/10 bg-card/95"
+                  className="mx-4 h-2 w-2 rotate-45 border-b border-r border-border/40 bg-card/95"
                   style={{ marginTop: -1 }}
                 />
               </div>
@@ -979,25 +920,6 @@ export function GraphArea({
         )}
       </div>
 
-      {/* ── Detail panel (30%) ─────────────────────────────────────────────── */}
-      {selectedId && (
-        <div
-          className="h-full overflow-hidden transition-all duration-300"
-          style={{ width: "30%" }}
-        >
-          <GraphDetailPanel
-            block={selectedBlock}
-            allBlocks={blocks}
-            onClose={() => setSelectedId(null)}
-            onSelectNode={(id) => setSelectedId(id)}
-            onReEnrich={onReEnrich}
-            onChangeType={onChangeType}
-            onTogglePin={onTogglePin}
-            onEdit={onEdit}
-            onEditAnnotation={onEditAnnotation}
-          />
-        </div>
-      )}
     </div>
   );
 }

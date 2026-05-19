@@ -1,4 +1,4 @@
-# FikrPad
+# Fikr Studio
 
 **A design experiment in spatial, AI-augmented thinking.**
 
@@ -8,7 +8,7 @@ Part of the Fikr family. A spatial research tool that reads what you write and e
 
 ---
 
-Most AI tools are built around a chat interface: you ask, it answers, you ask again. The interaction is sequential, conversational, and optimised for producing output. FikrPad is built around a different premise: that thinking is spatial and associative, and that AI is most useful when it works quietly in the background rather than at the centre of attention.
+Most AI tools are built around a chat interface: you ask, it answers, you ask again. The interaction is sequential, conversational, and optimised for producing output. Fikr Studio is built around a different premise: that thinking is spatial and associative, and that AI is most useful when it works quietly in the background rather than at the centre of attention.
 
 You add notes. The AI classifies them, finds connections between them, surfaces what you haven't said yet, and occasionally synthesises an emergent insight from the whole canvas. You stay in control of the space. The AI earns its place by being genuinely useful rather than prominent.
 
@@ -29,8 +29,8 @@ Three views: **tiling** (spatial BSP grid), **kanban** (grouped by type), **grap
 **Requirements**: macOS (for the desktop app) or a modern browser, plus an API key from one of the supported providers.
 
 ```bash
-git clone https://github.com/Bigmints-com/fikrpad.git
-cd fikrpad
+git clone https://github.com/Bigmints-com/fikr-studio.git
+cd fikr-studio
 npm install
 
 # Run in development (browser)
@@ -65,7 +65,7 @@ Use your OpenAI API key directly.
 - `o4-mini`
 
 ### Custom Local Providers
-FikrPad also supports Custom LLM Providers (e.g. self-hosted models or custom inferencing endpoints). You can configure a Custom Base URL and API key from the settings.
+Fikr Studio also supports Custom LLM Providers (e.g. self-hosted models or custom inferencing endpoints). You can configure a Custom Base URL and API key from the settings.
 
 ---
 
@@ -86,10 +86,10 @@ Double-click any note to edit. Click the type label to reclassify manually.
 
 Everything lives locally. No account, no server, no database.
 
-- Notes are persisted to `localStorage` under `fikrpad-projects`
-- A silent rolling backup is written on every change to `fikrpad-backup`
-- Export to `.md` or `.fikrpad` (versioned JSON) via `⌘K`
-- Import `.fikrpad` files via the sidebar
+- Notes are persisted to `localStorage` under `fikr-studio-projects`
+- A silent rolling backup is written on every change to `fikr-studio-backup`
+- Export to `.md` or `.fikr-studio` (versioned JSON) via `⌘K`
+- Import `.fikr-studio` files via the sidebar
 
 ---
 

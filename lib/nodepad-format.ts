@@ -1,7 +1,7 @@
 /**
- * .nodepad file format — full-fidelity project serialisation.
+ * .fikrdata file format — full-fidelity project serialisation.
  *
- * A .nodepad file is a JSON object with a version field so future schema
+ * A .fikrdata file is a JSON object with a version field so future schema
  * changes can be handled gracefully. The file contains the complete project
  * state: blocks (with all AI annotations, connections, confidence scores,
  * sub-tasks), collapsed IDs, ghost notes history, and enough context for
@@ -26,8 +26,9 @@ export interface NodepadBlock {
   annotation?: string
   confidence?: number | null
   sources?: { url: string; title: string; siteName: string }[]
-  influencedBy?: string[]        // stable block IDs (not category strings)
+  influencedBy?: { id: string; type: string }[]        // typed edges
   isUnrelated?: boolean
+  mergeSuggestion?: { targetId: string } | null
   isPinned?: boolean
   subTasks?: { id: string; text: string; isDone: boolean; timestamp: number }[]
 }
@@ -92,16 +93,19 @@ export function serialiseProject(project: {
         ...(b.annotation   !== undefined && { annotation:  b.annotation }),
         ...(b.confidence   !== undefined && { confidence:  b.confidence }),
         ...(b.sources      !== undefined && { sources:     b.sources }),
-        ...(b.influencedBy !== undefined && { influencedBy: b.influencedBy }),
+        ...(b.influencedBy !== undefined && { 
+          influencedBy: (b.influencedBy as any[]).map(edge => typeof edge === 'string' ? { id: edge, type: 'related' } : edge) 
+        }),
         ...(b.isUnrelated  !== undefined && { isUnrelated:  b.isUnrelated }),
         ...(b.isPinned                   && { isPinned:     b.isPinned }),
         ...(b.subTasks?.length           && { subTasks:     b.subTasks }),
+        ...(b.mergeSuggestion !== undefined && { mergeSuggestion: b.mergeSuggestion }),
       })),
     },
   }
 }
 
-/** Trigger a browser download of a .nodepad file for the given project. */
+/** Trigger a browser download of a .fikrdata file for the given project. */
 export function downloadNodepadFile(project: {
   id: string; name: string; blocks: any[]; collapsedIds: string[]
   ghostNotes?: any[]; lastGhostTexts?: string[]
@@ -119,7 +123,7 @@ export function downloadNodepadFile(project: {
     .replace(/[^a-z0-9-]/g, "")
     .slice(0, 60)
   a.href     = url
-  a.download = `${slug || "project"}.nodepad`
+  a.download = `${slug || "project"}.fikrdata`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -129,7 +133,7 @@ export function downloadNodepadFile(project: {
 export class NodepadParseError extends Error {}
 
 /**
- * Parse a .nodepad file string and return a project object ready to push
+ * Parse a .fikrdata file string and return a project object ready to push
  * into the projects list. Always assigns a fresh ID so there are no
  * collisions. Name conflicts get a copy suffix: "My Research (2)".
  */
@@ -150,14 +154,14 @@ export function parseNodepadFile(
   try {
     data = JSON.parse(raw)
   } catch {
-    throw new NodepadParseError("Not a valid .nodepad file — JSON parse failed.")
+    throw new NodepadParseError("Not a valid .fikrdata file — JSON parse failed.")
   }
 
   if (!data || typeof data !== "object") {
-    throw new NodepadParseError("Not a valid .nodepad file — unexpected root type.")
+    throw new NodepadParseError("Not a valid .fikrdata file — unexpected root type.")
   }
   if (!data.project || !Array.isArray(data.project.blocks)) {
-    throw new NodepadParseError("Not a valid .nodepad file — missing project.blocks array.")
+    throw new NodepadParseError("Not a valid .fikrdata file — missing project.blocks array.")
   }
 
   const src = data.project

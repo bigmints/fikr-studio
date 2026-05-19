@@ -1,21 +1,35 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { SearchProvider } from "@/lib/search-store";
 import { motion, AnimatePresence } from "framer-motion";
+import { LayoutGrid, Sparkles, Mic, Video, FileText } from "lucide-react";
 import { TilingArea } from "@/components/tiling-area";
-import { KanbanArea } from "@/components/kanban-area";
+import { ListArea } from "@/components/list-area";
 import { GraphArea } from "@/components/graph-area";
 import { ProjectSidebar } from "@/components/project-sidebar";
+import { SettingsPage, type SettingsSection } from "@/components/settings-page";
 import { StatusBar } from "@/components/status-bar";
 import { GhostPanel, type GhostNote } from "@/components/ghost-panel";
 import { VimInput } from "@/components/vim-input";
 import { IntroModal } from "@/components/intro-modal";
-import type { TextBlock } from "@/components/tile-card";
-import type { ContentType } from "@/lib/content-types";
+import { useSearchEffect } from "@/components/search-panel";
+import { SearchModal } from "@/components/search-modal";
+import { TileCard, type TextBlock } from "@/components/tile-card";
+import { NoteDetailPanel } from "@/components/note-detail-panel";
+import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
+
+function GlobalSearchEngine({ projects }: { projects: any[] }) {
+  useSearchEffect({ projects });
+  return null;
+}
+import { StudioRoot } from "@/components/studio/studio-root";
+import { ConnectionsPage } from "@/components/connections-page";
 import { INITIAL_PROJECTS } from "@/lib/initial-data";
 import { useAISettings } from "@/lib/ai-settings";
 import { enrichBlockClient } from "@/lib/ai-enrich";
 import { generateGhostClient } from "@/lib/ai-ghost";
+import { vectorIndex, VectorIndex } from "@/lib/vector-index";
 import {
   exportToMarkdown,
   downloadMarkdown,
@@ -27,6 +41,8 @@ import {
   NodepadParseError,
 } from "@/lib/nodepad-format";
 import { detectContentType } from "@/lib/detect-content-type";
+import { analytics } from "@/lib/analytics";
+import { limitWords } from "@/lib/utils";
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -45,23 +61,98 @@ export interface Project {
 }
 
 import { TileIndex } from "@/components/tile-index";
+import { type WordUsage } from "@/components/status-bar";
 
 export default function Page() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [studioProjects, setStudioProjects] = useState<any[]>([]);
+  const [activeStudioProjectId, setActiveStudioProjectId] = useState<string>("");
   const [activeProjectId, setActiveProjectId] = useState<string>("");
   const [highlightedBlockId, setHighlightedBlockId] = useState<string | null>(
     null,
   );
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isIndexOpen, setIsIndexOpen] = useState(false);
   const [isGhostPanelOpen, setIsGhostPanelOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"tiling" | "kanban" | "graph">(
-    "tiling",
+  const [viewMode, setViewMode] = useState<"tiling" | "list" | "graph">(
+    "list",
   );
-  const [isCommandKOpen, setIsCommandKOpen] = useState(false);
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [jumpToSettings, setJumpToSettings] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("account");
+
+  // ── Auth + usage polling ─────────────────────────────────────────────────
+  const [cloudIdToken, setCloudIdToken] = useState<string | null>(null);
+  const [cloudPlan, setCloudPlan] = useState<string>("Free");
+  const [cloudRelayKey, setCloudRelayKey] = useState<string>("");
+  const [wordUsage, setWordUsage] = useState<WordUsage | null>(null);
+  const usagePollRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchWordUsage = useCallback(async (token: string) => {
+    try {
+      const res = await fetch("https://www.fikr.one/api/user/usage", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.wordsLimit > 0) {
+        setWordUsage({
+          wordsUsed: data.wordsUsed,
+          wordsLimit: data.wordsLimit,
+          percentUsed: data.percentUsed,
+          plan: data.plan,
+        });
+      }
+    } catch {
+      // silently fail — usage is non-critical
+    }
+  }, []);
+
+  // Handle auth changes from SettingsModal → start/stop polling
+  const handleAuthChange = useCallback(
+    (user: any, idToken: string | null, plan: string, relayKey?: string) => {
+      if (relayKey !== undefined) setCloudRelayKey(relayKey);
+      setCloudIdToken(idToken);
+      setCloudPlan(plan);
+      // ── Send UID + ID token to main process so Firestore sync can fire ─────
+      if (typeof window !== "undefined" && (window as any).fikrStudio?.setUser) {
+        (window as any).fikrStudio.setUser(user?.uid ?? null, idToken ?? null);
+      }
+      if (usagePollRef.current) clearInterval(usagePollRef.current);
+      if (idToken && (plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro"))) {
+        fetchWordUsage(idToken);
+        usagePollRef.current = setInterval(() => fetchWordUsage(idToken), 5 * 60 * 1000);
+      } else {
+        setWordUsage(null);
+      }
+    },
+    [fetchWordUsage],
+  );
+
+  // Cleanup poll on unmount
+  useEffect(() => () => { if (usagePollRef.current) clearInterval(usagePollRef.current); }, []);
+
+  const handleWordCountClick = useCallback(() => {
+    const url = "https://fikr.one/dashboard/billing";
+    if (typeof window !== "undefined" && (window as any).fikrStudio?.openUrl) {
+      (window as any).fikrStudio.openUrl(url);
+    } else {
+      window.open(url, "_blank");
+    }
+  }, []);
+
+
+  const openSettings = (section: SettingsSection) => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  };
   const [mcpPort, setMcpPort] = useState<number | null>(null);
+  const [activeApp, setActiveApp] = useState("Fikr Intel");
   const [isIntroOpen, setIsIntroOpen] = useState(false);
   const [showHelpTooltip, setShowHelpTooltip] = useState(false);
   const helpTooltipTimer = useRef<NodeJS.Timeout | null>(null);
@@ -109,10 +200,11 @@ export default function Page() {
 
   // ── Intro modal ──────────────────────────────────────────────────────────
   const handleIntroClose = useCallback(() => {
+    analytics.track("intro_close");
     setIsIntroOpen(false);
     // Persist intro-seen via IPC in Electron, fall back to localStorage in browser
-    if (typeof window !== "undefined" && (window as any).fikrpad) {
-      (window as any).fikrpad.setIntroSeen();
+    if (typeof window !== "undefined" && (window as any).fikrStudio) {
+      (window as any).fikrStudio.setIntroSeen();
     } else {
       localStorage.setItem("nodepad-intro-seen", "true");
     }
@@ -138,6 +230,7 @@ export default function Page() {
       showUndoToast("Nothing to undo");
       return;
     }
+    analytics.track("note_undo");
     const previousBlocks = stack.pop()!;
     setProjects((prev) =>
       prev.map((p) =>
@@ -176,19 +269,20 @@ export default function Page() {
   }, [activeProjectId]);
 
   // 1. Persistence: Initial Load & Migration
-  //    In Electron: reads from ~/.fikrpad/workspace.json via IPC bridge
+  //    In Electron: reads from ~/.fikr-studio/workspace.json via IPC bridge
   //    In browser:  falls back to localStorage (dev mode)
   useEffect(() => {
-    const ipc = typeof window !== "undefined" && (window as any).fikrpad;
+    const ipc = typeof window !== "undefined" && (window as any).fikrStudio;
 
     const init = async () => {
       let initialProjects: Project[] = [];
       let initialActiveId = "";
-      let introSeen = false;
+      let introSeen: boolean;
+      let diskData: any = null;
 
       if (ipc) {
         // ── Electron path ──────────────────────────────────────────────────────
-        const diskData = await ipc.loadProjects();
+        diskData = await ipc.loadProjects();
         introSeen = await ipc.getIntroSeen();
         if (diskData && diskData.projects && diskData.projects.length > 0) {
           initialProjects = diskData.projects;
@@ -245,9 +339,59 @@ export default function Page() {
         initialActiveId = INITIAL_PROJECTS[0].id;
       }
 
-      setProjects(initialProjects);
+      // Sanitize loaded state to clear any stuck "in-progress" flags
+      // from a previous session that may have been interrupted.
+      const sanitizedProjects = initialProjects.map((p) => ({
+        ...p,
+        blocks: p.blocks.map((b) => ({
+          ...b,
+          isEnriching: false,
+          isError: false,
+          statusText: undefined,
+        })),
+        ghostNotes: (p.ghostNotes || []).map((g) => ({
+          ...g,
+          isGenerating: false,
+          isError: false,
+          statusText: undefined,
+        })),
+      }));
+
+      setProjects(sanitizedProjects);
       setActiveProjectId(initialActiveId);
       setIsLoaded(true);
+
+      // Load studio projects — in Electron use diskData (same workspace.json),
+      // fall back to localStorage in browser mode.
+      try {
+        if (ipc && diskData?.studioProjects?.length > 0) {
+          // Electron path: already loaded from disk above
+          const reset = diskData.studioProjects.map((p: any) =>
+            p.status === "generating"
+              ? { ...p, status: "error", outputMarkdown: undefined, error: "Generation was interrupted. Click Retry to regenerate." }
+              : p
+          );
+          setStudioProjects(reset);
+          setActiveStudioProjectId("");
+        } else if (!ipc) {
+          // Browser fallback
+          const savedStudio = localStorage.getItem("fikr-studio-projects");
+          if (savedStudio) {
+            const parsed = JSON.parse(savedStudio);
+            const reset = parsed.map((p: any) =>
+              p.status === "generating"
+                ? { ...p, status: "error", outputMarkdown: undefined, error: "Generation was interrupted. Click Retry to regenerate." }
+                : p
+            );
+            setStudioProjects(reset);
+            localStorage.setItem("fikr-studio-projects", JSON.stringify(reset));
+            setActiveStudioProjectId("");
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load studio projects", e);
+      }
+
 
       if (ipc && ipc.getMcpPort) {
         ipc
@@ -263,13 +407,20 @@ export default function Page() {
   }, []);
 
   // 2. Persistence: Save on Change
-  //    In Electron: saves to ~/.fikrpad/workspace.json via IPC
+  //    In Electron: saves to ~/.fikr-studio/workspace.json via IPC
   //    In browser:  saves to localStorage
+  //    NOTE: always include studioProjects so Studio articles are not lost when
+  //    an Intel canvas change triggers a save before saveWorkspace is called.
   useEffect(() => {
     if (!isLoaded) return;
-    const ipc = typeof window !== "undefined" && (window as any).fikrpad;
+    const ipc = typeof window !== "undefined" && (window as any).fikrStudio;
     if (ipc) {
-      ipc.saveProjects({ projects, activeProjectId });
+      ipc.saveProjects({
+        projects,
+        activeProjectId,
+        studioProjects: studioProjectsRef.current,
+        activeStudioProjectId,
+      });
     } else {
       localStorage.setItem("nodepad-projects", JSON.stringify(projects));
       localStorage.setItem("nodepad-active-project", activeProjectId);
@@ -279,11 +430,11 @@ export default function Page() {
         /* quota exceeded — skip silently */
       }
     }
-  }, [projects, activeProjectId, isLoaded]);
+  }, [projects, activeProjectId, activeStudioProjectId, isLoaded]);
 
   // 3. MCP Live Events — listen for notes/projects pushed by external AI agents
   useEffect(() => {
-    const ipc = typeof window !== "undefined" && (window as any).fikrpad;
+    const ipc = typeof window !== "undefined" && (window as any).fikrStudio;
     if (!ipc) return;
 
     const cleanup = ipc.onExternalEvent(
@@ -295,8 +446,13 @@ export default function Page() {
               p.id === projectId ? { ...p, blocks: [...p.blocks, note] } : p,
             ),
           );
-          if (note.fromMcp && enrichBlockRef.current) {
-            setTimeout(() => enrichBlockRef.current(projectId, note.id, note.text), 100);
+          // Only auto-enrich raw MCP notes. Pre-synthesized notes (fromSkill)
+          // arrive with isEnriching:false + full annotation — skip the LLM pass.
+          if (note.fromMcp && !note.fromSkill && enrichBlockRef.current) {
+            setTimeout(
+              () => enrichBlockRef.current(projectId, note.id, note.text),
+              100,
+            );
           }
         } else if (event.type === "note-deleted") {
           const { projectId, noteId } = event.payload;
@@ -333,6 +489,31 @@ export default function Page() {
         } else if (event.type === "project-created") {
           const { project } = event.payload;
           setProjects((prev) => [...prev, project]);
+        } else if (event.type === "workspace-synced") {
+          // Main process pushed a fresh workspace from Firestore after sign-in.
+          // Replace local state with cloud data. studioProjects are only replaced
+          // if the cloud has them (main.js preserves local disk data otherwise).
+          const workspace = event.payload;
+          if (workspace?.projects?.length > 0) {
+            setProjects(workspace.projects);
+            if (workspace.activeProjectId) {
+              setActiveProjectId(workspace.activeProjectId);
+            }
+          }
+          if (workspace?.studioProjects?.length > 0) {
+            setStudioProjects(workspace.studioProjects);
+          }
+        } else if (event.type === "workspace-cleared") {
+          // User chose "Clear everything" during logout.
+          // Reset to a blank slate so no data bleeds into the logged-out session.
+          setProjects(INITIAL_PROJECTS);
+          setActiveProjectId(INITIAL_PROJECTS[0]?.id ?? "");
+          setStudioProjects([]);
+          setActiveStudioProjectId("");
+          localStorage.removeItem("fikr-studio-projects");
+          localStorage.removeItem("nodepad-projects");
+          localStorage.removeItem("nodepad-active-project");
+          localStorage.removeItem("nodepad-backup");
         }
       },
     );
@@ -353,6 +534,7 @@ export default function Page() {
           const raw = ev.target?.result as string;
           const names = projectsRef.current.map((p) => p.name);
           const imported = parseNodepadFile(raw, names) as Project;
+          analytics.track("import_file_success", { file: file.name, project: imported.id });
           setProjects((prev) => [...prev, imported]);
           setActiveProjectId(imported.id);
           setIsSidebarOpen(false);
@@ -373,11 +555,228 @@ export default function Page() {
     [],
   );
 
+  const handleCreateStudioProject = useCallback(() => {
+    const id = generateId();
+    const newProj = {
+      id,
+      name: "New Article",
+      mode: "article",
+      platform: "linkedin",
+      status: "ideating",
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    setStudioProjects((prev) => [newProj, ...prev]);
+    setActiveStudioProjectId(id);
+    
+    // Save to IPC/localStorage
+    if (typeof window !== "undefined" && (window as any).fikrStudio) {
+      (window as any).fikrStudio.saveWorkspace({
+        projects,
+        activeProjectId,
+        studioProjects: [newProj, ...studioProjects],
+        activeStudioProjectId: id
+      });
+    } else {
+      localStorage.setItem("fikr-studio-projects", JSON.stringify([newProj, ...studioProjects]));
+    }
+  }, [projects, activeProjectId, studioProjects]);
+
   // A ref to read current projects without causing re-renders or stale closures
   const projectsRef = useRef(projects);
   useEffect(() => {
     projectsRef.current = projects;
   }, [projects]);
+
+  // Keep a ref to studioProjects for use in async callbacks that outlive renders
+  const studioProjectsRef = useRef(studioProjects);
+  useEffect(() => {
+    studioProjectsRef.current = studioProjects;
+  }, [studioProjects]);
+
+  // Persist studioProjects helper (always available at page level)
+  const persistStudio = useCallback((updated: any[]) => {
+    if (typeof window !== "undefined" && (window as any).fikrStudio?.saveWorkspace) {
+      (window as any).fikrStudio.saveWorkspace({
+        projects: projectsRef.current,
+        activeProjectId,
+        studioProjects: updated,
+        activeStudioProjectId,
+      });
+    } else {
+      localStorage.setItem("fikr-studio-projects", JSON.stringify(updated));
+    }
+  }, [activeProjectId, activeStudioProjectId]);
+
+  // ── Article version management ────────────────────────────────────────────
+  const MAX_VERSIONS = typeof window !== "undefined" && (window as any).fikrStudio ? 30 : 10;
+
+  const saveArticleVersion = useCallback((
+    projectId: string,
+    label: string,
+    markdown: string,
+    isManual: boolean,
+  ) => {
+    if (!markdown?.trim()) return;
+    const version: import("@/lib/generate/types").ArticleVersion = {
+      id: generateId(),
+      label,
+      savedAt: Date.now(),
+      markdown,
+      wordCount: markdown.trim().split(/\s+/).filter(Boolean).length,
+      isManual,
+    };
+    setStudioProjects((prev: any[]) => {
+      const updated = prev.map((p: any) => {
+        if (p.id !== projectId) return p;
+        const existing: import("@/lib/generate/types").ArticleVersion[] = p.versions ?? [];
+        const next = [...existing, version];
+        // Cap: evict oldest non-manual first, then oldest manual
+        while (next.length > MAX_VERSIONS) {
+          const dropIdx = next.findIndex((v) => !v.isManual);
+          next.splice(dropIdx !== -1 ? dropIdx : 0, 1);
+        }
+        return { ...p, versions: next };
+      });
+      persistStudio(updated);
+      return updated;
+    });
+  }, [persistStudio, MAX_VERSIONS]);
+
+  const revertToVersion = useCallback((
+    projectId: string,
+    versionId: string,
+    currentMarkdown: string,
+  ) => {
+    setStudioProjects((prev: any[]) => {
+      const updated = prev.map((p: any) => {
+        if (p.id !== projectId) return p;
+        const target = (p.versions ?? []).find(
+          (v: import("@/lib/generate/types").ArticleVersion) => v.id === versionId,
+        );
+        if (!target) return p;
+        // Snapshot current state before reverting so user can always undo the revert
+        const snapshot: import("@/lib/generate/types").ArticleVersion = {
+          id: generateId(),
+          label: "Before revert",
+          savedAt: Date.now(),
+          markdown: currentMarkdown,
+          wordCount: currentMarkdown.trim().split(/\s+/).filter(Boolean).length,
+          isManual: false,
+        };
+        const versions = [...(p.versions ?? []), snapshot];
+        while (versions.length > MAX_VERSIONS) {
+          const dropIdx = versions.findIndex((v: import("@/lib/generate/types").ArticleVersion) => !v.isManual);
+          versions.splice(dropIdx !== -1 ? dropIdx : 0, 1);
+        }
+        return { ...p, outputMarkdown: target.markdown, versions, updatedAt: Date.now() };
+      });
+      persistStudio(updated);
+      return updated;
+    });
+  }, [persistStudio, MAX_VERSIONS]);
+
+  /**
+   * Background generation — lives at page level so it survives mode switching.
+   * Called by StudioRoot when the user clicks Generate.
+   */
+  const handleStudioGenerate = useCallback(async (
+    projectId: string,
+    params: import("@/lib/generate/types").GenerateParams,
+    projectName: string,
+  ) => {
+    console.log("[Studio] handleStudioGenerate called", { projectId, projectName, params });
+    const { streamGenerate } = await import("@/lib/generate/generate-stream");
+
+    let outputMarkdown = "";
+    let flushBuffer = "";
+    const FLUSH_EVERY = 150; // flush to state every ~150 chars for streaming feel
+    try {
+      console.log("[Studio] calling streamGenerate...");
+      const result = await streamGenerate(
+        params,
+        (chunk) => {
+          outputMarkdown += chunk;
+          flushBuffer   += chunk;
+          if (flushBuffer.length >= FLUSH_EVERY) {
+            flushBuffer = "";
+            const snap = outputMarkdown;
+            setStudioProjects((prev) => prev.map((p: any) =>
+              p.id === projectId ? { ...p, outputMarkdown: snap } : p
+            ));
+          }
+        },
+        new AbortController().signal,
+      );
+      console.log("[Studio] streamGenerate done, length:", outputMarkdown.length);
+
+      setStudioProjects((prev) => {
+        const updated = prev.map((p: any) => {
+          if (p.id !== projectId) return p;
+          
+          let finalName = p.name;
+          if (outputMarkdown) {
+            const match = outputMarkdown.match(/^#\s+(.+)$/m);
+            if (match && match[1]) {
+              finalName = match[1].trim();
+            }
+          }
+
+          // Auto-snapshot "Generated" version
+          const genVersion: import("@/lib/generate/types").ArticleVersion = {
+            id: generateId(),
+            label: "Generated",
+            savedAt: Date.now(),
+            markdown: outputMarkdown,
+            wordCount: outputMarkdown.trim().split(/\s+/).filter(Boolean).length,
+            isManual: false,
+          };
+          const existingVersions: import("@/lib/generate/types").ArticleVersion[] = p.versions ?? [];
+          const nextVersions = [...existingVersions, genVersion];
+          const maxV = typeof window !== "undefined" && (window as any).fikrStudio ? 30 : 10;
+          while (nextVersions.length > maxV) {
+            const dropIdx = nextVersions.findIndex((v: import("@/lib/generate/types").ArticleVersion) => !v.isManual);
+            nextVersions.splice(dropIdx !== -1 ? dropIdx : 0, 1);
+          }
+
+          return { 
+            ...p, 
+            name: limitWords(finalName, 3),
+            status: "done", 
+            outputMarkdown, 
+            citations: result.citations,
+            systemPrompt: result.systemPrompt,
+            updatedAt: Date.now(),
+            versions: nextVersions,
+          };
+        });
+        persistStudio(updated);
+        return updated;
+      });
+
+      setUndoToast(`"${projectName}" is ready — open Studio to read it`);
+      if (undoToastTimer.current) clearTimeout(undoToastTimer.current);
+      undoToastTimer.current = setTimeout(() => setUndoToast(null), 6000);
+
+    } catch (err: unknown) {
+      const isAbort = (err as { name?: string })?.name === "AbortError";
+      const msg = isAbort ? "The generation timed out after 90 seconds. Try a simpler prompt or check your local model server." : (err instanceof Error ? err.message : "Unknown error");
+      console.error("[Studio] streamGenerate error:", msg);
+
+      setStudioProjects((prev) => {
+        const updated = prev.map((p: any) =>
+          p.id === projectId ? { ...p, status: "error", error: msg, updatedAt: Date.now() } : p,
+        );
+        persistStudio(updated);
+        return updated;
+      });
+
+      setUndoToast(`Generation failed: ${msg}`);
+      if (undoToastTimer.current) clearTimeout(undoToastTimer.current);
+      undoToastTimer.current = setTimeout(() => setUndoToast(null), 6000);
+    }
+  }, [persistStudio]);
+
 
   // Stable ref to active blocks — lets useCallbacks read current blocks without
   // listing `blocks` in their deps (which would recreate them on every state change
@@ -441,112 +840,155 @@ export default function Page() {
     return result;
   }
 
-  const generateGhostNote = useCallback(async (projectId: string) => {
-    const targetProject = projectsRef.current.find((p) => p.id === projectId);
+  const generateGhostNote = useCallback(
+    async (projectId: string, retryGhostId?: string) => {
+      const targetProject = projectsRef.current.find((p) => p.id === projectId);
 
-    if (!targetProject) return;
+      if (!targetProject) return;
 
-    // Require at least 5 enriched blocks
-    const enrichedBlocks = targetProject.blocks.filter(
-      (b) => !b.isEnriching && b.category,
-    );
-    if (enrichedBlocks.length < 5) return;
+      // Require at least 5 enriched blocks
+      const enrichedBlocks = targetProject.blocks.filter(
+        (b) => !b.isEnriching && b.category,
+      );
+      if (enrichedBlocks.length < 5) return;
 
-    // Cap panel at 5 ghost notes
-    if ((targetProject.ghostNotes || []).length >= 5) return;
+      // No concurrent generation for this project
+      if (generatingRef.current.has(projectId)) return;
 
-    // No concurrent generation for this project
-    if (generatingRef.current.has(projectId)) return;
+      // If NOT retrying, enforce generation limits
+      if (!retryGhostId) {
+        // Cap panel at 5 ghost notes
+        if ((targetProject.ghostNotes || []).length >= 5) return;
 
-    // Require at least 5 new blocks since last generation
-    const lastCount = targetProject.lastGhostBlockCount || 0;
-    if (enrichedBlocks.length < lastCount + 5) return;
+        // Require at least 5 new blocks since last generation
+        const lastCount = targetProject.lastGhostBlockCount || 0;
+        if (enrichedBlocks.length < lastCount + 5) return;
 
-    // Require at least 5 minutes since last generation
-    const lastTime = targetProject.lastGhostTimestamp || 0;
-    const fiveMinutes = 5 * 60 * 1000;
-    if (Date.now() - lastTime < fiveMinutes) return;
+        // Require at least 5 minutes since last generation
+        const lastTime = targetProject.lastGhostTimestamp || 0;
+        const fiveMinutes = 5 * 60 * 1000;
+        if (Date.now() - lastTime < fiveMinutes) return;
 
-    // Require at least 2 distinct categories (meaningful diversity)
-    const categories = new Set(
-      enrichedBlocks.map((b) => b.category).filter(Boolean),
-    );
-    if (categories.size < 2) return;
+        // Require at least 2 distinct categories (meaningful diversity)
+        const categories = new Set(
+          enrichedBlocks.map((b) => b.category).filter(Boolean),
+        );
+        if (categories.size < 2) return;
+      }
 
-    generatingRef.current.add(projectId);
-    const ghostId = "ghost-" + generateId();
+      analytics.track("ghost_generate", { project: projectId, retry: !!retryGhostId });
+      generatingRef.current.add(projectId);
+      const ghostId = retryGhostId || "ghost-" + generateId();
 
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === projectId
-          ? {
-              ...p,
-              ghostNotes: [
-                ...(p.ghostNotes || []),
-                {
-                  id: ghostId,
-                  text: "",
-                  category: "thesis",
-                  isGenerating: true,
-                },
-              ],
-              lastGhostBlockCount: enrichedBlocks.length,
-              lastGhostTimestamp: Date.now(),
-            }
-          : p,
-      ),
-    );
-
-    try {
-      const curated = buildGhostContext(enrichedBlocks);
-      const context = curated.map((b) => ({
-        text: b.text,
-        category: b.category,
-        contentType: b.contentType,
-      }));
-
-      // Pass the last 5 generated ghost texts so the model can avoid near-duplicates
-      const previousSyntheses = (targetProject.lastGhostTexts || []).slice(-5);
-
-      const data = await generateGhostClient(context, previousSyntheses);
       setProjects((prev) =>
         prev.map((p) => {
           if (p.id !== projectId) return p;
-          return {
-            ...p,
-            ghostNotes: (p.ghostNotes || []).map((n) =>
-              n.id === ghostId
+
+          let updatedGhostNotes = p.ghostNotes || [];
+          if (retryGhostId) {
+            updatedGhostNotes = updatedGhostNotes.map((n) =>
+              n.id === retryGhostId
                 ? {
                     ...n,
-                    text: data.text,
-                    category: data.category,
-                    isGenerating: false,
+                    isGenerating: true,
+                    isError: false,
+                    statusText: undefined,
                   }
                 : n,
-            ),
-            // Accumulate ghost texts for dedup (keep last 10)
-            lastGhostTexts: [...(p.lastGhostTexts || []), data.text].slice(-10),
+            );
+          } else {
+            updatedGhostNotes = [
+              ...updatedGhostNotes,
+              {
+                id: ghostId,
+                text: "",
+                category: "thesis",
+                isGenerating: true,
+              },
+            ];
+          }
+
+          return {
+            ...p,
+            ghostNotes: updatedGhostNotes,
+            lastGhostBlockCount: enrichedBlocks.length,
+            lastGhostTimestamp: Date.now(),
           };
         }),
       );
-    } catch (e) {
-      console.error("Ghost note generation failed", e);
-      setProjects((prev) =>
-        prev.map((p) =>
-          p.id === projectId
-            ? {
-                ...p,
-                ghostNotes: (p.ghostNotes || []).filter(
-                  (n) => n.id !== ghostId,
-                ),
-              }
-            : p,
-        ),
-      );
-    } finally {
-      generatingRef.current.delete(projectId);
-    }
-  }, []);
+
+      try {
+        const curated = buildGhostContext(enrichedBlocks);
+        const context = curated.map((b) => ({
+          text: b.text,
+          category: b.category,
+          contentType: b.contentType,
+        }));
+
+        // Pass the last 5 generated ghost texts so the model can avoid near-duplicates
+        const previousSyntheses = (targetProject.lastGhostTexts || []).slice(
+          -5,
+        );
+
+        const data = await generateGhostClient(context, previousSyntheses);
+        setProjects((prev) =>
+          prev.map((p) => {
+            if (p.id !== projectId) return p;
+            return {
+              ...p,
+              ghostNotes: (p.ghostNotes || []).map((n) =>
+                n.id === ghostId
+                  ? {
+                      ...n,
+                      text: data.text,
+                      category: data.category,
+                      isGenerating: false,
+                    }
+                  : n,
+              ),
+              // Accumulate ghost texts for dedup (keep last 10)
+              lastGhostTexts: [...(p.lastGhostTexts || []), data.text].slice(
+                -10,
+              ),
+            };
+          }),
+        );
+        
+        // Index the ghost note
+        try {
+          const indexText = vectorIndex.constructor.prototype.constructor.buildIndexText({ text: data.text, contentType: "thesis", category: data.category });
+          await vectorIndex.add(ghostId, projectId, indexText, "thesis", 90);
+        } catch(e) {}
+      } catch (e: any) {
+        console.error("Ghost note generation failed", e);
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === projectId
+              ? {
+                  ...p,
+                  ghostNotes: (p.ghostNotes || []).map((n) =>
+                    n.id === ghostId
+                      ? {
+                          ...n,
+                          isGenerating: false,
+                          isError: true,
+                          statusText:
+                            e instanceof Error
+                              ? e.message
+                              : "Generation failed",
+                        }
+                      : n,
+                  ),
+                }
+              : p,
+          ),
+        );
+      } finally {
+        generatingRef.current.delete(projectId);
+      }
+    },
+    [],
+  );
 
   const enrichBlock = useCallback(
     async (
@@ -555,6 +997,8 @@ export default function Page() {
       text: string,
       category?: string,
       forcedType?: string,
+      retryCount: number = 0,
+      isReEnrich: boolean = false,
     ) => {
       // Read context directly from the ref — avoids wrapping in setProjects() which
       // React StrictMode double-invokes in development, causing two concurrent
@@ -578,52 +1022,31 @@ export default function Page() {
           context.map(({ id, ...rest }) => ({ id, ...rest })),
           forcedType,
           category,
+          id, // stable block ID for the per-block in-flight guard
         );
 
-        // Map indices back to stable block IDs — the context array carries
-        // the original block IDs so we get exact, rename-proof references.
-        const influencedBy = data.influencedByIndices
-          ? ((data.influencedByIndices as number[])
-              .map((idx) => context[idx]?.id)
-              .filter(Boolean) as string[])
+        const mergeTargetIdx = data.mergeWithIndex;
+        const mergeTargetId =
+          mergeTargetIdx !== null && context[mergeTargetIdx]
+            ? context[mergeTargetIdx].id
+            : null;
+
+        // Map indices back to stable block IDs and typed edges
+        const influencedBy = data.influencedBy
+          ? data.influencedBy
+              .filter((item: any) => context[item.index])
+              .map((item: any) => ({ id: context[item.index].id, type: item.relationship }))
           : [];
 
         setProjects((current: Project[]) => {
-          const mergeTargetIdx = data.mergeWithIndex;
-          const mergeTargetId =
-            mergeTargetIdx !== null && context[mergeTargetIdx]
-              ? context[mergeTargetIdx].id
-              : null;
-
           return current.map((proj) => {
             if (proj.id !== projectId) return proj;
 
-            if (mergeTargetId) {
-              return {
-                ...proj,
-                blocks: proj.blocks
-                  .filter((b) => b.id !== id)
-                  .map((b) =>
-                    b.id === mergeTargetId
-                      ? {
-                          ...b,
-                          text: b.text + "\n\n" + text,
-                          contentType: data.contentType,
-                          category: data.category,
-                          annotation: data.annotation,
-                          confidence: data.confidence,
-                          influencedBy,
-                          isUnrelated: data.isUnrelated,
-                          sources: data.sources ?? undefined,
-                          isEnriching: false,
-                          statusText: undefined,
-                          isError: false,
-                        }
-                      : b,
-                  ),
-              };
-            }
-            if (data.contentType === "task") {
+            // Task-merge is only applied to brand-new notes, never to re-enrichments.
+            // Re-enriching an existing note that gets reclassified as "task" should
+            // update it in-place — not delete it from the block list (which would
+            // cause the detail panel to lose its reference and show "No synthesis").
+            if (data.contentType === "task" && !isReEnrich) {
               const existingTaskIndex = proj.blocks.findIndex(
                 (b) => b.contentType === "task" && b.id !== id,
               );
@@ -685,6 +1108,7 @@ export default function Page() {
                       ...b,
                       contentType: data.contentType,
                       category: data.category,
+                      title: data.title,
                       annotation: data.annotation,
                       confidence: data.confidence,
                       influencedBy,
@@ -693,6 +1117,7 @@ export default function Page() {
                       isEnriching: false,
                       statusText: undefined,
                       isError: false,
+                      mergeSuggestion: mergeTargetId ? { targetId: mergeTargetId } : undefined,
                     }
                   : b,
               ),
@@ -700,21 +1125,57 @@ export default function Page() {
           });
         });
 
+        // Index the note block asynchronously
+        try {
+          const indexText = VectorIndex.buildIndexText({ 
+            text, 
+            title: data.title,
+            annotation: data.annotation,
+            contentType: data.contentType, 
+            category: data.category 
+          });
+          await vectorIndex.add(id, projectId, indexText, data.contentType, data.confidence || 90);
+        } catch(e) {}
+
+        // Similarity check asynchronously to suggest merges
+        if (!mergeTargetId) {
+          try {
+            const results = await vectorIndex.search(text, 1);
+            if (results.length > 0 && results[0].score > 0.85 && results[0].blockId !== id) {
+              setProjects((current) => current.map(p => p.id === projectId ? {
+                ...p,
+                blocks: p.blocks.map(b => b.id === id ? { ...b, mergeSuggestion: { targetId: results[0].blockId } } : b)
+              } : p));
+            }
+          } catch(e) {}
+        }
+
         setTimeout(() => generateGhostNote(projectId), 2500);
       } catch (e: any) {
         console.warn(e);
-        const isNoKey =
-          e?.message?.includes("No API key") ||
-          e?.message?.includes("Invalid or missing API key") ||
-          false;
-        const isTimeout =
-          e?.name === "AbortError" || e?.message?.includes("abort") || false;
-        const isNetworkError = e?.message?.toLowerCase().includes("fetch") || e?.message?.toLowerCase().includes("network");
+        const isAbort = e?.name === "AbortError" || e?.message?.includes("abort") || false;
+        
+        // If it's an abort, it was explicitly cancelled by a newer request or timeout. Do not mutate state here.
+        if (isAbort) return;
+
+        const isNoKey = e?.message?.includes("No API key configured") || false;
+        const isNetworkError =
+          e?.message?.toLowerCase().includes("fetch") ||
+          e?.message?.toLowerCase().includes("network");
+
+        // Auto retry mechanism (up to 2 retries)
+        if (!isNoKey && retryCount < 2) {
+          const backoff = 2000 * Math.pow(2, retryCount); // 2s, 4s
+          console.log(`[Enrichment] Retrying block ${id} in ${backoff}ms (attempt ${retryCount + 1}/2)...`);
+          setTimeout(() => {
+            enrichBlock(projectId, id, text, category, forcedType, retryCount + 1);
+          }, backoff);
+          return;
+        }
+
         const errorStatus = isNoKey
           ? "no-api-key"
-          : isTimeout
-            ? "Model inference timed out. The local model may still be generating or the prompt is too large."
-            : isNetworkError
+          : isNetworkError
             ? "Connection failed. Ensure your AI server is running and accessible."
             : e instanceof Error
               ? e.message
@@ -749,6 +1210,7 @@ export default function Page() {
 
   const claimGhostNote = useCallback(
     (id: string) => {
+      analytics.track("ghost_claim", { ghostId: id });
       const note = (activeProject?.ghostNotes || []).find((n) => n.id === id);
       if (!note || note.isGenerating) return;
       const newId = generateId();
@@ -765,20 +1227,30 @@ export default function Page() {
               timestamp: Date.now(),
               contentType: "thesis" as ContentType,
               category,
-              isEnriching: true,
+              annotation: text, // The ghost note text IS the synthesis
+              isEnriching: false,
             },
           ],
           ghostNotes: (p.ghostNotes || []).filter((n) => n.id !== id),
         };
-        enrichBlock(p.id, newId, text, category, "thesis");
         return updatedProject;
       });
+
+      // Index claimed thesis note
+      try {
+        const indexText = VectorIndex.buildIndexText({ text, contentType: "thesis", category });
+        vectorIndex.add(newId, activeProjectId, indexText, "thesis", 95).catch(() => {});
+      } catch(e) {}
+
+      // Trigger a fresh ghost note pass after claiming
+      setTimeout(() => generateGhostNote(activeProjectId), 1000);
     },
-    [activeProject, updateActiveProject, enrichBlock],
+    [activeProject, activeProjectId, updateActiveProject, generateGhostNote],
   );
 
   const dismissGhostNote = useCallback(
     (id: string) => {
+      analytics.track("ghost_dismiss", { ghostId: id });
       updateActiveProject((p) => ({
         ...p,
         ghostNotes: (p.ghostNotes || []).filter((n) => n.id !== id),
@@ -791,7 +1263,11 @@ export default function Page() {
     const handleKeys = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setIsCommandKOpen((prev) => !prev);
+        setIsMenuOpen((prev) => !prev);
+      }
+      if (e.key === "f" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
       }
       if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
         // Don't intercept while typing in an input/textarea
@@ -802,8 +1278,10 @@ export default function Page() {
         }
       }
       if (e.key === "Escape") {
-        if (isCommandKOpen) {
-          setIsCommandKOpen(false);
+        if (isMenuOpen) {
+          setIsMenuOpen(false);
+        } else if (isSearchOpen) {
+          setIsSearchOpen(false);
         } else if (isGhostPanelOpen) {
           setIsGhostPanelOpen(false);
         }
@@ -811,7 +1289,57 @@ export default function Page() {
     };
     window.addEventListener("keydown", handleKeys);
     return () => window.removeEventListener("keydown", handleKeys);
-  }, [isCommandKOpen, isGhostPanelOpen, undo]);
+  }, [isMenuOpen, isSearchOpen, isGhostPanelOpen, undo]);
+
+  // List view keyboard navigation
+  useEffect(() => {
+    if (viewMode !== "list" || !activeProject?.blocks?.length) return;
+
+    const handleListKeys = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return;
+
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        
+        const sorted = [...activeProject.blocks].sort(
+          (a, b) => b.timestamp - a.timestamp
+        );
+        const currentIndex = highlightedBlockId 
+          ? sorted.findIndex(b => b.id === highlightedBlockId) 
+          : -1;
+        
+        const nextIndex = e.key === "ArrowDown"
+          ? (currentIndex < sorted.length - 1 ? currentIndex + 1 : 0)
+          : (currentIndex > 0 ? currentIndex - 1 : sorted.length - 1);
+        
+        const nextId = sorted[nextIndex].id;
+        setHighlightedBlockId(nextId);
+        
+        // Keep sidebar in sync if it is open
+        if (selectedNoteId) {
+          setSelectedNoteId(nextId);
+        }
+
+        // Auto-scroll
+        const el = document.getElementById(`tile-${nextId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }
+
+      if (e.key === "Enter" && highlightedBlockId && !selectedNoteId) {
+        e.preventDefault();
+        setSelectedNoteId(highlightedBlockId);
+      }
+    };
+
+    window.addEventListener("keydown", handleListKeys);
+    return () => window.removeEventListener("keydown", handleListKeys);
+  }, [viewMode, activeProject?.blocks, highlightedBlockId, selectedNoteId]);
 
   const addBlock = useCallback(
     (text: string, forcedType?: ContentType) => {
@@ -869,6 +1397,7 @@ export default function Page() {
         resolvedType ??
         (HIGH_CONFIDENCE_TYPES.has(heuristicType) ? heuristicType : "general");
 
+      analytics.track("note_add", { type: initialDisplayType, project: activeProjectId });
       pushHistory(activeProjectId, blocksRef.current);
       updateActiveProject((p) => ({
         ...p,
@@ -884,7 +1413,7 @@ export default function Page() {
         ],
       }));
 
-      setIsCommandKOpen(false);
+
       enrichBlock(
         activeProjectId,
         newId,
@@ -898,6 +1427,7 @@ export default function Page() {
 
   const deleteBlock = useCallback(
     (id: string) => {
+      analytics.track("note_delete", { blockId: id, project: activeProjectId });
       pushHistory(activeProjectId, blocksRef.current);
       updateActiveProject((p) => ({
         ...p,
@@ -909,6 +1439,7 @@ export default function Page() {
 
   const editBlock = useCallback(
     (id: string, newText: string) => {
+      analytics.track("note_edit", { blockId: id, project: activeProjectId });
       // Snapshot before the edit so Cmd+Z restores the original text
       const currentProj = projectsRef.current.find(
         (p) => p.id === activeProjectId,
@@ -935,9 +1466,13 @@ export default function Page() {
         }
 
         debounceTimers.current[activeProjectId][id] = setTimeout(() => {
-          enrichBlock(activeProjectId, id, newText, block.category).catch(
-            console.error,
-          );
+          enrichBlock(
+            activeProjectId, 
+            id, 
+            newText, 
+            block.category, 
+            block.contentType
+          ).catch(console.error);
           delete debounceTimers.current[activeProjectId][id];
         }, 800);
 
@@ -960,13 +1495,18 @@ export default function Page() {
 
   const reEnrichBlock = useCallback(
     (id: string, newCategory?: string) => {
+      analytics.track("note_re_enrich", { blockId: id });
       const block = blocksRef.current.find((b) => b.id === id);
       if (!block) return;
+
+      // Preserve the existing category if no new one is provided — avoids
+      // a brief flicker where the category pill goes blank during enrichment.
+      const resolvedCategory = newCategory ?? block.category;
 
       updateActiveProject((p) => ({
         ...p,
         blocks: p.blocks.map((b) =>
-          b.id === id ? { ...b, category: newCategory, isEnriching: true } : b,
+          b.id === id ? { ...b, category: resolvedCategory, isEnriching: true } : b,
         ),
       }));
 
@@ -974,8 +1514,10 @@ export default function Page() {
         activeProjectId,
         id,
         block.text,
-        newCategory || block.category,
+        resolvedCategory,
         block.contentType,
+        0,
+        true, // isReEnrich — prevents task-merge from deleting the block
       ).catch(console.error);
     },
     [activeProjectId, updateActiveProject, enrichBlock],
@@ -983,6 +1525,7 @@ export default function Page() {
 
   const editAnnotation = useCallback(
     (id: string, newAnnotation: string) => {
+      analytics.track("note_edit_annotation", { blockId: id });
       updateActiveProject((p) => ({
         ...p,
         blocks: p.blocks.map((b) =>
@@ -995,6 +1538,7 @@ export default function Page() {
 
   const toggleCollapse = useCallback(
     (id: string) => {
+      analytics.track("note_toggle_collapse", { blockId: id });
       updateActiveProject((p) => {
         const next = new Set(p.collapsedIds);
         if (next.has(id)) next.delete(id);
@@ -1007,6 +1551,7 @@ export default function Page() {
 
   const handleTogglePin = useCallback(
     (id: string) => {
+      analytics.track("note_toggle_pin", { blockId: id });
       setProjects((current) =>
         current.map((p) =>
           p.id === activeProjectId
@@ -1025,6 +1570,7 @@ export default function Page() {
 
   const handleToggleSubTask = useCallback(
     (blockId: string, subTaskId: string) => {
+      analytics.track("note_toggle_subtask", { blockId });
       setProjects((current) =>
         current.map((p) =>
           p.id === activeProjectId
@@ -1052,6 +1598,7 @@ export default function Page() {
 
   const handleDeleteSubTask = useCallback(
     (blockId: string, subTaskId: string) => {
+      analytics.track("note_delete_subtask", { blockId });
       setProjects((current) =>
         current.map((p) =>
           p.id === activeProjectId
@@ -1077,6 +1624,7 @@ export default function Page() {
 
   const handleChangeType = useCallback(
     (id: string, newType: ContentType) => {
+      analytics.track("note_change_type", { blockId: id, type: newType });
       const block = blocksRef.current.find((b) => b.id === id);
       if (!block) return;
       pushHistory(activeProjectId, blocksRef.current);
@@ -1092,17 +1640,48 @@ export default function Page() {
         block.text,
         block.category,
         newType,
+        0,
+        true, // isReEnrich — prevents task-merge from deleting the block
       ).catch(console.error);
     },
     [activeProjectId, pushHistory, updateActiveProject, enrichBlock],
   );
 
   const clearBlocks = useCallback(() => {
+    analytics.track("project_clear_all", { project: activeProjectId });
     pushHistory(activeProjectId, blocksRef.current);
     updateActiveProject((p) => ({ ...p, blocks: [], collapsedIds: [] }));
   }, [activeProjectId, pushHistory, updateActiveProject]);
 
+  const mergeBlocks = useCallback((sourceId: string, targetId: string) => {
+    analytics.track("note_merge", { sourceId, targetId });
+    pushHistory(activeProjectId, blocksRef.current);
+    updateActiveProject((p) => {
+      const source = p.blocks.find(b => b.id === sourceId);
+      const target = p.blocks.find(b => b.id === targetId);
+      if (!source || !target) return p;
+      return {
+        ...p,
+        blocks: p.blocks
+          .filter(b => b.id !== sourceId)
+          .map(b => b.id === targetId ? {
+            ...b,
+            text: b.text + "\n\n" + source.text,
+          } : b)
+      };
+    });
+  }, [activeProjectId, pushHistory, updateActiveProject]);
+
+  const dismissMerge = useCallback((id: string) => {
+    analytics.track("note_dismiss_merge", { blockId: id });
+    updateActiveProject((p) => ({
+      ...p,
+      blocks: p.blocks.map(b => b.id === id ? { ...b, mergeSuggestion: undefined } : b)
+    }));
+  }, [updateActiveProject]);
+
   const createProject = useCallback(() => {
+    analytics.track("project_create");
     const newProject: Project = {
       id: generateId(),
       name: "New Space",
@@ -1115,6 +1694,7 @@ export default function Page() {
   }, []);
 
   const renameProject = useCallback((id: string, newName: string) => {
+    analytics.track("project_rename", { projectId: id });
     setProjects((prev) =>
       prev.map((p) => (p.id === id ? { ...p, name: newName } : p)),
     );
@@ -1122,6 +1702,7 @@ export default function Page() {
 
   const deleteProject = useCallback(
     (id: string) => {
+      analytics.track("project_delete", { projectId: id });
       setProjects((prev) => {
         if (prev.length <= 1) return prev;
         const nextProjects = prev.filter((p) => p.id !== id);
@@ -1136,15 +1717,13 @@ export default function Page() {
 
   const handleCommand = useCallback(
     (cmd: string, text?: string) => {
-      setIsCommandKOpen(false);
-
       // Handle view switches
-      if (cmd === "kanban") {
-        setViewMode("kanban");
-      } else if (cmd === "tiling") {
+      if (cmd === "tiling") {
+        analytics.track("view_switch", { mode: "tiling" });
         setViewMode("tiling");
-      } else if (cmd === "graph") {
-        setViewMode("graph");
+      } else if (cmd === "list") {
+        analytics.track("view_switch", { mode: "list" });
+        setViewMode("list");
       } else if (cmd === "open-projects") {
         setIsGhostPanelOpen(false);
         setIsIndexOpen(false);
@@ -1154,246 +1733,358 @@ export default function Page() {
         setIsIndexOpen(false);
         setIsSidebarOpen(true);
         createProject();
-      } else if (cmd === "open-index") {
-        setIsSidebarOpen(false);
-        setIsGhostPanelOpen(false);
-        setIsIndexOpen((prev) => !prev);
-      } else if (cmd === "open-synthesis") {
-        setIsSidebarOpen(false);
-        setIsIndexOpen(false);
-        setIsGhostPanelOpen((prev) => !prev);
       } else if (cmd === "clear") clearBlocks();
-      else if (cmd === "help")
-        window.open("https://github.com/albingroen/react-cmdk", "_blank");
-      // .nodepad export / import
-      else if (cmd === "export-nodepad") {
+      // .fikrdata export / import
+      else if (cmd === "export-fikrdata") {
+        analytics.track("export_nodepad", { project: activeProjectId });
         setProjects((prev) => {
           const proj = prev.find((p) => p.id === activeProjectId);
           if (proj) downloadNodepadFile(proj);
           return prev;
         });
-      } else if (cmd === "import-nodepad") {
+      } else if (cmd === "import-fikrdata") {
+        analytics.track("import_file");
         importInputRef.current?.click();
-      }
-
-      // Export commands — read project from state snapshot via ref to avoid stale closure
-      else if (cmd === "export-md") {
-        setProjects((prev) => {
-          const proj = prev.find((p) => p.id === activeProjectId);
-          if (proj) {
-            const md = exportToMarkdown(proj.name, proj.blocks);
-            const slug = proj.name
-              .toLowerCase()
-              .replace(/\s+/g, "-")
-              .replace(/[^a-z0-9-]/g, "");
-            downloadMarkdown(`${slug}.md`, md);
-          }
-          return prev;
-        });
-      } else if (cmd === "copy-md") {
-        setProjects((prev) => {
-          const proj = prev.find((p) => p.id === activeProjectId);
-          if (proj) {
-            const md = exportToMarkdown(proj.name, proj.blocks);
-            copyToClipboard(md);
-          }
-          return prev;
-        });
       }
 
       // Handle type overrides
       else if (cmd === "task" && text) addBlock(text, "task");
       else if (cmd === "thesis" && text) addBlock(text, "thesis");
 
-      setIsCommandKOpen(false);
     },
     [clearBlocks, addBlock, activeProjectId],
   );
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
-      {/* Hidden file input for .nodepad import */}
-      <input
-        ref={importInputRef}
-        type="file"
-        accept=".nodepad,.json"
-        className="hidden"
-        onChange={handleImportFile}
-      />
+    <SearchProvider>
+      <GlobalSearchEngine projects={projects} />
+      <div className="flex h-dvh overflow-hidden bg-background">
+        {/* Hidden file input for .fikrdata import */}
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".fikrdata,.json"
+          className="hidden"
+          onChange={handleImportFile}
+        />
 
-      <ProjectSidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onSelectProject={setActiveProjectId}
-        onCreateProject={createProject}
-        onRenameProject={renameProject}
-        onDeleteProject={deleteProject}
-        aiSettings={settings}
-        onUpdateAISettings={updateSettings}
-        openToSettings={jumpToSettings}
-        onSettingsOpened={() => setJumpToSettings(false)}
-        mcpPort={mcpPort}
-      />
+         <ProjectSidebar
+           isOpen={isSidebarOpen}
+           onClose={() => setIsSidebarOpen(false)}
+           projects={projects}
+           activeProjectId={activeProjectId}
+           onSelectProject={(id) => {
+             analytics.track("project_select", { projectId: id });
+             setActiveProjectId(id);
+           }}
+           onCreateProject={createProject}
+           onRenameProject={renameProject}
+           onDeleteProject={deleteProject}
+           aiSettings={settings}
+           onUpdateAISettings={updateSettings}
+           openToSettings={jumpToSettings}
+           onSettingsOpened={() => setJumpToSettings(false)}
+           onOpenSettings={openSettings}
+           mcpPort={mcpPort}
+           activeApp={activeApp}
+           setActiveApp={setActiveApp}
+           studioProjects={studioProjects}
+           activeStudioProjectId={activeStudioProjectId}
+           onSelectStudioProject={setActiveStudioProjectId}
+           onCreateStudioProject={handleCreateStudioProject}
+           activeStudioWordCount={(() => {
+             const p = studioProjects.find((p: any) => p.id === activeStudioProjectId);
+             const md = p?.outputMarkdown ?? "";
+             return md ? md.trim().split(/\s+/).filter(Boolean).length : 0;
+           })()}
+         />
 
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-        <StatusBar
-          blockCount={blocks.length}
+        <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+          {/* ── Shared toolbar — always visible in Fikr Intel ── */}
+          {activeApp === "Fikr Intel" && (
+            <StatusBar
+              isGhostPanelOpen={isGhostPanelOpen}
+            ghostNoteCount={ghostNotes.filter((n) => !n.isGenerating).length}
+            activeProjectName={
+              activeApp === "Fikr Intel"
+                ? (activeProject?.name || "")
+                : (studioProjects.find((p: any) => p.id === activeStudioProjectId)?.name || "")
+            }
+            viewMode={viewMode}
+            onGhostPanelToggle={() => {
+              analytics.track("ghost_panel_toggle");
+              setIsGhostPanelOpen((prev) => !prev);
+            }}
+            onViewModeChange={(mode) => {
+              analytics.track("view_switch", { mode });
+              setViewMode(mode);
+            }}
+            onSearchClick={
+              activeApp === "Fikr Intel"
+                ? () => {
+                    analytics.track("search_open");
+                    setIsSearchOpen(true);
+                  }
+                : undefined
+            }
+            onImport={() => {
+              analytics.track("import_file");
+              importInputRef.current?.click();
+            }}
+            onExportFikrdata={() => handleCommand("export-fikrdata")}
+            onOpenSettings={() => {
+              analytics.track("settings_open");
+              setIsSidebarOpen(true);
+              setJumpToSettings(true);
+            }}
+            isMenuOpen={isMenuOpen}
+            setIsMenuOpen={setIsMenuOpen}
+            enrichingCount={activeApp === "Fikr Intel" ? blocks.filter((b) => b.isEnriching).length : 0}
+            modelLabel={
+              activeApp === "Fikr Intel" && isHydrated && settings.apiKey
+                ? currentModel.shortLabel
+                : undefined
+            }
+            wordUsage={wordUsage}
+            onWordCountClick={handleWordCountClick}
+          />
+          )}
+
+          {activeApp === "Connections" ? (
+            <ConnectionsPage
+              mcpPort={mcpPort}
+              plan={cloudPlan}
+              relayApiKey={cloudRelayKey}
+            />
+          ) : activeApp === "Fikr Intel" ? (
+            <>
+
+          {isHydrated && !settings.apiKey && !["plus", "pro"].some(t => cloudPlan.toLowerCase().includes(t)) && (
+            <div className="px-3 py-2 border-b border-border shrink-0">
+              <div
+                role="alert"
+                className="flex items-center justify-between gap-4 rounded-md border px-3.5 py-2.5 text-xs"
+                style={{
+                  borderColor: "color-mix(in oklch, #3CA6A6 35%, transparent)",
+                  background: "color-mix(in oklch, #3CA6A6 8%, transparent)",
+                  color: "var(--foreground)",
+                }}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#3CA6A6"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="shrink-0"
+                  >
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </svg>
+                  <span className="text-foreground/80 leading-snug">
+                    AI enrichment requires an API key to classify and annotate your notes.
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <a
+                    href="https://fikr.one/pricing"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all border cursor-pointer"
+                    style={{
+                      borderColor: "color-mix(in oklch, #3CA6A6 40%, transparent)",
+                      color: "#3CA6A6",
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLAnchorElement).style.background = "color-mix(in oklch, #3CA6A6 12%, transparent)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
+                    }}
+                  >
+                    View plans
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+                  </a>
+                  <button
+                    onClick={() => {
+                      setIsSidebarOpen(true);
+                      setJumpToSettings(true);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer"
+                    style={{
+                      background: "#3CA6A6",
+                      color: "#ffffff",
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.opacity = "0.88";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+                    }}
+                  >
+                    Add your key →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-1 overflow-hidden relative">
+            <main className="relative flex-1 overflow-hidden">
+              {isLoaded ? (
+                viewMode === "tiling" ? (
+                  <TilingArea
+                    key={`tiling-${activeProjectId}`}
+                    blocks={activeProject.blocks}
+                    collapsedIds={new Set(activeProject.collapsedIds)}
+                    onDelete={deleteBlock}
+                    onEdit={editBlock}
+                    onEditAnnotation={editAnnotation}
+                    onReEnrich={reEnrichBlock}
+                    onChangeType={handleChangeType}
+                    onToggleCollapse={toggleCollapse}
+                    onTogglePin={handleTogglePin}
+                    onToggleSubTask={handleToggleSubTask}
+                    onDeleteSubTask={handleDeleteSubTask}
+                    highlightedBlockId={highlightedBlockId}
+                    onHighlight={setHighlightedBlockId}
+                    selectedBlockId={selectedNoteId}
+                    onOpenDetail={setSelectedNoteId}
+                    onMerge={mergeBlocks}
+                    onDismissMerge={dismissMerge}
+                  />
+                ) : viewMode === "graph" ? (
+                  <GraphArea
+                    key={`graph-${activeProjectId}`}
+                    blocks={activeProject.blocks}
+                    ghostNote={activeProject.ghostNotes?.[0]}
+                    projectName={activeProject.name}
+                    onReEnrich={reEnrichBlock}
+                    onChangeType={handleChangeType}
+                    onTogglePin={handleTogglePin}
+                    onEdit={editBlock}
+                    onEditAnnotation={editAnnotation}
+                    highlightedBlockId={highlightedBlockId}
+                    onHighlight={setHighlightedBlockId}
+                    selectedBlockId={selectedNoteId}
+                    onOpenDetail={setSelectedNoteId}
+                  />
+                ) : (
+                  <ListArea
+                    blocks={activeProject.blocks}
+                    highlightedBlockId={highlightedBlockId}
+                    onHighlight={setHighlightedBlockId}
+                    selectedBlockId={selectedNoteId}
+                    onOpenDetail={setSelectedNoteId}
+                  />
+                )
+              ) : (
+                <div className="h-full w-full" />
+              )}
+            </main>
+
+            <GhostPanel
+              ghostNotes={ghostNotes}
+              isOpen={isGhostPanelOpen}
+              onClose={() => setIsGhostPanelOpen(false)}
+              onClaim={claimGhostNote}
+              onDismiss={dismissGhostNote}
+              onRetry={(id) => generateGhostNote(activeProjectId, id)}
+            />
+            
+            <NoteDetailPanel
+              block={selectedNoteId ? (activeProject?.blocks.find((b) => b.id === selectedNoteId) ?? null) : null}
+              isOpen={!!selectedNoteId}
+              onClose={() => { setSelectedNoteId(null); setHighlightedBlockId(null); }}
+              onEdit={editBlock}
+              onEditAnnotation={editAnnotation}
+              onReEnrich={reEnrichBlock}
+              onDelete={deleteBlock}
+              onTogglePin={handleTogglePin}
+              onChangeType={handleChangeType}
+            />
+          </div>
+
+          {/* Undo toast */}
+          <AnimatePresence>
+            {undoToast && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-[130] pointer-events-none"
+              >
+                <div className="px-3 py-1.5 rounded-sm bg-card/95 border border-border/40 backdrop-blur-md shadow-xl">
+                  <span className="font-mono text-[10px] text-foreground/70 tracking-tight whitespace-nowrap">
+                    {undoToast}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+            <VimInput
+              onSubmit={addBlock}
+            />
+          </>
+        ) : (
+          <StudioRoot
+            studioProjects={studioProjects}
+            setStudioProjects={setStudioProjects}
+            intelBlocks={blocks}
+            onHighlightNote={setHighlightedBlockId}
+            activeProjectId={activeStudioProjectId}
+            setActiveProjectId={setActiveStudioProjectId}
+            onStartGeneration={handleStudioGenerate}
+            onSaveVersion={saveArticleVersion}
+            onRevertToVersion={revertToVersion}
+            onPersist={persistStudio}
+          />
+        )}
+        </div>
+
+        <TileIndex
           blocks={blocks}
-          isSidebarOpen={isSidebarOpen}
-          isIndexOpen={isIndexOpen}
-          isGhostPanelOpen={isGhostPanelOpen}
-          ghostNoteCount={ghostNotes.filter((n) => !n.isGenerating).length}
-          activeProjectName={activeProject?.name || ""}
-          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          onIndexToggle={() => setIsIndexOpen(!isIndexOpen)}
-          onGhostPanelToggle={() => setIsGhostPanelOpen((prev) => !prev)}
-          onImport={() => importInputRef.current?.click()}
-          modelLabel={
-            isHydrated && settings.apiKey ? currentModel.shortLabel : undefined
-          }
-          showHelpTooltip={showHelpTooltip}
-          onHelpTooltipDismiss={() => {
-            setShowHelpTooltip(false);
-            if (helpTooltipTimer.current)
-              clearTimeout(helpTooltipTimer.current);
+          onHighlight={setHighlightedBlockId}
+          highlightedId={highlightedBlockId}
+          onClose={() => setIsIndexOpen(false)}
+          isOpen={isIndexOpen}
+          viewMode={viewMode}
+        />
+
+
+
+        <SearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          projects={projects}
+          onSelectResult={(blockId, projectId) => {
+            if (projectId !== activeProjectId) setActiveProjectId(projectId);
+            setHighlightedBlockId(blockId);
+            setSelectedNoteId(blockId);
+            setIsSearchOpen(false);
           }}
         />
 
-        {isHydrated && !settings.apiKey && settings.provider !== "custom" && (
-          <div className="flex items-center justify-center gap-3 px-4 py-2 bg-amber-950/80 border-b border-amber-800/60 text-amber-200 text-xs shrink-0">
-            <span className="opacity-80">
-              ⚡ AI enrichment requires an{" "}
-              <strong className="text-amber-200">OpenRouter API key</strong> —
-              use a free model (no credits needed) or add credits for GPT-4o,
-              Claude, and more. Configure in the{" "}
-              <strong className="text-amber-200">☰ left panel</strong>.
-            </span>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => {
-                  setIsSidebarOpen(true);
-                  setJumpToSettings(true);
-                }}
-                className="px-2.5 py-1 rounded bg-amber-700/60 hover:bg-amber-600/70 text-amber-100 font-medium transition-colors cursor-pointer border border-amber-600/50"
-              >
-                Add API key →
-              </button>
-              <a
-                href="https://openrouter.ai/keys"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="opacity-60 hover:opacity-90 transition-opacity underline underline-offset-2"
-              >
-                Get a free key ↗
-              </a>
-            </div>
-          </div>
-        )}
+        {/* First-visit intro video modal */}
+        <IntroModal open={isIntroOpen} onClose={handleIntroClose} />
 
-        <div className="flex flex-1 overflow-hidden relative">
-          <main className="relative flex-1 overflow-hidden">
-            {isLoaded ? (
-              viewMode === "tiling" ? (
-                <TilingArea
-                  key={`tiling-${activeProjectId}`}
-                  blocks={activeProject.blocks}
-                  collapsedIds={new Set(activeProject.collapsedIds)}
-                  onDelete={deleteBlock}
-                  onEdit={editBlock}
-                  onEditAnnotation={editAnnotation}
-                  onReEnrich={reEnrichBlock}
-                  onChangeType={handleChangeType}
-                  onToggleCollapse={toggleCollapse}
-                  onTogglePin={handleTogglePin}
-                  onToggleSubTask={handleToggleSubTask}
-                  onDeleteSubTask={handleDeleteSubTask}
-                  highlightedBlockId={highlightedBlockId}
-                  onHighlight={setHighlightedBlockId}
-                />
-              ) : viewMode === "kanban" ? (
-                <KanbanArea
-                  key={`kanban-${activeProjectId}`}
-                  blocks={activeProject.blocks}
-                  onDelete={deleteBlock}
-                  onEdit={editBlock}
-                  onEditAnnotation={editAnnotation}
-                  onReEnrich={reEnrichBlock}
-                  onChangeType={handleChangeType}
-                  onToggleCollapse={toggleCollapse}
-                  onTogglePin={handleTogglePin}
-                  onToggleSubTask={handleToggleSubTask}
-                  onDeleteSubTask={handleDeleteSubTask}
-                  collapsedIds={new Set(activeProject.collapsedIds)}
-                />
-              ) : (
-                <GraphArea
-                  key={`graph-${activeProjectId}`}
-                  blocks={activeProject.blocks}
-                  ghostNote={ghostNotes[ghostNotes.length - 1]}
-                  projectName={activeProject.name}
-                  onReEnrich={reEnrichBlock}
-                  onChangeType={handleChangeType}
-                  onTogglePin={handleTogglePin}
-                  onEdit={editBlock}
-                  onEditAnnotation={editAnnotation}
-                  highlightedBlockId={highlightedBlockId}
-                  onHighlight={setHighlightedBlockId}
-                />
-              )
-            ) : (
-              <div className="h-full w-full" />
-            )}
-          </main>
-
-          <GhostPanel
-            ghostNotes={ghostNotes}
-            isOpen={isGhostPanelOpen}
-            onClose={() => setIsGhostPanelOpen(false)}
-            onClaim={claimGhostNote}
-            onDismiss={dismissGhostNote}
-          />
-        </div>
-
-        {/* Undo toast */}
-        <AnimatePresence>
-          {undoToast && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.15, ease: "easeOut" }}
-              className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-[130] pointer-events-none"
-            >
-              <div className="px-3 py-1.5 rounded-sm bg-black/90 border border-white/15 backdrop-blur-md shadow-xl">
-                <span className="font-mono text-[10px] text-white/70 tracking-tight whitespace-nowrap">
-                  {undoToast}
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <VimInput
-          onSubmit={addBlock}
-          onCommand={handleCommand}
-          isCommandKOpen={isCommandKOpen}
-          setIsCommandKOpen={setIsCommandKOpen}
+        {/* Full-screen Settings Page */}
+        <SettingsPage
+          open={settingsOpen}
+          initialSection={settingsSection}
+          aiSettings={settings}
+          onUpdateAISettings={updateSettings}
+          mcpPort={mcpPort}
+          onClose={() => setSettingsOpen(false)}
+          onAuthChange={handleAuthChange}
         />
       </div>
-
-      <TileIndex
-        blocks={blocks}
-        onHighlight={setHighlightedBlockId}
-        highlightedId={highlightedBlockId}
-        onClose={() => setIsIndexOpen(false)}
-        isOpen={isIndexOpen}
-        viewMode={viewMode}
-      />
-
-      {/* First-visit intro video modal */}
-      <IntroModal open={isIntroOpen} onClose={handleIntroClose} />
-    </div>
+    </SearchProvider>
   );
 }

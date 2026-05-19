@@ -1,22 +1,28 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 /**
- * Exposes a safe `window.fikrpad` API to the React renderer.
+ * Exposes a safe `window.fikrStudio` API to the React renderer.
  * All IPC calls go through this bridge — the renderer never touches
  * Node.js APIs directly (contextIsolation: true is enforced).
  */
-contextBridge.exposeInMainWorld("fikrpad", {
-  /** Load all projects from ~/.fikrpad/workspace.json */
-  loadProjects: () => ipcRenderer.invoke("fikrpad:load-projects"),
+contextBridge.exposeInMainWorld("fikrStudio", {
+  /** Load all projects from ~/.fikr-studio/workspace.json */
+  loadProjects: () => ipcRenderer.invoke("fikr-studio:load-projects"),
 
-  /** Persist all projects to ~/.fikrpad/workspace.json */
-  saveProjects: (data) => ipcRenderer.invoke("fikrpad:save-projects", data),
+  /** Persist all projects to ~/.fikr-studio/workspace.json */
+  saveProjects: (data) => ipcRenderer.invoke("fikr-studio:save-projects", data),
+
+  /**
+   * Persist the full combined workspace (projects + studioProjects).
+   * Used when both note projects and Studio generation projects need saving together.
+   */
+  saveWorkspace: (data) => ipcRenderer.invoke("fikr-studio:save-projects", data),
 
   /** Load persisted intro-seen flag */
-  getIntroSeen: () => ipcRenderer.invoke("fikrpad:get-intro-seen"),
+  getIntroSeen: () => ipcRenderer.invoke("fikr-studio:get-intro-seen"),
 
   /** Persist intro-seen flag */
-  setIntroSeen: () => ipcRenderer.invoke("fikrpad:set-intro-seen"),
+  setIntroSeen: () => ipcRenderer.invoke("fikr-studio:set-intro-seen"),
 
   /**
    * Register a callback for events pushed from the MCP server.
@@ -25,19 +31,56 @@ contextBridge.exposeInMainWorld("fikrpad", {
    */
   onExternalEvent: (callback) => {
     const handler = (_event, data) => callback(data);
-    ipcRenderer.on("fikrpad:external-event", handler);
-    return () => ipcRenderer.removeListener("fikrpad:external-event", handler);
+    ipcRenderer.on("fikr-studio:external-event", handler);
+    return () => ipcRenderer.removeListener("fikr-studio:external-event", handler);
   },
 
+  /** Receive startup progress events from the main process (used by splash screen) */
+  onSplashProgress: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("fikr-studio:splash-progress", handler);
+    return () => ipcRenderer.removeListener("fikr-studio:splash-progress", handler);
+  },
+
+
   /** Get the MCP server port (for displaying in Settings) */
-  getMcpPort: () => ipcRenderer.invoke("fikrpad:get-mcp-port"),
+  getMcpPort: () => ipcRenderer.invoke("fikr-studio:get-mcp-port"),
 
   /** Execute a tool directly from the React renderer (e.g. from Cloud Relay) */
-  executeTool: (name, args) => ipcRenderer.invoke("fikrpad:execute-tool", { name, args }),
+  executeTool: (name, args) => ipcRenderer.invoke("fikr-studio:execute-tool", { name, args }),
 
   /** Execute a raw MCP payload directly */
-  executeMcp: (rpc) => ipcRenderer.invoke("fikrpad:execute-mcp", rpc),
+  executeMcp: (rpc) => ipcRenderer.invoke("fikr-studio:execute-mcp", rpc),
 
   /** Open Fikr.One SSO login in browser */
-  openAuth: () => ipcRenderer.invoke("fikrpad:open-auth"),
+  openAuth: () => ipcRenderer.invoke("fikr-studio:open-auth"),
+
+  /** 1-Click MCP Installations */
+  checkMcp: (client) => ipcRenderer.invoke("fikr-studio:check-mcp", client),
+  installMcp: (client) => ipcRenderer.invoke("fikr-studio:install-mcp", client),
+  uninstallMcp: (client) => ipcRenderer.invoke("fikr-studio:uninstall-mcp", client),
+  /** Live connectivity test: resolves { ok, status?, error? } */
+  testMcp: (client) => ipcRenderer.invoke("fikr-studio:test-mcp", client),
+
+  /** Open a URL in the system default browser (not Electron) */
+  openUrl: (url) => ipcRenderer.invoke("fikr-studio:open-url", url),
+
+  /**
+   * Notify the main process of the current Firebase Auth user.
+   * Must be called on every auth state change (sign-in and sign-out).
+   * @param {string|null} uid      - Firebase UID, or null if signed out
+   * @param {string|null} idToken  - Firebase ID token (for fikr.one API calls)
+   */
+  setUser: (uid, idToken) => ipcRenderer.invoke("fikr-studio:set-user", { uid, idToken }),
+
+  /**
+   * Full logout flow — syncs data to cloud, shows a native keep/clear dialog,
+   * and optionally wipes the local workspace cache.
+   * @param {object|null} currentData - The current { projects, activeProjectId } payload to sync
+   * @returns {Promise<{ cleared: boolean, cancelled: boolean }>}
+   */
+  logout: (currentData) => ipcRenderer.invoke("fikr-studio:logout", { currentData }),
+
+  /** Manually pull from the cloud and sync workspace to disk */
+  syncWorkspace: () => ipcRenderer.invoke("fikr-studio:sync-workspace"),
 });

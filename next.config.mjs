@@ -1,14 +1,43 @@
 /** @type {import('next').NextConfig} */
+// Static export is only used for production Electron builds.
+// In dev mode we run the normal Next.js server so HMR works.
+const isStaticExport = process.env.NEXT_STATIC_EXPORT === '1';
+
 const nextConfig = {
-  output: "export",
-  distDir: "out",
-  assetPrefix: "./",
+  ...(isStaticExport && {
+    output: "export",
+    distDir: "out",
+    assetPrefix: "./",
+  }),
   typescript: {
     // Build errors are intentionally ignored — see CLAUDE.md
     ignoreBuildErrors: true,
   },
   images: {
     unoptimized: true,
+  },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "sharp$": false,
+      "onnxruntime-node$": false,
+    }
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      path: false,
+      crypto: false,
+    }
+    return config
+  },
+  turbopack: {
+    resolveAlias: {
+      fs: "./empty.js",
+      path: "./empty.js",
+      crypto: "./empty.js",
+      sharp: "./empty.js",
+      "onnxruntime-node": "./empty.js",
+    },
   },
   async headers() {
     return [

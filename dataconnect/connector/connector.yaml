@@ -1,0 +1,6 @@
+connectorId: "studio-connector"
+generate:
+  javascriptSdk:
+    outputDir: "../../dataconnect-generated/js/studio-connector"
+    package: "@studio-connector/default"
+    packageJsonDir: "../../dataconnect-generated/js/studio-connector"

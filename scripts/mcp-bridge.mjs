@@ -2,11 +2,7 @@
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 async function main() {
-  const url = process.argv[2];
-  if (!url) {
-    console.error("Usage: node mcp-bridge.js <sse-url>");
-    process.exit(1);
-  }
+  const url = process.argv[2] || "http://127.0.0.1:3025/sse";
 
   const relayKey = process.env.MCP_RELAY_KEY || process.env.MCP_REMOTE_AUTH;
   const headers = {};

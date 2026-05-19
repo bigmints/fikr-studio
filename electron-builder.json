@@ -1,6 +1,6 @@
 {
-  "appId": "com.fikrpad.app",
-  "productName": "FikrPad",
+  "appId": "com.fikr-studio.app",
+  "productName": "Fikr Studio",
   "directories": {
     "output": "dist"
   },
@@ -8,14 +8,16 @@
     {
       "provider": "github",
       "owner": "Bigmints-com",
-      "repo": "fikrpad"
+      "repo": "fikr-studio"
     }
   ],
   "files": [
     "out/**/*",
     "main.js",
     "preload.js",
-    "package.json"
+    "package.json",
+    "lib/**/*",
+    "scripts/**/*"
   ],
   "mac": {
     "category": "public.app-category.productivity",
