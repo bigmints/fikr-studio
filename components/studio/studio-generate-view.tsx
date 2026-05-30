@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ArrowLeft, RefreshCw, Eye, EyeOff, Sparkles, BookOpen,
-  MoreHorizontal, Wand2,
+  MoreHorizontal, Wand2, Clock,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type {
@@ -11,6 +11,7 @@ import type {
 } from "@/lib/generate/types";
 import { StudioRichEditor } from "./studio-rich-editor";
 import { ArtifactDrawer } from "./artifact-drawer";
+import { VersionHistoryDrawer } from "./version-history-drawer";
 import { LOCAL_AI_CONFIG, LM_STUDIO_MODELS } from "@/local-ai.config";
 import PRESETS from "@/lib/generate/presets.json";
 
@@ -104,6 +105,7 @@ interface Props {
 
 export function StudioGenerateView({
   project, params, onBack, onRegenerate, onUpdateParams, onHighlightNote,
+  onSaveVersion, onRevertToVersion,
 }: Props) {
   const rawMarkdown = project.outputMarkdown ?? "";
   const [markdown, setMarkdown] = useState(() => cleanMarkdown(rawMarkdown));
@@ -111,6 +113,7 @@ export function StudioGenerateView({
   const [showSources, setShowSources] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const [tone,     setTone]     = useState(params.tone     ?? 50);
@@ -211,10 +214,21 @@ export function StudioGenerateView({
             <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2 }}>{project.name}</span>
           </div>
         </div>
+        <div className="studio-toolbar__right" style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className={`studio-pill-btn ${showHistory ? "active" : ""}`}
+            title="Version History"
+            style={{ display: "flex", alignItems: "center", gap: 6 }}
+          >
+            <Clock className="size-3.5" />
+            <span>History</span>
+          </button>
+        </div>
       </header>
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
-      <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
 
         {/* ── Main content ─────────────────────────────────────────────────── */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -419,6 +433,18 @@ export function StudioGenerateView({
             </div>
           </div>
         )}
+
+        <AnimatePresence>
+          {showHistory && (
+            <VersionHistoryDrawer
+              versions={project.versions ?? []}
+              currentMarkdown={markdown}
+              onClose={() => setShowHistory(false)}
+              onSave={() => onSaveVersion?.("Manual Save", markdown, true)}
+              onRevert={(versionId) => onRevertToVersion?.(versionId, markdown)}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Publish / Export drawer */}

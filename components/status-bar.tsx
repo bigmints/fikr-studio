@@ -352,6 +352,12 @@ export function StatusBar({
                 className="absolute right-0 top-full mt-2 z-[300] w-52 rounded-lg bg-background/95 border border-border/60 shadow-2xl backdrop-blur-xl overflow-hidden"
               >
                 <div className="py-1">
+                  {/* Settings */}
+                  {menuItem(
+                    <Settings className="h-3.5 w-3.5" />,
+                    "Settings",
+                    onOpenSettings,
+                  )}
                   {/* Import / Export */}
                   {menuItem(
                     <FolderInput className="h-3.5 w-3.5" />,
