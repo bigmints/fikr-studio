@@ -5,11 +5,11 @@ import { MobileWall } from "@/components/mobile-wall";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-// const geistSans = Geist({
-//   variable: "--font-geist-sans",
-//   subsets: ["latin"],
-//   preload: false,
-// });
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+  preload: false,
+});
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -57,7 +57,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistMono.variable} ${vazirmatn.variable} font-sans antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${vazirmatn.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
         <ThemeProvider

@@ -202,21 +202,47 @@ export function SettingsModal({
         >
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60 backdrop-blur-md"
             onClick={() => onOpenChange(false)}
+          />
+
+          {/* Ambient Background Glow behind the modal */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 1, ease: "easeOut" }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-primary/20 blur-[120px] rounded-full pointer-events-none"
           />
 
           {/* Panel */}
           <motion.div
-            initial={{ scale: 0.97, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.97, opacity: 0 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="relative m-auto flex w-full max-w-4xl h-[680px] rounded-xl overflow-hidden shadow-2xl border border-border/20 bg-background"
+            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="relative m-auto flex w-full max-w-4xl h-[680px] rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-background/80 backdrop-blur-2xl"
+            style={{ boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05) inset" }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Inner Animated Gradient Ring (Optional, matching intro-modal) */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
+              <motion.div
+                animate={{ 
+                  backgroundPosition: ["0% 0%", "100% 100%"],
+                  opacity: [0.1, 0.2, 0.1]
+                }}
+                transition={{ duration: 10, repeat: Infinity, repeatType: "reverse" }}
+                className="absolute -inset-[100%] opacity-10"
+                style={{
+                  background: "radial-gradient(circle at center, var(--primary) 0%, transparent 50%)",
+                  filter: "blur(60px)",
+                  mixBlendMode: "screen",
+                }}
+              />
+            </div>
             {/* ── Left Sidebar ──────────────────────────────────────── */}
-            <div className="w-56 flex flex-col shrink-0 bg-sidebar border-r border-border/20">
+            <div className="w-56 relative z-10 flex flex-col shrink-0 bg-background/40 backdrop-blur-md border-r border-white/10">
               <div className="px-5 pt-7 pb-5">
                 <p className="text-[11px] font-mono font-bold uppercase tracking-[0.15em] text-muted-foreground/60">
                   Preferences
@@ -255,9 +281,9 @@ export function SettingsModal({
             </div>
 
             {/* ── Right Content ──────────────────────────────────────── */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="relative z-10 flex-1 flex flex-col min-w-0">
               {/* Header */}
-              <div className="flex items-center justify-between px-8 pt-7 pb-5 shrink-0 border-b border-border/10">
+              <div className="flex items-center justify-between px-8 pt-7 pb-5 shrink-0 border-b border-white/10">
                 <div>
                   <h1 className="text-xl font-semibold text-foreground tracking-tight">
                     {NAV_ITEMS.find((n) => n.id === activeTab)?.label}
@@ -517,16 +543,16 @@ export function SettingsModal({
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-3 px-8 py-5 border-t border-border/10 bg-background/50 backdrop-blur-sm shrink-0">
+              <div className="flex items-center justify-end gap-3 px-8 py-5 border-t border-white/10 bg-background/50 backdrop-blur-md shrink-0">
                 <button
                   onClick={() => { analytics.track("settings_close"); onOpenChange(false); }}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all duration-200 active:scale-[0.98]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Save className="h-3.5 w-3.5" />
                   Save Changes

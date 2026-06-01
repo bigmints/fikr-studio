@@ -5,3 +5,5 @@ worklog[0]{}:
     message: "Completed usability expert review: integrated settings in StatusBar system menu and Version History Drawer in Studio"
   - date: "2026-06-01 07:11:42"
     message: "Released version 0.1.11 via OTA to GitHub"
+  - date: "2026-06-01 07:11:43"
+    message: "Post-commit: chore(context): session end — release_version_0_1_11"

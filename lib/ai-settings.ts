@@ -268,7 +268,7 @@ export async function getManagedAuthStatus(): Promise<{ isManaged: boolean; toke
     if (!userDoc.exists()) return { isManaged: false, token: null }
     
     const plan = (userDoc.data()?.plan as string) || "Free"
-    const isPro = plan.toLowerCase().includes("pro")
+    const isPro = plan.toLowerCase().includes("pro") || plan.toLowerCase().includes("plus")
     
     if (isPro) {
       const token = await user.getIdToken()

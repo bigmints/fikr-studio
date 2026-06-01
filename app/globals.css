@@ -19,34 +19,34 @@
      * ─────────────────────────────────────────────────────── */
 
     /* Surfaces */
-    --background: #EBE7DD;
-    --foreground: #091811;
+    --background: #FFFFFF;
+    --foreground: #111827;
     --card: #FFFFFF;
-    --card-foreground: #091811;
+    --card-foreground: #111827;
     --popover: #FFFFFF;
-    --popover-foreground: #091811;
+    --popover-foreground: #111827;
 
     /* Primary: Brand Teal */
     --primary: #3CA6A6;
     --primary-foreground: #ffffff;
 
-    /* Secondary: soft teal tint surface */
-    --secondary: #D2E4E4;
-    --secondary-foreground: #091811;
+    /* Secondary: soft neutral gray */
+    --secondary: #F3F4F6;
+    --secondary-foreground: #111827;
 
     /* Accent */
-    --accent: #D2E4E4;
-    --accent-foreground: #091811;
+    --accent: #F3F4F6;
+    --accent-foreground: #111827;
 
     /* Muted tones */
-    --muted: #DFDBD0;
-    --muted-foreground: #2A4042;
+    --muted: #F3F4F6;
+    --muted-foreground: #6B7280;
 
     /* Borders & inputs */
     --destructive: #EF4444;
     --destructive-foreground: #ffffff;
-    --border: rgba(16, 43, 36, 0.20);
-    --input: #CEDAD7;
+    --border: #E5E7EB;
+    --input: #E5E7EB;
     --ring: #3CA6A6;
 
     /* Charts — teal-forest palette */
@@ -56,34 +56,34 @@
     --chart-4: #EEF7F7;
     --chart-5: #8B6E6B;
 
-    /* Sidebar — DARK FOREST RAIL for real chrome / contrast */
-    --sidebar: #061210;
-    --sidebar-foreground: #ffffff;
+    /* Sidebar — Light Gray */
+    --sidebar: #F9FAFB;
+    --sidebar-foreground: #111827;
     --sidebar-primary: #3CA6A6;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: rgba(255, 255, 255, 0.1);
-    --sidebar-accent-foreground: #ffffff;
-    --sidebar-border: rgba(255, 255, 255, 0.07);
+    --sidebar-accent: #E5E7EB;
+    --sidebar-accent-foreground: #111827;
+    --sidebar-border: #E5E7EB;
     --sidebar-ring: #3CA6A6;
 
     --font-sans: var(--font-geist-sans);
     --font-serif: var(--font-display);
     --font-mono: var(--font-geist-mono);
-    --radius: 0.75rem;
+    --radius: 0.5rem;
     --shadow-x: 0px;
     --shadow-y: 1px;
     --shadow-blur: 4px;
     --shadow-spread: 0px;
-    --shadow-opacity: 0.10;
+    --shadow-opacity: 0.05;
     --shadow-color: #000000;
-    --shadow-2xs: 0px 1px 3px 0px rgba(16, 43, 36, 0.07);
-    --shadow-xs:  0px 1px 4px 0px rgba(16, 43, 36, 0.10);
-    --shadow-sm:  0px 1px 3px 0px rgba(16, 43, 36, 0.12), 0px 1px 2px -1px rgba(16, 43, 36, 0.08);
-    --shadow:     0px 2px 8px 0px rgba(16, 43, 36, 0.14), 0px 1px 3px -1px rgba(16, 43, 36, 0.10);
-    --shadow-md:  0px 4px 16px 0px rgba(16, 43, 36, 0.16), 0px 2px 6px -2px rgba(16, 43, 36, 0.12);
-    --shadow-lg:  0px 8px 24px 0px rgba(16, 43, 36, 0.18), 0px 4px 10px -4px rgba(16, 43, 36, 0.14);
-    --shadow-xl:  0px 12px 32px 0px rgba(16, 43, 36, 0.20), 0px 6px 14px -6px rgba(16, 43, 36, 0.16);
-    --shadow-2xl: 0px 16px 48px 0px rgba(16, 43, 36, 0.26);
+    --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+    --shadow-xs:  0px 1px 3px 0px rgba(0, 0, 0, 0.08);
+    --shadow-sm:  0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+    --shadow:     0px 1px 3px 0px rgba(0, 0, 0, 0.10), 0px 1px 2px -1px rgba(0, 0, 0, 0.10);
+    --shadow-md:  0px 4px 6px -1px rgba(0, 0, 0, 0.10), 0px 2px 4px -2px rgba(0, 0, 0, 0.10);
+    --shadow-lg:  0px 10px 15px -3px rgba(0, 0, 0, 0.10), 0px 4px 6px -4px rgba(0, 0, 0, 0.10);
+    --shadow-xl:  0px 20px 25px -5px rgba(0, 0, 0, 0.10), 0px 8px 10px -6px rgba(0, 0, 0, 0.10);
+    --shadow-2xl: 0px 25px 50px -12px rgba(0, 0, 0, 0.25);
     --tracking-normal: 0rem;
     --spacing: 0.25rem;
 
@@ -110,30 +110,29 @@
 .dark {
     color-scheme: dark;
     /*
-     * Dark mode: neutral near-black shell, teal as accent only.
-     * The brand teal (#3CA6A6) pops against neutral — do not tint the shell.
+     * Dark mode: sleek, neutral dark gray
      */
-    --background: oklch(0.14 0 0);
-    --foreground: oklch(0.96 0 0);
-    --card: oklch(0.19 0 0);
-    --card-foreground: oklch(0.96 0 0);
-    --popover: oklch(0.17 0 0);
-    --popover-foreground: oklch(0.96 0 0);
+    --background: #111111;
+    --foreground: #F3F4F6;
+    --card: #171717;
+    --card-foreground: #F3F4F6;
+    --popover: #171717;
+    --popover-foreground: #F3F4F6;
 
-    /* Primary: brand teal — accent only, never used as shell bg */
+    /* Primary */
     --primary: #3CA6A6;
     --primary-foreground: #ffffff;
 
-    --secondary: oklch(0.24 0 0);
-    --secondary-foreground: oklch(0.96 0 0);
-    --muted: oklch(0.24 0 0);
-    --muted-foreground: oklch(0.55 0 0);
-    --accent: oklch(0.24 0 0);
-    --accent-foreground: oklch(0.96 0 0);
-    --destructive: oklch(0.637 0.237 25.331);
+    --secondary: #262626;
+    --secondary-foreground: #F3F4F6;
+    --muted: #262626;
+    --muted-foreground: #A3A3A3;
+    --accent: #262626;
+    --accent-foreground: #F3F4F6;
+    --destructive: #EF4444;
     --destructive-foreground: #ffffff;
-    --border: oklch(0.27 0 0);
-    --input: oklch(0.27 0 0);
+    --border: #262626;
+    --input: #262626;
     --ring: #3CA6A6;
 
     --chart-1: #3CA6A6;
@@ -142,20 +141,20 @@
     --chart-4: oklch(0.627 0.265 185);
     --chart-5: oklch(0.645 0.246 16.439);
 
-    /* Sidebar: matched to light mode for brand consistency */
-    --sidebar: #061210;
-    --sidebar-foreground: #ffffff;
+    /* Sidebar: integrated dark mode */
+    --sidebar: #171717;
+    --sidebar-foreground: #F3F4F6;
     --sidebar-primary: #3CA6A6;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: rgba(255, 255, 255, 0.1);
-    --sidebar-accent-foreground: #ffffff;
-    --sidebar-border: rgba(255, 255, 255, 0.07);
+    --sidebar-accent: #262626;
+    --sidebar-accent-foreground: #F3F4F6;
+    --sidebar-border: #262626;
     --sidebar-ring: #3CA6A6;
 
     --font-sans: var(--font-geist-sans);
     --font-serif: var(--font-display);
     --font-mono: var(--font-geist-mono);
-    --radius: 0.75rem;
+    --radius: 0.5rem;
     --shadow-2xs: 0px 1px 4px 0px rgba(0,0,0,0.08);
     --shadow-xs:  0px 1px 4px 0px rgba(0,0,0,0.10);
     --shadow-sm:  0px 1px 4px 0px rgba(0,0,0,0.12), 0px 1px 2px -1px rgba(0,0,0,0.10);

@@ -82,7 +82,7 @@ OUTPUT: Return ONLY the rewritten paragraph. No preamble, no quotes, no explanat
       rewritten = data.response ?? segment;
     } else {
       const config = loadAIConfig();
-      if (!config) throw new Error("No API key configured.");
+      if (!config || !config.apiKey) throw new Error("No API key configured and Fikr Cloud Pro is inactive.");
       const model = resolveModel(config, "analysis");
       if (!model) throw new Error(`No model for provider "${config.provider}".`);
 

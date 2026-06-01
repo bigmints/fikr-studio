@@ -194,17 +194,17 @@ export const TileCard = memo(function TileCard({
     <motion.div
       ref={cardRef}
       layout
-      whileHover={{ scale: 1.005 }}
+      whileHover={{ scale: 1.01, y: -2 }}
       transition={{
         type: "spring",
         stiffness: 400,
         damping: 28,
         layout: { duration: 0.3 },
       }}
-      className={`group relative flex h-auto w-full flex-col overflow-hidden rounded-[12px] border bg-card transition-all duration-200 ${
+      className={`group relative flex h-auto w-full flex-col overflow-hidden rounded-[12px] border bg-card transition-all duration-300 ${
         isHighlighted
-          ? "z-10 border-[rgba(60,166,166,0.30)] bg-[rgba(60,166,166,0.03)] shadow-[0_2px_12px_rgba(60,166,166,0.08)]"
-          : "border-[rgba(16,43,36,0.07)] hover:border-[rgba(16,43,36,0.13)] shadow-none"
+          ? "z-10 border-[rgba(60,166,166,0.30)] bg-[rgba(60,166,166,0.03)] shadow-[0_4px_24px_rgba(60,166,166,0.15)]"
+          : "border-[rgba(16,43,36,0.07)] hover:border-[rgba(16,43,36,0.13)] shadow-2xs hover:shadow-md"
       } ${isDimmed ? "opacity-25 saturate-0" : ""} ${onOpenDetail ? "cursor-pointer" : ""}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -550,7 +550,7 @@ export const TileCard = memo(function TileCard({
             className="relative flex shrink-0 flex-col"
           >
             <div
-              className="flex items-center justify-between px-5 py-2"
+              className="flex items-center justify-between px-5 py-2.5"
             >
               <div
                 className={`flex flex-1 items-start gap-2 overflow-hidden ${

@@ -9,6 +9,7 @@ import {
   getBaseUrl,
   getProviderHeaders,
   resolveModel,
+  getManagedAuthStatus,
 } from "@/lib/ai-settings";
 import { LOCAL_AI_CONFIG } from "@/local-ai.config";
 
@@ -31,8 +32,9 @@ export async function refineSelection(
   const systemPrompt = ACTION_PROMPTS[action];
   if (!systemPrompt) throw new Error(`Unknown action: ${action}`);
 
-  // ── Use dev override if enabled ──────────────────────────────────────────
+  const { isManaged, token } = await getManagedAuthStatus();
   const isDevOverride = LOCAL_AI_CONFIG.enabled;
+
   let actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
   let actualModel = LOCAL_AI_CONFIG.model;
   if (typeof window !== "undefined") {
@@ -41,9 +43,9 @@ export async function refineSelection(
   }
   let actualHeaders: Record<string, string> = { "Content-Type": "application/json" };
 
-  if (!isDevOverride) {
+  if (!isDevOverride && !isManaged) {
     const config = loadAIConfig();
-    if (!config) throw new Error("No API key configured.");
+    if (!config || !config.apiKey) throw new Error("No API key configured and Fikr Cloud Pro is inactive.");
     const resolved = resolveModel(config, "analysis");
     if (!resolved) throw new Error("No model configured.");
     actualBaseUrl = getBaseUrl(config);
@@ -56,6 +58,31 @@ export async function refineSelection(
   signal?.addEventListener("abort", () => controller.abort(), { once: true });
 
   try {
+    if (isManaged && !isDevOverride) {
+      const res = await fetch("https://fikr.one/api/ai/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          systemPrompt,
+          userMessage: text,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Fikr Cloud error ${res.status}: ${body}`);
+      }
+
+      const data = await res.json();
+      const result = data.response?.trim() ?? "";
+      if (!result) throw new Error("Empty response from model.");
+      return result;
+    }
+
     const res = await fetch(`${actualBaseUrl}/chat/completions`, {
       method: "POST",
       headers: actualHeaders,

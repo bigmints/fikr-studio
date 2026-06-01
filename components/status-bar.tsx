@@ -164,14 +164,14 @@ export function StatusBar({
             onClick={onSearchClick}
             style={{ WebkitAppRegion: "no-drag" } as any}
             className="flex-1 max-w-xs flex items-center gap-2 h-7 px-3 rounded-md bg-secondary/40 border border-border/30 text-muted-foreground/60 hover:text-foreground hover:bg-secondary/60 hover:border-border/60 transition-all duration-200 group"
-            title="Search workspace (⌘K)"
+            title="Search workspace (⌘F)"
           >
             <Search className="h-3 w-3 shrink-0" />
             <span className="text-[11px] font-medium flex-1 text-left truncate">
               Search workspace...
             </span>
             <span className="font-mono text-[9px] opacity-50 shrink-0 group-hover:opacity-70 transition-opacity">
-              ⌘K
+              ⌘F
             </span>
           </button>
         )}

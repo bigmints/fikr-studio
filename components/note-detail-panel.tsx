@@ -232,7 +232,7 @@ export function NoteDetailPanel({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "100%", opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 36 }}
-            className="absolute top-0 right-0 h-full w-[550px] max-w-[90vw] shrink-0 z-40 flex flex-col bg-background border-l border-border/60 shadow-2xl overflow-hidden"
+            className="absolute top-0 right-0 h-full w-[550px] max-w-[90vw] shrink-0 z-40 flex flex-col bg-background/80 backdrop-blur-3xl border-l border-white/10 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-[550px] h-full flex flex-col">
@@ -391,37 +391,49 @@ export function NoteDetailPanel({
             </AnimatePresence>
 
             {/* ── Tab switcher ─────────────────────────────────────────────── */}
-            <div className="flex items-center gap-0 px-5 pt-3 shrink-0">
+            <div className="flex items-center gap-0 px-5 pt-3 shrink-0 relative z-10">
               <button
                 onClick={() => {
                   analytics.track("detail_tab_switch", { tab: "original" });
                   setActiveTab("original");
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-md text-[11px] font-semibold border-b-2 transition-all ${
+                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-t-md text-[11px] font-semibold transition-all ${
                   activeTab === "original"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground/50 hover:text-foreground"
+                    ? "text-primary"
+                    : "text-muted-foreground/50 hover:text-foreground hover:bg-secondary/40"
                 }`}
               >
                 <FileText className="h-3 w-3" />
                 Original
+                {activeTab === "original" && (
+                  <motion.div
+                    layoutId="activeTabUnderline"
+                    className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-primary"
+                  />
+                )}
               </button>
               <button
                 onClick={() => {
                   analytics.track("detail_tab_switch", { tab: "synthesis" });
                   setActiveTab("synthesis");
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-md text-[11px] font-semibold border-b-2 transition-all ${
+                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-t-md text-[11px] font-semibold transition-all ${
                   activeTab === "synthesis"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground/50 hover:text-foreground"
+                    ? "text-primary"
+                    : "text-muted-foreground/50 hover:text-foreground hover:bg-secondary/40"
                 }`}
               >
                 <Sparkles className="h-3 w-3" />
                 Synthesized
+                {activeTab === "synthesis" && (
+                  <motion.div
+                    layoutId="activeTabUnderline"
+                    className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-primary"
+                  />
+                )}
               </button>
             </div>
-            <div className="h-px bg-border/40 mx-0 shrink-0" />
+            <div className="h-px bg-border/40 mx-0 shrink-0 relative z-0" />
 
             {/* ── Body ─────────────────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">
@@ -487,7 +499,7 @@ export function NoteDetailPanel({
                                   saveAnnotation();
                                 }
                               }}
-                              className="w-full resize-none rounded-lg bg-secondary/30 border border-border/60 px-3 py-2.5 text-[13px] leading-relaxed text-foreground focus:border-primary/50 focus:ring-2 focus:ring-primary/10 outline-none transition-all"
+                              className="w-full resize-none rounded-xl bg-secondary/20 border border-border/60 px-3 py-2.5 text-[13px] leading-relaxed text-foreground focus:bg-background focus:border-primary/50 focus:ring-4 focus:ring-primary/10 shadow-inner outline-none transition-all"
                               style={{ minHeight: "6rem" }}
                             />
                             <div className="flex items-center justify-between">
@@ -637,7 +649,7 @@ export function NoteDetailPanel({
                               saveText();
                             }
                           }}
-                          className="w-full resize-none rounded-lg bg-secondary/30 border border-border/60 px-3 py-2.5 text-[13px] leading-relaxed text-foreground focus:border-primary/50 focus:ring-2 focus:ring-primary/10 outline-none transition-all"
+                          className="w-full resize-none rounded-xl bg-secondary/20 border border-border/60 px-3 py-2.5 text-[13px] leading-relaxed text-foreground focus:bg-background focus:border-primary/50 focus:ring-4 focus:ring-primary/10 shadow-inner outline-none transition-all"
                           style={{ minHeight: "6rem" }}
                         />
                         <div className="flex items-center justify-between">

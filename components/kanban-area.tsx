@@ -131,7 +131,7 @@ export function KanbanArea({
       {/* Scrollable Container */}
       <div
         ref={containerRef}
-        className="flex h-full w-full overflow-x-auto custom-scrollbar p-6 pb-6 gap-8"
+        className="flex h-full w-full overflow-x-auto custom-scrollbar pt-8 pb-10 px-8 gap-8"
       >
         <AnimatePresence mode="popLayout">
           {columns.map(([key, col]) => (
@@ -145,16 +145,18 @@ export function KanbanArea({
               className="flex flex-col w-96 shrink-0 h-auto min-h-[200px] pb-2"
             >
               {/* Column Header */}
-              <div className="flex items-center justify-between px-2 py-1 border-b-0">
-                <div className="flex items-center gap-2">
-                  <col.icon className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/70">
+              <div className="flex items-center justify-between px-3 py-2.5 mb-3 rounded-lg border border-border/20 bg-secondary/20 shadow-sm backdrop-blur-sm">
+                <div className="flex items-center gap-2.5">
+                  <col.icon className="h-4 w-4 text-muted-foreground/70" />
+                  <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-foreground/80">
                     {col.title}
                   </h3>
                 </div>
-                <span className="font-mono text-[9px] text-muted-foreground/40 font-bold">
-                  {col.blocks.length}
-                </span>
+                <div className="bg-background/80 px-2 py-0.5 rounded-md border border-border/40 shadow-inner">
+                  <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                    {col.blocks.length}
+                  </span>
+                </div>
               </div>
 
               {/* Column Content */}

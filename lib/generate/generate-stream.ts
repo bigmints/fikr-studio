@@ -85,9 +85,9 @@ export async function streamGenerate(
 
   try {
     const { isManaged: _isManaged, token } = await getManagedAuthStatus();
+    const isDevOverride = LOCAL_AI_CONFIG.enabled;
 
-    // eslint-disable-next-line no-constant-condition
-    if (false /* DEV OVERRIDE — set to true to test the managed path */) {
+    if (_isManaged && !isDevOverride) {
       // ── Managed (Pro) path — fikr.one ─────────────────────────────────────
       const res = await fetch("https://fikr.one/api/ai/chat", {
         method: "POST",
@@ -127,7 +127,6 @@ export async function streamGenerate(
 
     } else {
       // ── BYOK path ─────────────────────────────────────────────────────────
-      const isDevOverride = LOCAL_AI_CONFIG.enabled;
 
       let actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
       let actualModel = LOCAL_AI_CONFIG.model;
@@ -140,7 +139,7 @@ export async function streamGenerate(
 
       if (!isDevOverride) {
         const config = loadAIConfig();
-        if (!config) {
+        if (!config || !config.apiKey) {
           throw new Error("No API key configured. Go to Settings → AI Models and add your key.");
         }
         const resolved = resolveModel(config, "analysis");
