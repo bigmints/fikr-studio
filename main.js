@@ -22,6 +22,14 @@ let currentIdToken = null;
  */
 let isStartupComplete = false;
 
+/**
+ * True once the startup cloud load has completed (or we confirmed user is offline/Free).
+ * Blocks all Firestore saves until we know what the cloud state is.
+ * Without this gate the renderer's initial disk-state save fires before the cloud
+ * data arrives, potentially overwriting cloud data from another device.
+ */
+let isCloudSyncReady = false;
+
 /** Whether the user is signed in as Plus/Pro (uid present = cloud sync enabled) */
 async function setCurrentUser(uid, idToken) {
   const prev = currentUserId;
@@ -370,8 +378,10 @@ ipcMain.handle("fikr-studio:load-projects", async () => {
 ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
   const ok = saveProjectsToDisk(data);  // always write local cache
   scheduleEmbedQueue();  // debounced — at most once per 30s
-  // Plus/Pro: background sync to Data Connect
-  if (currentUserId) {
+  // Plus/Pro: background sync to Firestore — only after startup cloud load is done.
+  // If we haven't loaded from cloud yet, we don't know what the authoritative state
+  // is — saving now risks overwriting another device's data with our stale disk cache.
+  if (currentUserId && isCloudSyncReady) {
     dc.saveWorkspace(currentUserId, data, lastSyncedNoteIds, lastSyncedProjectIds)
       .then(() => {
         updateLastSyncedIds(data);
@@ -380,6 +390,8 @@ ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
       .catch((err) => {
         console.error('[DataConnect] save-projects sync failed:', err.message);
       });
+  } else if (currentUserId && !isCloudSyncReady) {
+    console.log('[DataConnect] save-projects: blocking Firestore write — cloud sync not ready yet');
   }
   return ok;
 });
@@ -397,6 +409,14 @@ ipcMain.handle("fikr-studio:open-auth", async () => {
 ipcMain.handle("fikr-studio:set-user", async (_event, { uid, idToken }) => {
   const wasSignedIn = !!currentUserId;
   await setCurrentUser(uid ?? null, idToken ?? null);
+
+  if (!uid) {
+    // User signed out — reset the gate so if they sign back in we re-load from cloud
+    // before allowing any Firestore saves.
+    isCloudSyncReady = false;
+    return true;
+  }
+
   // Only trigger a post-auth cloud load if startup is already complete.
   // During startup, runStartupSequence() handles the sync itself.
   if (uid && !wasSignedIn && mainWindow && isStartupComplete) {
@@ -421,10 +441,15 @@ ipcMain.handle("fikr-studio:set-user", async (_event, { uid, idToken }) => {
       }
     } catch (err) {
       console.error('[DataConnect] Post-auth load failed:', err.message);
+    } finally {
+      // Allow saves now that we have the authoritative cloud state
+      isCloudSyncReady = true;
+      console.log('[DataConnect] isCloudSyncReady = true after post-auth load');
     }
   }
   return true;
 });
+
 
 ipcMain.handle("fikr-studio:sync-workspace", async () => {
   if (currentUserId) {
@@ -1681,6 +1706,9 @@ async function runStartupSequence() {
       console.warn('[Startup] Cloud sync failed (non-fatal):', err.message);
     }
   }
+  // Cloud load is done (or user is Free/offline) — now allow Firestore saves.
+  isCloudSyncReady = true;
+  console.log('[Startup] isCloudSyncReady = true — Firestore saves unblocked');
 
   // ── Phase 4: Wait for model + run embed queue ─────────────────────────────
   splashProgress('loading-model', 'Warming up AI model', 55);
