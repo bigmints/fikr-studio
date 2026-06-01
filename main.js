@@ -322,6 +322,21 @@ function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
 
+let lastSyncedNoteIds = new Set();
+function updateLastSyncedIds(workspace) {
+  lastSyncedNoteIds.clear();
+  if (!workspace) return;
+  const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
+  for (const proj of projects) {
+    if (proj.blocks) {
+      for (const b of proj.blocks) if (b.id) lastSyncedNoteIds.add(b.id);
+    }
+    if (proj.ghostNotes) {
+      for (const g of proj.ghostNotes) if (g.id) lastSyncedNoteIds.add(g.id);
+    }
+  }
+}
+
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 /**
@@ -334,6 +349,7 @@ ipcMain.handle("fikr-studio:load-projects", async () => {
     try {
       const workspace = await dc.loadWorkspace(currentUserId);
       if (workspace) {
+        updateLastSyncedIds(workspace);
         saveProjectsToDisk(workspace); // keep local cache warm
         return workspace;
       }
@@ -353,8 +369,11 @@ ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
   scheduleEmbedQueue();  // debounced — at most once per 30s
   // Plus/Pro: background sync to Data Connect
   if (currentUserId) {
-    dc.saveWorkspace(currentUserId, data)
-      .then(() => triggerServerEmbed(data))
+    dc.saveWorkspace(currentUserId, data, lastSyncedNoteIds)
+      .then(() => {
+        updateLastSyncedIds(data);
+        triggerServerEmbed(data);
+      })
       .catch((err) => {
         console.error('[DataConnect] save-projects sync failed:', err.message);
       });
@@ -389,6 +408,7 @@ ipcMain.handle("fikr-studio:set-user", async (_event, { uid, idToken }) => {
           cloudWorkspace.activeStudioProjectId = disk?.activeStudioProjectId ?? '';
         }
         saveProjectsToDisk(cloudWorkspace);
+        updateLastSyncedIds(cloudWorkspace);
         pushToRenderer(mainWindow, "workspace-synced", cloudWorkspace);
         console.log('[DataConnect] Post-auth workspace pushed to renderer');
         // Trigger server-side embedding for any notes not yet embedded
@@ -414,6 +434,7 @@ ipcMain.handle("fikr-studio:sync-workspace", async () => {
           cloudWorkspace.activeStudioProjectId = disk?.activeStudioProjectId ?? '';
         }
         saveProjectsToDisk(cloudWorkspace);
+        updateLastSyncedIds(cloudWorkspace);
         if (mainWindow) {
           pushToRenderer(mainWindow, "workspace-synced", cloudWorkspace);
         }
@@ -1650,6 +1671,7 @@ async function runStartupSequence() {
           cloudWorkspace.activeStudioProjectId = disk?.activeStudioProjectId ?? '';
         }
         saveProjectsToDisk(cloudWorkspace);
+        updateLastSyncedIds(cloudWorkspace);
         console.log('[Startup] Cloud workspace synced to disk');
       }
     } catch (err) {
