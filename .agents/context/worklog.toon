@@ -3,3 +3,5 @@ worklog[0]{}:
     message: "Implemented Multi-Selection and BulkActions via shift-click in ListArea and BulkActionPanel"
   - date: "2026-05-30 15:54:15"
     message: "Completed usability expert review: integrated settings in StatusBar system menu and Version History Drawer in Studio"
+  - date: "2026-06-01 07:11:42"
+    message: "Released version 0.1.11 via OTA to GitHub"

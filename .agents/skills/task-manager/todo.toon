@@ -2,12 +2,20 @@ tasks:
   next:
         status: todo
         priority: 1
+        summary: "Release version 0.1.11"
+        status: todo
+        priority: 1
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   in_progress:
         status: in_progress
         priority: high
+        summary: "Release version 0.1.11"
+        status: in_progress
+        priority: high
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   completed:
+    - release_version_0_1_11:
+        summary: "Built, signed, notarized, and published Fikr Studio v0.1.11 to GitHub OTA"
     - browse_all_pages_of_fikr_studio_find_usability_iss:
         summary: "Integrated settings option in StatusBar and Version History drawer in StudioGenerateView"
   cancelled:
