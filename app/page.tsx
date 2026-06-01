@@ -73,6 +73,9 @@ export default function Page() {
     null,
   );
   const [isLoaded, setIsLoaded] = useState(false);
+  // Suppresses the save-on-change effect during cloud push (workspace-synced).
+  // Without this, the effect would immediately re-upload the stale pre-sync state.
+  const isSyncingFromCloud = useRef(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isIndexOpen, setIsIndexOpen] = useState(false);
   const [isGhostPanelOpen, setIsGhostPanelOpen] = useState(false);
@@ -422,6 +425,7 @@ export default function Page() {
   //    an Intel canvas change triggers a save before saveWorkspace is called.
   useEffect(() => {
     if (!isLoaded) return;
+    if (isSyncingFromCloud.current) return; // cloud just pushed — don't echo back
     const ipc = typeof window !== "undefined" && (window as any).fikrStudio;
     if (ipc) {
       ipc.saveProjects({
@@ -500,14 +504,17 @@ export default function Page() {
           setProjects((prev) => [...prev, project]);
         } else if (event.type === "workspace-synced") {
           // Main process pushed a fresh workspace from Firestore after sign-in.
-          // Replace local state with cloud data. studioProjects are only replaced
-          // if the cloud has them (main.js preserves local disk data otherwise).
+          // Replace local state with cloud data. Suppress the save-on-change effect
+          // so we don't immediately re-upload the stale pre-sync state.
           const workspace = event.payload;
           if (workspace?.projects?.length > 0) {
+            isSyncingFromCloud.current = true;
             setProjects(workspace.projects);
             if (workspace.activeProjectId) {
               setActiveProjectId(workspace.activeProjectId);
             }
+            // Clear the flag after React has flushed all state updates
+            setTimeout(() => { isSyncingFromCloud.current = false; }, 0);
           }
           if (workspace?.studioProjects?.length > 0) {
             setStudioProjects(workspace.studioProjects);
@@ -1270,21 +1277,9 @@ export default function Page() {
 
   useEffect(() => {
     const handleKeys = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setIsMenuOpen((prev) => !prev);
-      }
       if (e.key === "f" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setIsSearchOpen((prev) => !prev);
-      }
-      if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
-        // Don't intercept while typing in an input/textarea
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag !== "INPUT" && tag !== "TEXTAREA") {
-          e.preventDefault();
-          undo();
-        }
       }
       if (e.key === "Escape") {
         if (isMenuOpen) {
