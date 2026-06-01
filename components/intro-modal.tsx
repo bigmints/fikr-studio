@@ -8,6 +8,7 @@ import { onAuthStateChanged, User, signInWithCustomToken } from "firebase/auth"
 import { doc, onSnapshot } from "firebase/firestore"
 import { useAISettings, AI_PROVIDER_PRESETS, type AIProvider, getPreset } from "@/lib/ai-settings"
 import { analytics } from "@/lib/analytics"
+import pkg from "../package.json"
 
 interface IntroModalProps {
   open: boolean
@@ -167,6 +168,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                     <img src="./logo-icon.png" alt="Fikr Studio" className="h-5 w-5 object-contain brightness-0 invert" />
                   </div>
                   <span className="font-mono text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-foreground to-foreground/70 tracking-tight">Fikr Studio</span>
+                  <span className="font-mono text-xs font-bold text-muted-foreground/60 px-2 py-0.5 rounded-md bg-white/5 border border-white/10">v{pkg.version}</span>
                 </div>
                 <div className="flex items-center gap-2 mt-4">
                   {steps.map((s, idx) => (
