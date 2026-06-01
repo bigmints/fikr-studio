@@ -13,7 +13,7 @@ export function EmptyWorkspace({ title }: EmptyWorkspaceProps) {
       <div className="flex flex-col items-center text-center max-w-xl px-6">
         <div className="mb-6">
           <img
-            src="/logo.svg"
+            src="./logo.svg"
             alt="Fikr Studio"
             className="h-14 w-14 object-contain"
           />
