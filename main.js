@@ -323,11 +323,14 @@ function generateId() {
 }
 
 let lastSyncedNoteIds = new Set();
+let lastSyncedProjectIds = new Set();
 function updateLastSyncedIds(workspace) {
   lastSyncedNoteIds.clear();
+  lastSyncedProjectIds.clear();
   if (!workspace) return;
   const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
   for (const proj of projects) {
+    if (proj.id) lastSyncedProjectIds.add(proj.id);
     if (proj.blocks) {
       for (const b of proj.blocks) if (b.id) lastSyncedNoteIds.add(b.id);
     }
@@ -369,7 +372,7 @@ ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
   scheduleEmbedQueue();  // debounced — at most once per 30s
   // Plus/Pro: background sync to Data Connect
   if (currentUserId) {
-    dc.saveWorkspace(currentUserId, data, lastSyncedNoteIds)
+    dc.saveWorkspace(currentUserId, data, lastSyncedNoteIds, lastSyncedProjectIds)
       .then(() => {
         updateLastSyncedIds(data);
         triggerServerEmbed(data);

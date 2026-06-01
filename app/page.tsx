@@ -513,8 +513,11 @@ export default function Page() {
             if (workspace.activeProjectId) {
               setActiveProjectId(workspace.activeProjectId);
             }
-            // Clear the flag after React has flushed all state updates
-            setTimeout(() => { isSyncingFromCloud.current = false; }, 0);
+            // Hold the suppression flag for 500ms to ensure React's render + commit
+            // cycle completes before the save-on-change effect is allowed to fire.
+            // setTimeout(0) is insufficient — the effect runs after commit, which
+            // can happen in a later microtask queue than the setTimeout(0) callback.
+            setTimeout(() => { isSyncingFromCloud.current = false; }, 500);
           }
           if (workspace?.studioProjects?.length > 0) {
             setStudioProjects(workspace.studioProjects);
