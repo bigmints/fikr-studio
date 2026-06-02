@@ -160,230 +160,8 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
     docsUrl: "https://github.com/github/github-mcp-server",
     primaryActionLabel: "Copy Config",
   },
-  {
-    id: "linear",
-    name: "Linear",
-    tagline: "Auto-capture notes when issues are created or updated.",
-    description: "When issues are created, updated, or completed in Linear, Fikr automatically captures a note. Track your sprint work alongside your thinking.",
-    iconSrc: "/brand-icons/linear.svg",
-    iconBg: "#5E6AD2", iconLetter: "L",
-    category: "Webhooks",
-    connectionType: "copy-endpoint",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Copy your relay endpoint", detail: "Your unique cloud webhook URL is shown above. Copy it." },
-      { label: "Open Linear → Settings → API → Webhooks", detail: "Click New webhook → paste your endpoint URL." },
-      { label: "Select events", detail: "Enable: Issues (Created, Updated), Comments (Created)." },
-    ],
-    snippet: "https://fikr.one/api/relay/webhook/linear",
-    snippetLang: "text",
-    docsUrl: "https://developers.linear.app/docs/graphql/webhooks",
-    primaryActionLabel: "Copy Endpoint",
-  },
-  {
-    id: "vercel",
-    name: "Vercel",
-    tagline: "Get notified when deployments succeed or fail.",
-    description: "Get notified in Fikr when deployments succeed or fail. Auto-capture deploy logs alongside your project notes.",
-    iconSrc: "/brand-icons/vercel.svg",
-    iconBg: "#000000", iconLetter: "V",
-    category: "Webhooks",
-    connectionType: "copy-endpoint",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Copy your relay endpoint", detail: "Your unique cloud webhook URL is shown above. Copy it." },
-      { label: "Open Vercel → Project Settings → Webhooks", detail: "Click Add Webhook → paste the URL." },
-      { label: "Select events", detail: "Enable: deployment.succeeded, deployment.error, deployment.cancelled." },
-    ],
-    snippet: "https://fikr.one/api/relay/webhook/vercel",
-    snippetLang: "text",
-    docsUrl: "https://vercel.com/docs/observability/webhooks-overview",
-    primaryActionLabel: "Copy Endpoint",
-  },
-  {
-    id: "slack",
-    name: "Slack",
-    tagline: "Post Fikr summaries directly to a Slack channel.",
-    description: "Post Fikr summaries or insight highlights directly to a Slack channel. Also receive Slack messages as Fikr notes via slash command.",
-    iconEmoji: "💬",
-    iconBg: "#4A154B", iconLetter: "S",
-    category: "Webhooks",
-    connectionType: "paste-url",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Create a Slack app", detail: "Go to api.slack.com/apps → Create New App → From Scratch." },
-      { label: "Enable Incoming Webhooks", detail: "Under Features → Incoming Webhooks → toggle ON → Add New Webhook to Workspace." },
-      { label: "Paste your webhook URL into Fikr", detail: "Copy the URL from Slack and paste it in the field below." },
-    ],
-    snippet: 'POST https://hooks.slack.com/services/T.../B.../XXXX\nContent-Type: application/json\n\n{"text": "New Fikr insight: Your weekly review is ready."}',
-    snippetLang: "text",
-    docsUrl: "https://api.slack.com/messaging/webhooks",
-    primaryActionLabel: "Paste URL",
-  },
-  {
-    id: "discord",
-    name: "Discord",
-    tagline: "Post Fikr notes or alerts to a Discord channel.",
-    description: "Post Fikr notes or alerts to a Discord channel. Useful for team shared-brain setups.",
-    iconSrc: "/brand-icons/discord.svg",
-    iconBg: "#5865F2", iconLetter: "D",
-    category: "Webhooks",
-    connectionType: "paste-url",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Open Discord Server Settings", detail: "Go to Integrations → Webhooks → New Webhook." },
-      { label: "Copy the webhook URL", detail: "Format: https://discord.com/api/webhooks/{id}/{token}" },
-      { label: "Paste your webhook URL into Fikr", detail: "Paste it in the field below to connect." },
-    ],
-    snippet: 'POST https://discord.com/api/webhooks/{id}/{token}\nContent-Type: application/json\n\n{"content": "New Fikr note captured."}',
-    snippetLang: "text",
-    docsUrl: "https://discord.com/developers/docs/resources/webhook",
-    primaryActionLabel: "Paste URL",
-  },
-  {
-    id: "telegram",
-    name: "Telegram",
-    tagline: "Send Fikr notes or reminders to yourself via Telegram.",
-    description: "Send Fikr notes or reminders to yourself via Telegram. The bot can also receive messages and create notes.",
-    iconSrc: "/brand-icons/telegram.svg",
-    iconBg: "#0088CC", iconLetter: "T",
-    category: "Webhooks",
-    connectionType: "paste-url",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Create a bot via @BotFather", detail: "Message @BotFather → /newbot → follow prompts → copy your token." },
-      { label: "Register the webhook with your relay URL", detail: "POST https://api.telegram.org/bot{TOKEN}/setWebhook?url=https://fikr.one/api/relay/webhook/telegram" },
-      { label: "Paste your bot token into Fikr", detail: "Paste the token in the field below." },
-    ],
-    snippet: "POST https://api.telegram.org/bot{TOKEN}/setWebhook\n?url=https://fikr.one/api/relay/webhook/telegram",
-    snippetLang: "text",
-    docsUrl: "https://core.telegram.org/bots/api#setwebhook",
-    primaryActionLabel: "Paste URL",
-  },
-  {
-    id: "sentry",
-    name: "Sentry",
-    tagline: "Capture error alerts as notes alongside your canvas.",
-    description: "When an error or alert fires in Sentry, Fikr captures a note with the error context. Track production issues alongside your project canvas.",
-    iconSrc: "/brand-icons/sentry.svg",
-    iconBg: "#362D59", iconLetter: "S",
-    category: "Webhooks",
-    connectionType: "copy-endpoint",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Copy your relay endpoint", detail: "Your unique cloud webhook URL is shown above. Copy it." },
-      { label: "Open Sentry → Settings → Developer Settings → Internal Integrations", detail: "Create New Integration → Name it 'Fikr Studio'." },
-      { label: "Paste endpoint under Webhooks", detail: "Select events: issue (created, resolved), error_alert, metric_alert." },
-    ],
-    snippet: "https://fikr.one/api/relay/webhook/sentry",
-    snippetLang: "text",
-    docsUrl: "https://docs.sentry.io/organization/integrations/integration-platform/webhooks/",
-    primaryActionLabel: "Copy Endpoint",
-  },
-  {
-    id: "n8n",
-    name: "n8n",
-    tagline: "Build automations that read from or write to Fikr.",
-    description: "Build automation workflows that read from or write to Fikr. n8n's HTTP Request node can POST to Fikr's cloud relay endpoint on any trigger.",
-    iconSrc: "/brand-icons/n8n-color.svg",
-    iconBg: "#EA4B71", iconLetter: "n",
-    category: "Webhooks",
-    connectionType: "copy-endpoint",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Create a workflow in n8n", detail: "Add an HTTP Request node." },
-      { label: "Set method to POST", detail: "URL: https://fikr.one/api/relay/webhook/n8n (add Authorization: Bearer header)" },
-      { label: "Set body", detail: '{"event": "...", "data": {...}}' },
-    ],
-    snippet: "https://fikr.one/api/relay/webhook/n8n",
-    snippetLang: "text",
-    docsUrl: "https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/",
-    primaryActionLabel: "Copy Endpoint",
-  },
-  {
-    id: "zapier",
-    name: "Zapier",
-    tagline: "Connect Fikr to thousands of apps through Zapier.",
-    description: "Connect Fikr to thousands of apps through Zapier. Use 'Send Webhook' action to POST events to Fikr.",
-    iconSrc: "/brand-icons/zapier-color.svg",
-    iconBg: "#FF4A00", iconLetter: "Z",
-    category: "Automation & REST",
-    connectionType: "copy-endpoint",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Create a new Zap", detail: "Choose your trigger (e.g. New row in Google Sheets)." },
-      { label: "Add action: Webhooks by Zapier → POST", detail: "URL: https://fikr.one/api/relay/webhook/zapier (add Authorization: Bearer header)" },
-      { label: "Set payload", detail: '{"source": "zapier", "content": "...", "title": "..."}' },
-    ],
-    snippet: "https://fikr.one/api/relay/webhook/zapier",
-    snippetLang: "text",
-    docsUrl: "https://zapier.com/apps/webhook/integrations",
-    primaryActionLabel: "Copy Endpoint",
-  },
-  {
-    id: "notion",
-    name: "Notion",
-    tagline: "Read Notion pages and databases from your AI client.",
-    description: "Read Notion pages and databases from your AI client via the official Notion API. Keep your Notion knowledge base in sync with your Fikr canvas.",
-    iconSrc: "/brand-icons/notion.svg",
-    iconBg: "#000000", iconLetter: "N",
-    category: "Automation & REST",
-    connectionType: "rest-api",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Create a Notion integration", detail: "Go to notion.so/my-integrations → New integration → get your Integration Token." },
-      { label: "Share your database", detail: "Page menu → Connect → Fikr Studio." },
-      { label: "Paste your token into Fikr", detail: "Fikr routes it through the cloud relay to Notion's API." },
-    ],
-    snippet: "GET https://api.notion.com/v1/databases/{id}/query\nAuthorization: Bearer {your_token}\nNotion-Version: 2022-06-28",
-    snippetLang: "text",
-    docsUrl: "https://developers.notion.com/reference/intro",
-    primaryActionLabel: "Paste Token",
-  },
-  {
-    id: "todoist",
-    name: "Todoist",
-    tagline: "Capture completed tasks as Fikr notes automatically.",
-    description: "When Todoist tasks complete, Fikr captures a note. Or: trigger task creation from Fikr insights.",
-    iconSrc: "/brand-icons/todoist.svg",
-    iconBg: "#DB4035", iconLetter: "T",
-    category: "Automation & REST",
-    connectionType: "copy-endpoint",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Get your Todoist API token", detail: "Settings → Integrations → Developer → copy API token." },
-      { label: "Register the webhook", detail: 'POST https://api.todoist.com/api/v1/webhooks with url: https://fikr.one/api/relay/webhook/todoist' },
-      { label: "Copy endpoint below", detail: "Use this URL when registering the webhook." },
-    ],
-    snippet: "https://fikr.one/api/relay/webhook/todoist",
-    snippetLang: "text",
-    docsUrl: "https://developer.todoist.com/sync/v9/#webhooks",
-    primaryActionLabel: "Copy Endpoint",
-  },
-  {
-    id: "make",
-    name: "Make",
-    tagline: "Use Make scenarios to automate Fikr note creation.",
-    description: "Use Make's HTTP module to POST to Fikr as part of any multi-step automation scenario.",
-    iconSrc: "/brand-icons/make.svg",
-    iconBg: "#6D00CC", iconLetter: "M",
-    category: "Automation & REST",
-    connectionType: "copy-endpoint",
-    requiresPlan: "plus",
-    steps: [
-      { label: "Create a scenario in Make", detail: "Add HTTP → Make a Request module." },
-      { label: "Set method to POST", detail: "URL: https://fikr.one/api/relay/webhook/make (add Authorization: Bearer header)" },
-      { label: "Set body", detail: '{"trigger": "...", "payload": {...}}' },
-    ],
-    snippet: "https://fikr.one/api/relay/webhook/make",
-    snippetLang: "text",
-    docsUrl: "https://www.make.com/en/integrations/http",
-    primaryActionLabel: "Copy Endpoint",
-  },
   ];
 };
-
-const CATEGORIES = ["All", "MCP Clients", "Webhooks", "Automation & REST"];
 
 // -- Helpers --
 function useIpc() {
@@ -845,7 +623,7 @@ function IntegrationRow({
 export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageProps) {
   const ipc = useIpc();
   const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
-  const [activeCategory, setActiveCategory] = useState("All");
+
   const [statuses, setStatuses] = useState<Record<string, StatusType>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
@@ -895,125 +673,20 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
     }
   };
 
-  const visible = activeCategory === "All"
-    ? INTEGRATIONS
-    : INTEGRATIONS.filter((i) => i.category === activeCategory);
-
-  const grouped = CATEGORIES.slice(1).reduce<Record<string, Integration[]>>((acc, cat) => {
-    const items = visible.filter((i) => i.category === cat);
-    if (items.length) acc[cat] = items;
-    return acc;
-  }, {});
-
   return (
-    <div className="flex flex-col h-full overflow-y-auto custom-scrollbar">
-
-      {/* Header */}
-      <div className="px-8 pt-10 pb-6 border-b border-border/10 shrink-0">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 rounded-2xl flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 70%, #7c3aed) 100%)", boxShadow: "0 4px 16px color-mix(in srgb, var(--primary) 35%, transparent)" }}>
-                <Plug className="h-5 w-5 text-white" />
-              </div>
-              <h1 className="text-2xl font-black tracking-tight text-foreground">Connections</h1>
-            </div>
-            <p className="text-[13px] text-muted-foreground max-w-lg leading-relaxed">
-              Connect Fikr Studio to your AI clients, dev tools, and automation platforms.
-            </p>
-          </div>
-          <div className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl border text-[12px] font-bold ${
-            mcpPort
-              ? "border-emerald-500/30 bg-emerald-500/8 text-emerald-700 dark:text-emerald-400"
-              : "border-border/30 bg-muted/20 text-muted-foreground"
-          }`}>
-            <span className={`h-2 w-2 rounded-full ${mcpPort ? "bg-emerald-500 animate-pulse" : "bg-zinc-300 dark:bg-zinc-600"}`} />
-            {mcpPort ? `MCP · :${mcpPort}` : "MCP offline"}
-          </div>
-        </div>
-
-        {/* Category tabs */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {CATEGORIES.map((cat) => {
-            const catIntegrations = INTEGRATIONS.filter((i) => i.category === cat);
-            const count = cat === "All" ? INTEGRATIONS.length : catIntegrations.length;
-            const isActive = activeCategory === cat;
-            const catLocked = cat !== "All" && catIntegrations.every(i => i.requiresPlan === "plus") && !isPlusPro;
-            return (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`h-8 px-4 rounded-full text-[12px] font-semibold transition-all border flex items-center gap-1.5 ${
-                  isActive
-                    ? "bg-foreground text-background border-transparent shadow-sm"
-                    : "bg-transparent text-muted-foreground hover:text-foreground border-border/30 hover:border-border/60 hover:bg-muted/30"
-                }`}
-              >
-                {catLocked && <Lock className="h-2.5 w-2.5 opacity-60" />}
-                {cat}
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                  isActive ? "bg-white/20" : "bg-muted/50 text-muted-foreground"
-                }`}>{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Integration list */}
-      <div className="px-8 py-6 space-y-8 max-w-3xl">
-        {activeCategory === "All"
-          ? Object.entries(grouped).map(([cat, items]) => {
-              const catNeedsPlan = items.every(i => i.requiresPlan === "plus");
-              const catLocked = catNeedsPlan && !isPlusPro;
-              return (
-                <div key={cat}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary opacity-60" />
-                    <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{cat}</h2>
-                    {catLocked && (
-                      <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
-                        <Lock className="h-2.5 w-2.5" /> Plus
-                      </span>
-                    )}
-                  </div>
-                  {catLocked ? (
-                    <UpgradeWall category={cat} integrations={items} />
-                  ) : (
-                    <div className="space-y-2">
-                      {items.map((integration) => (
-                        <IntegrationRow
-                          key={integration.id}
-                          integration={integration}
-                          status={statuses[integration.id] ?? "not_configured"}
-                          onOpen={() => setSelectedId(integration.id)}
-                          onInstall={handleInstall}
-                          onUninstall={handleUninstall}
-                          installing={installing}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          : (
-            <div className="space-y-2">
-              {visible.map((integration) => (
-                <IntegrationRow
-                  key={integration.id}
-                  integration={integration}
-                  status={statuses[integration.id] ?? "not_configured"}
-                  onOpen={() => setSelectedId(integration.id)}
-                  onInstall={handleInstall}
-                  onUninstall={handleUninstall}
-                  installing={installing}
-                />
-              ))}
-            </div>
-          )
-        }
+    <>
+      <div className="space-y-2">
+        {INTEGRATIONS.map((integration) => (
+          <IntegrationRow
+            key={integration.id}
+            integration={integration}
+            status={statuses[integration.id] ?? "not_configured"}
+            onOpen={() => setSelectedId(integration.id)}
+            onInstall={handleInstall}
+            onUninstall={handleUninstall}
+            installing={installing}
+          />
+        ))}
       </div>
 
       {/* Detail Sheet */}
@@ -1029,6 +702,6 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
         onUninstall={handleUninstall}
         installing={installing}
       />
-    </div>
+    </>
   );
 }
