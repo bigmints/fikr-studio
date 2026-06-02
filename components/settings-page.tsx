@@ -341,118 +341,65 @@ export function SettingsPage({
                     {user ? (
                       <>
                         {/* Profile card */}
-                        <div className="relative overflow-hidden flex items-center gap-5 p-6 rounded-3xl border border-border/30 bg-gradient-to-b from-muted/20 to-background shadow-sm">
-                          {/* Subtle ambient glow behind avatar */}
-                          <div className="absolute top-0 left-0 w-32 h-32 bg-primary/20 blur-3xl rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
-                          
-                          <div className="relative flex aspect-square size-20 shrink-0 items-center justify-center rounded-full bg-background border-4 border-background shadow-xl text-primary font-bold text-2xl overflow-hidden z-10">
+                        <div className="flex items-center gap-5 p-6 rounded-3xl border border-border/40 bg-card/50 shadow-sm">
+                          <div className="relative flex aspect-square size-16 shrink-0 items-center justify-center rounded-full bg-muted border-2 border-background shadow-sm text-primary font-bold text-xl overflow-hidden">
                             {user.photoURL
                               ? <img src={user.photoURL} alt="" className="h-full w-full object-cover" />
                               : (user.displayName?.charAt(0) || user.email?.charAt(0) || "U").toUpperCase()}
                           </div>
                           
-                          <div className="flex-1 min-w-0 z-10">
-                            <p className="font-black tracking-tight text-foreground text-2xl leading-none mb-1.5 truncate">{user.displayName || "Fikr User"}</p>
-                            <p className="text-sm font-medium text-muted-foreground truncate">{user.email}</p>
-                          </div>
-                          
-                          <div className="z-10">
-                            <div className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border shadow-sm ${
-                              isPro 
-                                ? "bg-amber-400/10 border-amber-400/30 text-amber-500" 
-                                : isPlus 
-                                ? "bg-teal-400/10 border-teal-400/30 text-teal-500" 
-                                : "bg-muted border-border text-foreground"
-                            }`}>
-                              {isPro && <Zap className="size-3.5 shrink-0" />}
-                              {isPlus && <Cloud className="size-3.5 shrink-0" />}
-                              {userPlan}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold tracking-tight text-foreground text-lg truncate leading-tight">{user.displayName || "Fikr User"}</p>
+                            <p className="text-sm text-muted-foreground truncate mb-2">{user.email}</p>
+                            
+                            <div className="flex items-center gap-3">
+                              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                                isPro ? "bg-amber-500/10 border-amber-500/20 text-amber-600" : isPlus ? "bg-teal-500/10 border-teal-500/20 text-teal-600" : "bg-muted border-border text-muted-foreground"
+                              }`}>
+                                {isPro ? <Zap className="size-3" /> : isPlus ? <Cloud className="size-3" /> : null}
+                                {userPlan}
+                              </div>
+                              <button
+                                onClick={() => window.open("https://fikr.one/dashboard", "_blank")}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-primary hover:underline"
+                              >
+                                {isPro ? "Manage billing" : "Upgrade"} <ExternalLink className="size-3" />
+                              </button>
                             </div>
                           </div>
                         </div>
 
-                        {isManagedPlan && (
-                          <div className={`relative overflow-hidden flex items-start gap-4 p-5 rounded-2xl border ${
-                            isPro ? "bg-gradient-to-br from-amber-400/10 to-amber-400/5 border-amber-400/20" : "bg-gradient-to-br from-teal-400/10 to-teal-400/5 border-teal-400/20"
-                          }`}>
-                            <div className={`p-2.5 rounded-xl shrink-0 mt-0.5 shadow-sm ${
-                              isPro ? "bg-amber-400/20 text-amber-500" : "bg-teal-400/20 text-teal-500"
-                            }`}>
-                              {isPro
-                                ? <Zap className="h-5 w-5" />
-                                : <Cloud className="h-5 w-5" />}
+                        {/* Simplified Actions */}
+                        <div className="flex flex-col gap-2 mt-2">
+                          <div className="flex items-center justify-between p-4 rounded-2xl border border-border/40 bg-card/50 hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                                <Key className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-foreground">Relay API Key</p>
+                                <p className="text-xs text-muted-foreground truncate max-w-[200px] sm:max-w-[300px] font-mono mt-0.5">{relayApiKey || "—"}</p>
+                              </div>
                             </div>
-                            <div className="flex-1">
-                              <p className={`font-bold text-[15px] tracking-tight mb-1 ${isPro ? "text-amber-500" : "text-teal-500"}`}>
-                                Fikr Cloud Managed
-                              </p>
-                              <p className="text-[13px] text-muted-foreground/90 leading-relaxed max-w-lg">
-                                AI is routed through Fikr's managed infrastructure. No API key required.
-                                Usage is tracked and capped per your {userPlan} plan.
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Relay API key */}
-                        <div className="flex flex-col gap-3">
-                          <label className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Cloud Relay Key</label>
-                          <div className="group flex items-center gap-3 rounded-2xl border border-border/40 bg-card/50 shadow-sm px-4 py-3.5 hover:border-border/80 hover:shadow-md transition-all duration-300">
-                            <div className="p-2 rounded-lg bg-muted/50 text-muted-foreground group-hover:text-foreground transition-colors shrink-0">
-                              <Key className="h-4 w-4" />
-                            </div>
-                            <span className="flex-1 font-mono text-[13px] tracking-tight text-foreground/80 truncate selection:bg-primary/20">
-                              {relayApiKey || "—"}
-                            </span>
                             <button
                               onClick={() => { navigator.clipboard.writeText(relayApiKey); setCopiedRelay(true); setTimeout(() => setCopiedRelay(false), 1500); }}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                                copiedRelay 
-                                  ? "bg-[#22C55E]/10 text-[#22C55E]" 
-                                  : "bg-muted text-muted-foreground hover:bg-foreground hover:text-background shadow-sm"
-                              }`}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0 ${copiedRelay ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-muted text-foreground hover:bg-primary hover:text-primary-foreground"}`}
                             >
-                              {copiedRelay ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                               {copiedRelay ? "Copied" : "Copy"}
                             </button>
                           </div>
-                          <p className="text-[12px] text-muted-foreground ml-1">
-                            Use this key to authenticate external AI agents with your Fikr Studio cloud relay.
-                          </p>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                          {/* Plan row */}
-                          <div className={`flex flex-col justify-between p-5 rounded-2xl border transition-all duration-300 hover:shadow-md ${
-                            isPro ? "bg-amber-400/[0.03] border-amber-400/20 hover:border-amber-400/40" : isPlus ? "bg-teal-400/[0.03] border-teal-400/20 hover:border-teal-400/40" : "bg-muted/5 border-border/20"
-                          }`}>
-                            <div className="flex items-center gap-2 mb-4">
-                              <div className={`p-1.5 rounded-md ${isPro ? "bg-amber-400/20" : isPlus ? "bg-teal-400/20" : "bg-muted"}`}>
-                                {isPro ? <Zap className="h-4 w-4 text-amber-500" /> : isPlus ? <Cloud className="h-4 w-4 text-teal-500" /> : <Shield className="h-4 w-4 text-muted-foreground" />}
-                              </div>
-                              <span className={`text-[15px] font-bold tracking-tight ${
-                                isPro ? "text-amber-500" : isPlus ? "text-teal-500" : "text-foreground"
-                              }`}>{userPlan} Plan</span>
-                            </div>
-                            <button
-                              onClick={() => window.open("https://fikr.one/dashboard", "_blank")}
-                              className="flex items-center justify-between w-full px-4 py-2.5 rounded-xl bg-background border border-border shadow-sm text-[13px] font-bold text-foreground hover:bg-muted transition-colors"
-                            >
-                              <span>{isPro ? "Manage billing" : "Upgrade plan"}</span> 
-                              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                            </button>
-                          </div>
-
-                          <div className="flex flex-col justify-end p-5 rounded-2xl border border-destructive/10 bg-destructive/[0.02] transition-all duration-300 hover:border-destructive/30 hover:bg-destructive/[0.04]">
-                            <div className="flex-1" />
-                            <button
-                              onClick={() => signOut(getFirebaseAuth())}
-                              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-destructive/10 border border-destructive/20 text-[13px] font-bold text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all duration-200 shadow-sm"
-                            >
+                          <button
+                            onClick={() => signOut(getFirebaseAuth())}
+                            className="group flex items-center gap-3.5 p-4 rounded-2xl border border-border/40 bg-card/50 hover:bg-destructive/10 hover:border-destructive/30 transition-colors w-full text-left"
+                          >
+                            <div className="p-2 rounded-xl bg-muted text-muted-foreground group-hover:bg-destructive/20 group-hover:text-destructive transition-colors">
                               <LogOut className="h-4 w-4" />
-                              Sign Out Fikr Cloud
-                            </button>
-                          </div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold text-foreground group-hover:text-destructive transition-colors">Sign Out</p>
+                            </div>
+                          </button>
                         </div>
                       </>
                     ) : (
