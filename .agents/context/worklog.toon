@@ -9,3 +9,5 @@ worklog[0]{}:
     message: "Post-commit: chore(context): session end — release_version_0_1_11"
   - date: "2026-06-01 19:14:21"
     message: "Post-commit: chore: release v0.1.14"
+  - date: "2026-06-02 11:01:11"
+    message: "Post-commit: fix: auto-updater quit bug, add check updates menu, hide auth buttons for guests"
