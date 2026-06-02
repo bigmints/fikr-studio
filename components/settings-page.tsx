@@ -22,6 +22,7 @@ import {
   Shield,
   ArrowLeft,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { AI_PROVIDER_PRESETS, getPreset, type AISettings } from "@/lib/ai-settings";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
@@ -453,23 +454,75 @@ export function SettingsPage({
                         </div>
                       </>
                     ) : (
-                      <div className="flex flex-col items-center gap-5 py-16">
-                        <div className="flex aspect-square size-20 items-center justify-center rounded-2xl bg-muted/30 text-muted-foreground/30">
-                          <Cloud className="h-10 w-10" />
-                        </div>
-                        <div className="text-center max-w-sm">
-                          <p className="font-semibold text-foreground text-lg mb-2">Not connected to Fikr Cloud</p>
-                          <p className="text-sm text-muted-foreground leading-relaxed">
-                            Sign in to enable cloud sync, managed AI inference, cross-device access, and external agent relay.
+                      <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-b from-primary/10 to-transparent p-8 sm:p-10 shadow-sm mt-4">
+                        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+                        
+                        <div className="relative z-10 flex flex-col items-center text-center max-w-lg mx-auto">
+                          <div className="inline-flex items-center justify-center p-3 rounded-2xl mb-6 shadow-md"
+                               style={{ background: "linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 70%, #7c3aed) 100%)" }}>
+                            <Cloud className="h-8 w-8 text-white" />
+                          </div>
+                          
+                          <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mb-3">
+                            Unlock Fikr Cloud
+                          </h3>
+                          <p className="text-muted-foreground text-[15px] leading-relaxed mb-8">
+                            Supercharge your workflow with seamless sync, premium AI models, and powerful integrations across all your devices.
+                          </p>
+
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-4 w-full text-left mb-10">
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 rounded-md bg-blue-500/10 p-1.5 text-blue-500">
+                                <RefreshCw className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-sm text-foreground">Real-time Sync</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Notes synced everywhere</p>
+                              </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 rounded-md bg-emerald-500/10 p-1.5 text-emerald-500">
+                                <Sparkles className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-sm text-foreground">Managed Models</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Claude 3.5 & more</p>
+                              </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 rounded-md bg-purple-500/10 p-1.5 text-purple-500">
+                                <Zap className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-sm text-foreground">Cloud Relay</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">External agent hooks</p>
+                              </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 rounded-md bg-amber-500/10 p-1.5 text-amber-500">
+                                <Shield className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-sm text-foreground">Private & Secure</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Your data is yours</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {loginError && <p className="text-[13px] font-bold text-destructive mb-4 px-4 py-2 bg-destructive/10 rounded-lg">{loginError}</p>}
+                          
+                          <button
+                            onClick={() => { setLoginError(""); (window as any).fikrStudio?.openAuth(); }}
+                            className="relative overflow-hidden group w-full sm:w-auto px-8 py-3.5 rounded-xl bg-primary text-primary-foreground font-bold text-[15px] transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/25"
+                          >
+                            <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
+                            <span className="relative z-10">Sign in with Fikr Cloud</span>
+                          </button>
+                          
+                          <p className="text-[12px] font-medium text-muted-foreground mt-4 flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Free plan available. No credit card required.
                           </p>
                         </div>
-                        {loginError && <p className="text-sm text-destructive">{loginError}</p>}
-                        <button
-                          onClick={() => { setLoginError(""); (window as any).fikrStudio?.openAuth(); }}
-                          className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
-                        >
-                          Sign in with Fikr Cloud
-                        </button>
                       </div>
                     )}
                   </motion.div>
