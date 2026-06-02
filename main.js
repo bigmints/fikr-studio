@@ -332,9 +332,12 @@ function generateId() {
 
 const lastSyncedNoteIds = new Set();
 const lastSyncedProjectIds = new Set();
+const lastSyncedGenProjectIds = new Set();
+
 function updateLastSyncedIds(workspace) {
   lastSyncedNoteIds.clear();
   lastSyncedProjectIds.clear();
+  lastSyncedGenProjectIds.clear();
   if (!workspace) return;
   const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
   for (const proj of projects) {
@@ -345,6 +348,9 @@ function updateLastSyncedIds(workspace) {
     if (proj.ghostNotes) {
       for (const g of proj.ghostNotes) if (g.id) lastSyncedNoteIds.add(g.id);
     }
+  }
+  if (!Array.isArray(workspace) && workspace.studioProjects) {
+    for (const p of workspace.studioProjects) if (p.id) lastSyncedGenProjectIds.add(p.id);
   }
 }
 
@@ -369,7 +375,9 @@ ipcMain.handle("fikr-studio:load-projects", async () => {
     }
   }
   // Free / offline
-  return loadProjectsFromDisk();
+  const data = loadProjectsFromDisk();
+  updateLastSyncedIds(data);
+  return data;
 });
 
 /**
@@ -382,7 +390,7 @@ ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
   // If we haven't loaded from cloud yet, we don't know what the authoritative state
   // is — saving now risks overwriting another device's data with our stale disk cache.
   if (currentUserId && isCloudSyncReady) {
-    dc.saveWorkspace(currentUserId, data, lastSyncedNoteIds, lastSyncedProjectIds)
+    dc.saveWorkspace(currentUserId, data, lastSyncedNoteIds, lastSyncedProjectIds, lastSyncedGenProjectIds)
       .then(() => {
         updateLastSyncedIds(data);
         triggerServerEmbed(data);
