@@ -269,21 +269,6 @@ function BrandIcon({ integration, size = 40 }: { integration: Integration; size?
   );
 }
 
-function TypeBadge({ type }: { type: ConnectionType }) {
-  const map: Record<ConnectionType, { label: string; class: string }> = {
-    "1-click":       { label: "⚡ 1-Click",     class: "bg-primary/10 text-primary border-primary/25 dark:bg-primary/15" },
-    "copy-config":   { label: "Config",         class: "bg-blue-500/10 text-blue-600 border-blue-400/25 dark:text-blue-400" },
-    "copy-endpoint": { label: "Webhook",        class: "bg-violet-500/10 text-violet-600 border-violet-400/25 dark:text-violet-400" },
-    "paste-url":     { label: "Paste URL",      class: "bg-amber-500/10 text-amber-700 border-amber-400/25 dark:text-amber-400" },
-    "rest-api":      { label: "REST",           class: "bg-emerald-500/10 text-emerald-700 border-emerald-400/25 dark:text-emerald-400" },
-  };
-  const { label, class: cls } = map[type];
-  return (
-    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${cls}`}>
-      {label}
-    </span>
-  );
-}
 
 function StatusDot({ status }: { status: StatusType }) {
   const map: Record<StatusType, { dot: string; text: string; pulse: boolean }> = {
@@ -554,66 +539,48 @@ function IntegrationRow({
   const isInstalled = status === "installed";
   const isOneClick = integration.connectionType === "1-click";
 
-  const accentColor = isInstalled ? "#10b981" : integration.iconBg;
-
   return (
     <div
-      className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl border transition-all duration-200 cursor-pointer group relative overflow-hidden
-        ${ isInstalled
-          ? "border-emerald-500/25 bg-gradient-to-r from-emerald-500/[0.04] to-transparent shadow-sm"
-          : "border-border/30 bg-card hover:border-border/50 hover:shadow-md dark:hover:bg-muted/10"
-        }`}
-      style={{ boxShadow: isInstalled ? `0 1px 12px ${accentColor}18` : undefined }}
+      className="flex items-center justify-between p-4 rounded-2xl border border-border/40 bg-card/50 hover:bg-muted/50 transition-colors cursor-pointer group"
       onClick={onOpen}
     >
-      {/* Subtle left accent bar */}
-      <div
-        className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full opacity-60"
-        style={{ background: accentColor }}
-      />
-
-      <div className="pl-2">
-        <BrandIcon integration={integration} size={42} />
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap mb-1">
-          <span className="font-bold text-[13.5px] text-foreground tracking-tight">{integration.name}</span>
-          <StatusDot status={status} />
+      <div className="flex items-center gap-3.5 min-w-0">
+        <BrandIcon integration={integration} size={36} />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="font-semibold text-sm text-foreground">{integration.name}</span>
+            {isInstalled && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                <Check className="h-3 w-3" /> Connected
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground truncate max-w-[200px] sm:max-w-[400px]">
+            {integration.tagline}
+          </p>
         </div>
-        <p className="text-[12px] text-muted-foreground leading-snug truncate mb-1.5">{integration.tagline}</p>
-        <TypeBadge type={integration.connectionType} />
       </div>
 
-      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
         {isOneClick && !isInstalled && (
-          <Button
-            size="sm"
-            className="font-bold h-8 px-4 text-[12px] shadow-sm"
-            style={{ boxShadow: `0 2px 8px ${integration.iconBg}35` }}
+          <button
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground shadow-sm hover:opacity-90 transition-opacity"
             onClick={() => onInstall(integration.id)}
             disabled={installing === integration.id}
           >
-            {installing === integration.id
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <Zap className="h-3.5 w-3.5" />
-            }
-            {installing === integration.id ? "Installing…" : "Install"}
-          </Button>
+            {installing === integration.id ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Installing…</>
+            ) : (
+              <><Zap className="h-3.5 w-3.5" /> Install</>
+            )}
+          </button>
         )}
-        {isInstalled && (
-          <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-            <Check className="h-3 w-3" /> Connected
-          </span>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-[12px] text-muted-foreground group-hover:text-foreground h-8"
+        <button
+          className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5"
           onClick={onOpen}
         >
-          View guide
-        </Button>
+          Setup
+        </button>
       </div>
     </div>
   );
