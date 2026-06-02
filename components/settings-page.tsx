@@ -223,14 +223,16 @@ export function SettingsPage({
               <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
 
                 {/* Page header */}
-                <div className="mb-8">
-                  <h1 className="text-2xl font-bold text-foreground tracking-tight">
-                    {NAV.find(n => n.id === section)?.label}
-                  </h1>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {NAV.find(n => n.id === section)?.description}
-                  </p>
-                </div>
+                {!(section === "account" && !user) && (
+                  <div className="mb-8">
+                    <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                      {NAV.find(n => n.id === section)?.label}
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {NAV.find(n => n.id === section)?.description}
+                    </p>
+                  </div>
+                )}
 
                 {/* ── Connections ── */}
                 {section === "connections" && (
