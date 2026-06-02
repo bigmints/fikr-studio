@@ -13,3 +13,7 @@ worklog[0]{}:
     message: "Post-commit: fix: auto-updater quit bug, add check updates menu, hide auth buttons for guests"
   - date: "2026-06-02 11:09:31"
     message: "Post-commit: chore(ui): remove Settings option from main popover menu"
+  - date: "2026-06-02 11:24:00"
+    message: "Post-commit: refactor(ui): redesign settings page to simple centered layout"
+  - date: "2026-06-02 11:30:55"
+    message: "Post-commit: fix(ui): revert to full-page settings layout while keeping simple centered content"

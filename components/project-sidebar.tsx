@@ -644,10 +644,7 @@ export function ProjectSidebar({
                   <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem className="gap-2 cursor-pointer focus:bg-foreground/5 rounded-md py-2" onClick={() => onOpenKeyboardShortcuts()}>
-                <Keyboard className="size-4" />
-                <span>Keyboard Shortcuts</span>
-              </DropdownMenuItem>
+
               <DropdownMenuItem className="gap-2 cursor-pointer focus:bg-foreground/5 rounded-md py-2" onClick={() => setIsAboutOpen(true)}>
                 <HelpCircle className="size-4" />
                 <span>About / Help</span>

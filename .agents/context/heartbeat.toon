@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-06-02T11:09:31Z"
+  last_seen: "2026-06-02T11:30:55Z"
   host: "BigMac-2"
-  task: "Committed: chore(ui): remove Settings option from main popover menu"
+  task: "Committed: fix(ui): revert to full-page settings layout while keeping simple centered content"
   status: alive
