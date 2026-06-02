@@ -1,17 +1,5 @@
 heartbeat:
-  last_seen: "2026-06-01T18:16:39Z"
-  host: "Mac"
-  task: "Committed: fix(sync): gate all Firestore saves until startup cloud load completes (isCloudSyncReady)
-
-The core race condition was: renderer fires save-projects with stale disk cache
-BEFORE runStartupSequence finishes loading from Firestore. Even with the
-lastSyncedProjectIds guard, if saves fire during the startup window they
-can corrupt cloud state from another device.
-
-Solution: isCloudSyncReady=false blocks all Firestore saves until:
-- runStartupSequence cloud load completes (normal startup), or
-- post-auth cloud load completes (mid-session sign-in)
-
-Local disk writes still proceed immediately (for offline cache).
-isCloudSyncReady resets to false on sign-out so subsequent sign-ins are safe."
+  last_seen: "2026-06-02T10:58:45Z"
+  host: "BigMac-2"
+  task: "Implementing bug fixes and check for updates feature"
   status: alive

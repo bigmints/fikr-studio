@@ -156,7 +156,7 @@ export function ProjectSidebar({
     });
 
     // Listen to deep-linked auth tokens from Electron
-    // @ts-ignore
+    // @ts-expect-error - external IPC method
     const unsubscribeIpc = window.fikrStudio?.onExternalEvent?.((eventData) => {
       if (eventData.type === "auth-token" && eventData.payload?.token) {
         signInWithCustomToken(auth, eventData.payload.token).catch(() => {});
@@ -166,7 +166,6 @@ export function ProjectSidebar({
     return () => {
       unsubscribeAuth();
       if (unsubscribeUserDoc) unsubscribeUserDoc();
-      // @ts-ignore
       if (unsubscribeIpc) unsubscribeIpc();
     };
   }, []);
@@ -194,7 +193,7 @@ export function ProjectSidebar({
                 typeof data.payload === "string"
                   ? JSON.parse(data.payload)
                   : data.payload;
-              // @ts-ignore
+              // @ts-expect-error - external IPC method
               const result = await window.fikrStudio.executeMcp(payload);
 
               if (result !== null && payload.id !== undefined) {
@@ -236,7 +235,7 @@ export function ProjectSidebar({
       onOpenSettings("llm");
       onSettingsOpened?.();
     }
-  }, [openToSettings]);
+  }, [openToSettings, onOpenSettings, onSettingsOpened]);
 
   const isPro = userPlan.toLowerCase().includes("pro");
   const isPlus = userPlan.toLowerCase().includes("plus");
@@ -619,11 +618,13 @@ export function ProjectSidebar({
                 <Plug className="size-4" />
                 <span>Connections</span>
               </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 cursor-pointer focus:bg-foreground/5 rounded-md py-2" onClick={() => onOpenSettings("account")}>
-                <Shield className="size-4" />
-                <span>Manage Account</span>
-              </DropdownMenuItem>
-              {isManagedPlan && (
+              {user && (
+                <DropdownMenuItem className="gap-2 cursor-pointer focus:bg-foreground/5 rounded-md py-2" onClick={() => onOpenSettings("account")}>
+                  <Shield className="size-4" />
+                  <span>Manage Account</span>
+                </DropdownMenuItem>
+              )}
+              {user && isManagedPlan && (
                 <DropdownMenuItem 
                   className="gap-2 cursor-pointer focus:bg-foreground/5 rounded-md py-2" 
                   onClick={handleSyncNow} 

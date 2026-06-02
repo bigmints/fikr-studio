@@ -34,7 +34,7 @@ export function SearchModal({
       setQuery("");
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [isOpen]);
+  }, [isOpen, setQuery]);
 
   // Close on Escape
   React.useEffect(() => {
@@ -64,7 +64,7 @@ export function SearchModal({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose, selectNext, selectPrev, results, selectedIndex, onSelectResult]);
+  }, [isOpen, onClose, selectNext, selectPrev, results, selectedIndex, onSelectResult, addRecentSearch, query]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalQuery(e.target.value);

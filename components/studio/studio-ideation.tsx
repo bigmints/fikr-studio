@@ -61,7 +61,7 @@ export function StudioIdeation({ project, intelBlocks, onBack, onGenerate }: Pro
     const computed = scoreTopics(intelBlocks);
     setTopics(computed);
     if (computed.length > 0 && !selectedTopic) setSelectedTopic(computed[0]);
-  }, [intelBlocks]);
+  }, [intelBlocks, selectedTopic]);
 
   const canGenerate = selectedTopic !== null || customPrompt.trim().length > 0;
 

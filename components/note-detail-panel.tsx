@@ -124,7 +124,7 @@ export function NoteDetailPanel({
       // Auto-switch tab: default to original
       setActiveTab("original");
     }
-  }, [block?.id]);
+  }, [block?.id, block]);
 
   // Auto-grow textareas
   useEffect(() => {

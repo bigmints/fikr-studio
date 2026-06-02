@@ -27,12 +27,12 @@ export const PRESET_MODELS: Record<AITask, Record<AIProvider, string>> = {
   analysis: {
     openai:     "gpt-4o-mini",
     gemini:     "gemini-2.0-flash-lite",
-    openrouter: "google/gemini-2.0-flash-lite-001",
+    openrouter: "deepseek/deepseek-v4-pro",
   },
   tools: {
     openai:     "gpt-4o-mini",
     gemini:     "gemini-2.0-flash-lite",
-    openrouter: "google/gemini-2.0-flash-lite-001",
+    openrouter: "deepseek/deepseek-v4-pro",
   },
   transcription: {
     openai:     "whisper-1",
@@ -42,7 +42,7 @@ export const PRESET_MODELS: Record<AITask, Record<AIProvider, string>> = {
   vision: {
     openai:     "gpt-4o-mini",
     gemini:     "gemini-2.0-flash",
-    openrouter: "google/gemini-2.0-flash-lite-001",
+    openrouter: "deepseek/deepseek-v4-pro",
   },
   embedding: {
     openai:     "text-embedding-3-small",
@@ -57,6 +57,8 @@ export const AVAILABLE_MODELS: Record<AITask, Partial<Record<AIProvider, string[
     openai:     ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini", "o4-mini"],
     gemini:     ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-pro-preview-03-25", "gemini-1.5-pro"],
     openrouter: [
+      "deepseek/deepseek-v4-pro",
+      "openrouter/free",
       "google/gemini-2.0-flash-lite-001",
       "google/gemini-2.5-pro-preview-03-25",
       "anthropic/claude-sonnet-4-5",
@@ -70,7 +72,7 @@ export const AVAILABLE_MODELS: Record<AITask, Partial<Record<AIProvider, string[
   tools: {
     openai:     ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
     gemini:     ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
-    openrouter: ["google/gemini-2.0-flash-lite-001", "openai/gpt-4o-mini", "deepseek/deepseek-chat"],
+    openrouter: ["deepseek/deepseek-v4-pro", "openrouter/free", "google/gemini-2.0-flash-lite-001", "openai/gpt-4o-mini", "deepseek/deepseek-chat"],
   },
   transcription: {
     openai:     ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"],
@@ -81,6 +83,8 @@ export const AVAILABLE_MODELS: Record<AITask, Partial<Record<AIProvider, string[
     openai:     ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
     gemini:     ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-pro-preview-03-25"],
     openrouter: [
+      "deepseek/deepseek-v4-pro",
+      "openrouter/free",
       "google/gemini-2.0-flash-lite-001",
       "google/gemini-2.0-flash-001",
       "openai/gpt-4o-mini",

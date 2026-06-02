@@ -79,7 +79,7 @@ export function SettingsPage({
       setSection(initialSection);
       setDraft(aiSettings);
     }
-  }, [open, initialSection]);
+  }, [open, initialSection, aiSettings]);
 
   // Escape to close
   useEffect(() => {

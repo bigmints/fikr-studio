@@ -620,7 +620,6 @@ export function useSearchEffect(options: UseSearchEffectOptions): void {
     state.modelStatus,
     setResults,
     setSearching,
-    textSearch,
     allBlocks,
     blockMap,
     projects,

@@ -46,6 +46,8 @@ interface StatusBarProps {
   wordUsage?: WordUsage | null;
   /** Called when the word-count pill is clicked */
   onWordCountClick?: () => void;
+  /** Called to trigger the onboarding flow in dev mode */
+  onTriggerOnboarding?: () => void;
 }
 
 function fmtWords(n: number): string {
@@ -71,6 +73,7 @@ export function StatusBar({
   enrichingCount = 0,
   wordUsage,
   onWordCountClick,
+  onTriggerOnboarding,
 }: StatusBarProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pillHovered, setPillHovered] = useState(false);
@@ -100,7 +103,7 @@ export function StatusBar({
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [isMenuOpen]);
+  }, [isMenuOpen, setIsMenuOpen]);
 
   const menuItem = (
     icon: React.ReactNode,
@@ -307,21 +310,32 @@ export function StatusBar({
           </button>
         </div>
 
-        {/* Dev Model Switcher */}
-        {process.env.NODE_ENV === "development" && LOCAL_AI_CONFIG.enabled && (
-          <div className="flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 p-0.5 ml-1" style={{ WebkitAppRegion: "no-drag" } as any}>
-            <select
-              value={devModel}
-              onChange={(e) => handleModelChange(e.target.value)}
-              className="bg-transparent text-[10px] font-mono font-medium text-amber-500 outline-none px-1 py-0.5 cursor-pointer max-w-[120px] truncate"
-              title="Dev Model Switcher"
-            >
-              {Object.entries(LM_STUDIO_MODELS).map(([key, value]) => (
-                <option key={value} value={value} className="bg-background text-foreground font-sans">
-                  {key}
-                </option>
-              ))}
-            </select>
+        {/* Dev Options */}
+        {process.env.NODE_ENV === "development" && (
+          <div className="flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 p-0.5 ml-1 gap-0.5" style={{ WebkitAppRegion: "no-drag" } as any}>
+            {onTriggerOnboarding && (
+              <button
+                onClick={onTriggerOnboarding}
+                className="px-1.5 py-0.5 text-[10px] font-mono font-bold text-amber-500 hover:bg-amber-500/20 rounded transition-colors"
+                title="Test Onboarding Modal"
+              >
+                ONBOARD
+              </button>
+            )}
+            {LOCAL_AI_CONFIG.enabled && (
+              <select
+                value={devModel}
+                onChange={(e) => handleModelChange(e.target.value)}
+                className="bg-transparent text-[10px] font-mono font-medium text-amber-500 outline-none px-1 py-0.5 cursor-pointer max-w-[120px] truncate"
+                title="Dev Model Switcher"
+              >
+                {Object.entries(LM_STUDIO_MODELS).map(([key, value]) => (
+                  <option key={value} value={value} className="bg-background text-foreground font-sans">
+                    {key}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
 

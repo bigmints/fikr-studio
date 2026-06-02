@@ -257,8 +257,8 @@ export default function Page() {
     [projects, activeProjectId],
   );
 
-  const blocks = activeProject?.blocks || [];
-  const ghostNotes = activeProject?.ghostNotes || [];
+  const blocks = useMemo(() => activeProject?.blocks || [], [activeProject?.blocks]);
+  const ghostNotes = useMemo(() => activeProject?.ghostNotes || [], [activeProject?.ghostNotes]);
 
   const updateActiveProject = useCallback(
     (updater: (p: Project) => Project) => {
@@ -1840,7 +1840,7 @@ export default function Page() {
       else if (cmd === "thesis" && text) addBlock(text, "thesis");
 
     },
-    [clearBlocks, addBlock, activeProjectId],
+    [clearBlocks, addBlock, activeProjectId, createProject],
   );
 
   return (
@@ -1935,6 +1935,7 @@ export default function Page() {
             }
             wordUsage={wordUsage}
             onWordCountClick={handleWordCountClick}
+            onTriggerOnboarding={() => setIsIntroOpen(true)}
           />
           )}
 

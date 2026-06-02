@@ -55,7 +55,7 @@ export function StudioRoot({
     } else {
       setScreen("home");
     }
-  }, [activeProjectId]); // Only depend on activeProjectId to avoid overriding user navigation
+  }, [activeProjectId, studioProjects]); // Only depend on activeProjectId to avoid overriding user navigation
 
   // ── Create new project ─────────────────────────────────────────────────────
   const handleNewProject = useCallback((project: StudioProject) => {
@@ -147,7 +147,7 @@ export function StudioRoot({
 
     onStartGeneration(projectId, params, newName);
     setScreen("editor");
-  }, [activeProjectId, studioProjects, setStudioProjects, onStartGeneration]);
+  }, [activeProjectId, studioProjects, setStudioProjects, onStartGeneration, onPersist]);
 
   // ── Regenerate from editor (params may have been adjusted in sidebar) ──────
   const handleRegenerate = useCallback((params: GenerateParams, currentMarkdown?: string) => {

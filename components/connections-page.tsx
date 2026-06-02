@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Check, Copy, ExternalLink, Loader2, Plug, Zap, AlertTriangle, RefreshCw, Wrench, Sparkles, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -850,7 +850,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
 
-  const INTEGRATIONS = getIntegrations(mcpPort);
+  const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort), [mcpPort]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
 
   // Auto-check 1-click integrations on mount
@@ -867,7 +867,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
 
   useEffect(() => {
     INTEGRATIONS.filter((i) => i.connectionType === "1-click").forEach((i) => checkStatus(i.id));
-  }, [checkStatus]);
+  }, [checkStatus, INTEGRATIONS]);
 
   const handleInstall = async (id: string) => {
     if (!ipc?.installMcp) return;

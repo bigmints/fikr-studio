@@ -119,7 +119,7 @@ export function SettingsModal({
       // Notify the Electron main process of the auth state change.
       // This enables Data Connect sync and triggers the one-shot legacy migration.
       // Pass idToken so main.js can call fikr.one APIs (e.g. server-side embedding).
-      // @ts-ignore
+      // @ts-expect-error - external IPC method
       window.fikrStudio?.setUser(u?.uid ?? null, token ?? null);
 
       if (u) {
@@ -151,7 +151,7 @@ export function SettingsModal({
       }
     });
 
-    // @ts-ignore
+    // @ts-expect-error - external IPC method
     const ipc = window.fikrStudio?.onExternalEvent?.((ev: any) => {
       if (ev.type === "auth-token" && ev.payload?.token) {
         signInWithCustomToken(auth, ev.payload.token).catch((e) =>
@@ -162,7 +162,6 @@ export function SettingsModal({
 
     return () => {
       unsub();
-      // @ts-ignore
       if (ipc) ipc();
     };
   }, [onAuthChange]);

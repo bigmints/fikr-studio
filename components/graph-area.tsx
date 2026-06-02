@@ -771,7 +771,7 @@ export function GraphArea({
                         style={{ pointerEvents: "none" }}
                       >
                         <div
-                          // @ts-ignore
+                          // @ts-expect-error - foreignObject requires xmlns on its children
                           xmlns="http://www.w3.org/1999/xhtml"
                           style={{
                             width: 34,

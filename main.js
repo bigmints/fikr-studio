@@ -330,8 +330,8 @@ function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
 
-let lastSyncedNoteIds = new Set();
-let lastSyncedProjectIds = new Set();
+const lastSyncedNoteIds = new Set();
+const lastSyncedProjectIds = new Set();
 function updateLastSyncedIds(workspace) {
   lastSyncedNoteIds.clear();
   lastSyncedProjectIds.clear();
@@ -1021,40 +1021,39 @@ async function executeTool(name, args, mainWindow) {
 
 // ─── Direct MCP Execution via IPC ─────────────────────────────────────────────
 ipcMain.handle("fikr-studio:execute-mcp", async (event, rpc) => {
-  try {
-    switch (rpc.method) {
-      case "initialize":
-        console.log("[Fikr Studio] IPC received initialize!");
-        return {
-          protocolVersion: "2024-11-05",
-          capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false }, prompts: { listChanged: false } },
-          serverInfo: { name: "fikr-studio", version: "1.0.0" },
-        };
+  switch (rpc.method) {
+    case "initialize":
+      console.log("[Fikr Studio] IPC received initialize!");
+      return {
+        protocolVersion: "2024-11-05",
+        capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false }, prompts: { listChanged: false } },
+        serverInfo: { name: "fikr-studio", version: "1.0.0" },
+      };
 
-      case "prompts/list":
+    case "prompts/list":
+      return {
+        prompts: [
+          {
+            name: "pre_synthesis",
+            description: "Instructions for performing local AI note synthesis and classification before storing in Fikr Studio",
+            arguments: [
+              { name: "text", description: "The raw text of the note to synthesize", required: true }
+            ]
+          }
+        ]
+      };
+
+    case "prompts/get": {
+      if (rpc.params?.name === "pre_synthesis") {
         return {
-          prompts: [
+          description: "Instructions for Fikr Studio Note Synthesis",
+          messages: [
             {
-              name: "pre_synthesis",
-              description: "Instructions for performing local AI note synthesis and classification before storing in Fikr Studio",
-              arguments: [
-                { name: "text", description: "The raw text of the note to synthesize", required: true }
-              ]
-            }
-          ]
-        };
-
-      case "prompts/get": {
-        if (rpc.params?.name === "pre_synthesis") {
-          return {
-            description: "Instructions for Fikr Studio Note Synthesis",
-            messages: [
-              {
-                role: "user",
-                content: {
-                  type: "text",
-                  text: `You are an expert Fikr Studio synthesis AI. Your task is to analyze the following raw note and enrich it before storing it.
-                  
+              role: "user",
+              content: {
+                type: "text",
+                text: `You are an expert Fikr Studio synthesis AI. Your task is to analyze the following raw note and enrich it before storing it.
+                
 Raw Note:
 "${rpc.params?.arguments?.text || ""}"
 
@@ -1064,55 +1063,52 @@ Instructions:
 3. Write a 2-4 sentence 'annotation' summarizing the core insight or context.
 4. Estimate a 'confidence' score (0-100) for your classification.
 5. Finally, call the \`create_note_synthesized\` tool with your generated fields and the original raw text.`
-                }
               }
-            ]
-          };
-        }
-        throw new Error("Unknown prompt");
-      }
-
-      case "tools/list":
-        return { tools: MCP_TOOLS };
-
-      case "tools/call": {
-        const { name, arguments: args } = rpc.params || {};
-        return await executeTool(name, args || {}, mainWindow);
-      }
-
-      case "resources/list":
-        return {
-          resources: [
-            { uri: "fikr-studio://projects", name: "All Projects", description: "Full workspace dump", mimeType: "application/json" },
-          ],
+            }
+          ]
         };
-
-      case "resources/read": {
-        if (rpc.params?.uri === "fikr-studio://projects") {
-          const workspace = loadProjectsFromDisk() || { projects: [] };
-          const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
-          return { contents: [{ uri: "fikr-studio://projects", mimeType: "application/json", text: JSON.stringify(projects, null, 2) }] };
-        } else {
-          throw new Error("Unknown resource URI");
-        }
       }
-
-      case "notifications/initialized":
-      case "notifications/cancelled":
-      case "notifications/progress":
-        console.log(`[Fikr Studio] Received MCP notification: ${rpc.method}`, rpc.params || "");
-        return null; // Notifications have no response
-
-      // Optional MCP methods — not implemented, acknowledge gracefully
-      case "resources/subscribe":
-      case "resources/unsubscribe":
-        return { jsonrpc: "2.0", id: rpc.id, result: {} };
-
-      default:
-        throw new Error(`Method not found: ${rpc.method}`);
+      throw new Error("Unknown prompt");
     }
-  } catch (err) {
-    throw err; // Will be caught by the React frontend and mapped to a JSON-RPC error
+
+    case "tools/list":
+      return { tools: MCP_TOOLS };
+
+    case "tools/call": {
+      const { name, arguments: args } = rpc.params || {};
+      return await executeTool(name, args || {}, mainWindow);
+    }
+
+    case "resources/list":
+      return {
+        resources: [
+          { uri: "fikr-studio://projects", name: "All Projects", description: "Full workspace dump", mimeType: "application/json" },
+        ],
+      };
+
+    case "resources/read": {
+      if (rpc.params?.uri === "fikr-studio://projects") {
+        const workspace = loadProjectsFromDisk() || { projects: [] };
+        const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
+        return { contents: [{ uri: "fikr-studio://projects", mimeType: "application/json", text: JSON.stringify(projects, null, 2) }] };
+      } else {
+        throw new Error("Unknown resource URI");
+      }
+    }
+
+    case "notifications/initialized":
+    case "notifications/cancelled":
+    case "notifications/progress":
+      console.log(`[Fikr Studio] Received MCP notification: ${rpc.method}`, rpc.params || "");
+      return null; // Notifications have no response
+
+    // Optional MCP methods — not implemented, acknowledge gracefully
+    case "resources/subscribe":
+    case "resources/unsubscribe":
+      return { jsonrpc: "2.0", id: rpc.id, result: {} };
+
+    default:
+      throw new Error(`Method not found: ${rpc.method}`);
   }
 });
 
@@ -1562,6 +1558,7 @@ let splashWindow = null;
 let mcpServer    = null;
 let tray         = null;
 let isQuiting    = false;
+let isManualUpdateCheck = false;
 
 /** Buffered progress events sent before the splash page was ready */
 let _splashQueue = [];
@@ -1787,6 +1784,14 @@ app.whenReady().then(async () => {
       submenu: [
         { role: 'about' },
         { type: 'separator' },
+        { 
+          label: 'Check for Updates...', 
+          click: () => { 
+            isManualUpdateCheck = true; 
+            autoUpdater.checkForUpdates(); 
+          } 
+        },
+        { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
         { role: 'hide' },
@@ -1858,7 +1863,19 @@ app.whenReady().then(async () => {
   });
 
   autoUpdater.on("update-available", () => {
+    isManualUpdateCheck = false;
     console.log("[Fikr Studio] Update available.");
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    if (isManualUpdateCheck) {
+      isManualUpdateCheck = false;
+      dialog.showMessageBox({
+        type: "info",
+        title: "Up to Date",
+        message: "You are already running the latest version of Fikr Studio."
+      });
+    }
   });
 
   autoUpdater.on("update-downloaded", () => {
@@ -1870,7 +1887,10 @@ app.whenReady().then(async () => {
       buttons: ["Quit and Install", "Later"]
     }).then(result => {
       if (result.response === 0) {
-        autoUpdater.quitAndInstall();
+        isQuiting = true;
+        setTimeout(() => {
+          autoUpdater.quitAndInstall();
+        }, 100);
       }
     });
   });

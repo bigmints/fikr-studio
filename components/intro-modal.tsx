@@ -32,13 +32,16 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
   const [draftProvider, setDraftProvider] = useState<AIProvider>(settings.provider)
   const [draftKey, setDraftKey] = useState(settings.apiKey)
 
+  const prevOpen = useRef(false)
+  
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpen.current) {
       setStep("intro")
       setAuthMode("choose")
       setDraftProvider(settings.provider)
       setDraftKey(settings.apiKey)
     }
+    prevOpen.current = open;
   }, [open, settings])
 
   // Close on Escape
