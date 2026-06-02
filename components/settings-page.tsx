@@ -312,12 +312,7 @@ export function SettingsPage({
                       </div>
                     </div>
 
-                    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${
-                      draft.apiKey ? "bg-[#22C55E]/8 border-[#22C55E]/20 text-[#22C55E]" : "bg-muted/20 border-border/20 text-muted-foreground"
-                    }`}>
-                      <span className={`h-2 w-2 rounded-full shrink-0 ${draft.apiKey ? "bg-[#22C55E] animate-pulse" : "bg-muted-foreground/30"}`} />
-                      {draft.apiKey ? `${currentPreset.label} — configured and ready` : "No API key — AI features disabled"}
-                    </div>
+
 
                     <div className="pt-2 flex justify-end gap-3">
                       <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
