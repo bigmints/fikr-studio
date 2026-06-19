@@ -82,7 +82,7 @@ if (!gotTheLock) {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const MCP_PORT = 3025;
+let MCP_PORT = 3025;
 const WORKSPACE_DIR = path.join(app.getPath("home"), ".fikr-studio");
 const WORKSPACE_FILE = path.join(WORKSPACE_DIR, "workspace.json");
 const INTRO_FILE = path.join(WORKSPACE_DIR, "intro-seen");
@@ -1545,18 +1545,47 @@ To generate a weekly digest every Friday:
     res.end("Not found");
   });
 
-  server.listen(MCP_PORT, "127.0.0.1", () => {
+  let currentPort = 3025;
+
+  const tryListen = (port) => {
+    server.listen(port, "127.0.0.1");
+  };
+
+  server.once("listening", () => {
+    MCP_PORT = currentPort;
     console.log(`[Fikr Studio] MCP server running at http://localhost:${MCP_PORT}`);
+
+    // Write mcp-port.json lockfile
+    try {
+      const portData = {
+        port: MCP_PORT,
+        url: `http://127.0.0.1:${MCP_PORT}/sse`,
+        pid: process.pid,
+        updatedAt: new Date().toISOString()
+      };
+      const lockfilePath = path.join(app.getPath("userData"), "mcp-port.json");
+      fs.writeFileSync(lockfilePath, JSON.stringify(portData, null, 2), "utf8");
+      console.log(`[Fikr Studio] Wrote MCP port configuration to ${lockfilePath}`);
+    } catch (err) {
+      console.error("[Fikr Studio] Failed to write mcp-port.json lockfile:", err);
+    }
   });
 
   server.on("error", (e) => {
     if (e.code === "EADDRINUSE") {
-      console.warn(`[Fikr Studio] Port ${MCP_PORT} in use — MCP server not started`);
+      console.warn(`[Fikr Studio] Port ${currentPort} in use — trying next port...`);
+      currentPort++;
+      if (currentPort < 3125) {
+        tryListen(currentPort);
+      } else {
+        console.error("[Fikr Studio] Failed to find any free port for MCP server after 100 attempts.");
+      }
     } else {
       console.error("[Fikr Studio] MCP server error:", e);
     }
   });
 
+  tryListen(currentPort);
   return server;
 }
 
@@ -1934,4 +1963,13 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   isQuiting = true;
   if (mcpServer) mcpServer.close();
+  try {
+    const lockfilePath = path.join(app.getPath("userData"), "mcp-port.json");
+    if (fs.existsSync(lockfilePath)) {
+      fs.unlinkSync(lockfilePath);
+      console.log("[Fikr Studio] Cleaned up MCP port lockfile on exit.");
+    }
+  } catch (err) {
+    console.error("[Fikr Studio] Failed to clean up MCP port lockfile:", err);
+  }
 });
