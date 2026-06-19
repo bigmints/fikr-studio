@@ -178,6 +178,114 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
     docsUrl: "https://modelcontextprotocol.io",
     primaryActionLabel: "Copy Config",
   },
+  {
+    id: "other-local",
+    name: "Others (Local Code)",
+    tagline: "Copy the local MCP bridge Node.js script code.",
+    description: "Use this option if you want to run the bridge as a local file without installing from npm. Copy the source code, save it to a local file, install dependencies, and configure your AI client.",
+    iconBg: "#10B981", iconLetter: "L",
+    category: "MCP Clients",
+    connectionType: "copy-config",
+    requiresPlan: null,
+    steps: [
+      { label: "Copy the code below", detail: "Click Copy to copy the complete bridge source code." },
+      { label: "Save to a local file", detail: "Save the code as `mcp-bridge.mjs` on your computer." },
+      { label: "Install SDK dependency", detail: "Run `npm install @modelcontextprotocol/sdk` in the same folder." },
+      { label: "Add to your client config", detail: "Add the command `node /absolute/path/to/mcp-bridge.mjs` to your AI client's MCP configuration settings." },
+    ],
+    snippet: `#!/usr/bin/env node
+import readline from "readline";
+import path from "path";
+import os from "os";
+import fs from "fs";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+
+function getTargetUrl() {
+  if (process.argv[2]) {
+    return process.argv[2];
+  }
+
+  const home = os.homedir();
+  let userDataDir;
+  if (process.platform === "darwin") {
+    userDataDir = path.join(home, "Library", "Application Support", "fikr-studio");
+  } else if (process.platform === "win32") {
+    userDataDir = path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "fikr-studio");
+  } else {
+    userDataDir = path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "fikr-studio");
+  }
+
+  const lockfilePath = path.join(userDataDir, "mcp-port.json");
+  try {
+    if (fs.existsSync(lockfilePath)) {
+      const data = JSON.parse(fs.readFileSync(lockfilePath, "utf8"));
+      if (data && data.url) {
+        return data.url;
+      }
+    }
+  } catch (err) {
+    console.error("Warning: failed to read lockfile at", lockfilePath, err.message);
+  }
+
+  return "http://127.0.0.1:${port}/sse";
+}
+
+async function main() {
+  const url = getTargetUrl();
+
+  const relayKey = process.env.MCP_RELAY_KEY || process.env.MCP_REMOTE_AUTH;
+  const headers = {};
+  if (relayKey) {
+    headers.Authorization = "Bearer " + relayKey.replace("Bearer ", "");
+  }
+
+  const transport = new SSEClientTransport(new URL(url), {
+    eventSourceInit: { headers },
+    requestInit: { headers }
+  });
+
+  transport.onmessage = (message) => {
+    console.log(JSON.stringify(message));
+  };
+
+  transport.onerror = (error) => {
+    console.error("Transport error:", error);
+  };
+
+  transport.onclose = () => {
+    process.exit(0);
+  };
+
+  try {
+    await transport.start();
+  } catch (err) {
+    console.error("Failed to connect to SSE server at " + url + ":", err);
+    process.exit(1);
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    terminal: false
+  });
+
+  rl.on("line", (line) => {
+    if (!line.trim()) return;
+    try {
+      const message = JSON.parse(line);
+      transport.send(message).catch((err) => {
+        console.error("Failed to send message:", err);
+      });
+    } catch (err) {
+      console.error("Failed to parse stdin line:", err);
+    }
+  });
+}
+
+main().catch(console.error);`,
+    snippetLang: "javascript",
+    docsUrl: "https://modelcontextprotocol.io",
+    primaryActionLabel: "Copy Code",
+  },
   ];
 }
 
@@ -367,7 +475,7 @@ function SnippetBox({ label, code, mono = true, children }: { label: string; cod
       </div>
       {/* Code area */}
       {mono ? (
-        <pre className="px-3.5 pb-3.5 text-emerald-400 text-[10.5px] font-mono leading-relaxed overflow-x-auto whitespace-pre max-h-36 overflow-y-auto">
+        <pre className="px-3.5 pb-3.5 text-emerald-400 text-[10.5px] font-mono leading-relaxed overflow-x-auto whitespace-pre max-h-60 overflow-y-auto">
           {code}
         </pre>
       ) : (
@@ -556,6 +664,18 @@ function IntegrationRow({
 }) {
   const isInstalled = status === "installed";
   const isOneClick = integration.connectionType === "1-click";
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(integration.snippet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy snippet: ", err);
+    }
+  };
 
   return (
     <div
@@ -590,6 +710,28 @@ function IntegrationRow({
               <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Installing…</>
             ) : (
               <><Zap className="h-3.5 w-3.5" /> Install</>
+            )}
+          </button>
+        )}
+        {!isOneClick && (
+          <button
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              copied
+                ? "bg-emerald-500/20 text-emerald-400"
+                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+            }`}
+            onClick={handleCopy}
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                Copied
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" />
+                Copy
+              </>
             )}
           </button>
         )}
