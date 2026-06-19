@@ -594,9 +594,20 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   const [statuses, setStatuses] = useState<Record<string, StatusType>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
+  const [copiedUrl, setCopiedUrl] = useState(false);
 
   const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort), [mcpPort]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
+
+  const activePort = mcpPort ?? 3025;
+  const localSseUrl = `http://127.0.0.1:${activePort}/sse`;
+
+  const handleCopyUrl = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(localSseUrl);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2000);
+  };
 
   // Auto-check 1-click integrations on mount
   const checkStatus = useCallback(async (id: string) => {
@@ -641,7 +652,44 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   };
 
   return (
-    <>
+    <div className="space-y-6">
+      {/* Dynamic Port Status Banner */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card/60 via-card/30 to-muted/20 p-5 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="shrink-0 h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mt-0.5">
+              <Plug className="h-5 w-5 text-emerald-500" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm text-foreground">Local MCP Server</h3>
+                <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Active
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md leading-relaxed">
+                Fikr Studio automatically searches for and binds to a free port if conflicts occur. Listening on port <span className="font-semibold text-foreground">{activePort}</span>.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col md:items-end gap-1.5 shrink-0">
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Local SSE Endpoint</span>
+            <div className="flex items-center gap-1.5 bg-black/40 border border-border/20 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-300">
+              <span>{localSseUrl}</span>
+              <button
+                onClick={handleCopyUrl}
+                className="text-zinc-500 hover:text-zinc-200 transition-colors ml-1 p-0.5"
+                title="Copy SSE URL"
+              >
+                {copiedUrl ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-2">
         {INTEGRATIONS.map((integration) => (
           <IntegrationRow
@@ -669,6 +717,6 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
         onUninstall={handleUninstall}
         installing={installing}
       />
-    </>
+    </div>
   );
 }

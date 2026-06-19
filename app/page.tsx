@@ -533,6 +533,8 @@ export default function Page() {
           localStorage.removeItem("nodepad-projects");
           localStorage.removeItem("nodepad-active-project");
           localStorage.removeItem("nodepad-backup");
+        } else if (event.type === "mcp-port-updated") {
+          setMcpPort(event.payload.port);
         }
       },
     );

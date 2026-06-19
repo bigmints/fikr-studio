@@ -403,7 +403,7 @@ ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
   }
   return ok;
 });
-ipcMain.handle("fikr-studio:get-mcp-port", () => MCP_PORT);
+ipcMain.handle("fikr-studio:get-mcp-port", async () => mcpServerReadyPromise);
 ipcMain.handle("fikr-studio:open-auth", async () => {
   shell.openExternal("https://www.fikr.one/login?returnUrl=fikr-studio://auth/callback");
 });
@@ -1555,6 +1555,15 @@ To generate a weekly digest every Friday:
     MCP_PORT = currentPort;
     console.log(`[Fikr Studio] MCP server running at http://localhost:${MCP_PORT}`);
 
+    // Resolve ready promise
+    if (mcpServerReadyResolve) {
+      mcpServerReadyResolve(MCP_PORT);
+    }
+
+    if (mainWindow) {
+      pushToRenderer(mainWindow, "mcp-port-updated", { port: MCP_PORT });
+    }
+
     // Write mcp-port.json lockfile
     try {
       const portData = {
@@ -1588,6 +1597,12 @@ To generate a weekly digest every Friday:
   tryListen(currentPort);
   return server;
 }
+
+// ─── MCP Ready Promise ────────────────────────────────────────────────────────
+let mcpServerReadyResolve;
+const mcpServerReadyPromise = new Promise((resolve) => {
+  mcpServerReadyResolve = resolve;
+});
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 let mainWindow   = null;
