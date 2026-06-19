@@ -58,7 +58,7 @@ const getIntegrations = (mcpPort: number | null, relayApiKey?: string): Integrat
       { label: "Click Install below", detail: "Fikr Studio writes the config and restarts Claude automatically." },
       { label: "Open Claude Desktop", detail: "Start a new conversation — the 🔌 icon shows available tools." },
     ],
-    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { command: "npx", args: ["-y", "fikr-studio-mcp@latest"] } } }, null, 2),
+    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { url: `http://localhost:${port}/sse`, type: "sse" } } }, null, 2),
     snippetLang: "json",
     docsUrl: "https://docs.anthropic.com/en/docs/developer/mcp",
     primaryActionLabel: "Install",
@@ -204,8 +204,8 @@ const getIntegrations = (mcpPort: number | null, relayApiKey?: string): Integrat
     snippet: JSON.stringify({
       mcpServers: {
         "fikr-studio": {
-          command: "npx",
-          args: ["-y", "fikr-studio-mcp@latest"]
+          url: `http://localhost:${port}/sse`,
+          type: "sse"
         }
       }
     }, null, 2),

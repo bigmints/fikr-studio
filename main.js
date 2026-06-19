@@ -595,22 +595,14 @@ ipcMain.handle("fikr-studio:set-intro-seen", () => {
     }
     if (!config.mcpServers) config.mcpServers = {};
 
-    // Find a Node >=20 npx from nvm to avoid Node v14 compatibility errors.
-    // The system PATH may point to an old Node; nvm version dirs are more reliable.
-    const npxCommand = findCompatibleNpx();
-
-    const isDev = process.env.ELECTRON_IS_DEV === "1";
-    if (isDev) {
-      console.log("[Fikr Studio] Using local script for MCP install (dev mode)");
+    if (client === "claude") {
       config.mcpServers["fikr-studio"] = {
-        command: "node",
-        args: [path.join(__dirname, "scripts", "mcp-bridge.mjs"), `http://localhost:${MCP_PORT}/sse`]
+        url: `http://localhost:${MCP_PORT}/sse`,
+        type: "sse"
       };
-    } else {
-      console.log("[Fikr Studio] Using npx for MCP install:", npxCommand);
+    } else if (client === "windsurf") {
       config.mcpServers["fikr-studio"] = {
-        command: npxCommand,
-        args: ["-y", "fikr-studio-mcp@latest", `http://localhost:${MCP_PORT}/sse`]
+        serverUrl: `http://localhost:${MCP_PORT}/sse`
       };
     }
 
