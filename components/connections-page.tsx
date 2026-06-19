@@ -517,20 +517,7 @@ function IntegrationSheet({
 
   const status = statuses[integration.id] ?? "not_configured";
 
-  // Resolve the right config for this integration + plan
-  const cloudKey = relayApiKey || "<your-relay-key>";
-  
-  const config = isMcpClient && isPlusPro
-    ? JSON.stringify({
-        mcpServers: {
-          "fikr-studio": {
-            command: "npx",
-            args: ["-y", "fikr-studio-mcp", "https://fikr.one/api/mcp/relay"],
-            env: { MCP_RELAY_KEY: cloudKey },
-          },
-        },
-      }, null, 2)
-    : integration.snippet;
+  const config = integration.snippet;
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -557,20 +544,19 @@ function IntegrationSheet({
 
           {/* MCP Config box */}
           <SnippetBox label="MCP Config" code={config}>
-            {isMcpClient && !isPlusPro && (
+            {isMcpClient && (
               <div className="px-3.5 py-2 border-t border-white/[0.06]">
-                <p className="text-[11px] text-zinc-500 flex items-center gap-1.5">
-                  Requires Studio running locally.{" "}
-                  <a href="https://fikr.one/pricing" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline inline-flex items-center gap-1">
-                    Upgrade for cloud relay <ExternalLink className="h-3 w-3" />
-                  </a>
-                </p>
-              </div>
-            )}
-            {isMcpClient && isPlusPro && (
-              <div className="px-3.5 py-2 border-t border-white/[0.06]">
-                <p className="text-[11px] text-zinc-500 flex items-center gap-1.5">
-                  ✦ Cloud relay — works without Studio running locally.
+                <p className="text-[11px] text-zinc-500">
+                  {isPlusPro ? (
+                    <>✦ Runs locally. Use <strong>Fikr Cloud Relay</strong> details on the main page to connect remotely.</>
+                  ) : (
+                    <>
+                      Requires Studio running locally.{" "}
+                      <a href="https://fikr.one/pricing" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline inline-flex items-center gap-1">
+                        Upgrade for cloud relay <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </>
+                  )}
                 </p>
               </div>
             )}
@@ -754,6 +740,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
 
+  const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
   const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort), [mcpPort]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
 
@@ -801,6 +788,51 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
 
   return (
     <>
+      {/* Cloud Relay Card */}
+      {isPlusPro ? (
+        <div className="p-4 mb-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.04] to-violet-500/[0.03] space-y-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="font-bold text-[14px] text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+                Fikr Cloud Relay
+              </h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5 max-w-sm leading-relaxed">
+                Connect to Fikr Studio from remote environments or when the local app is closed. Use the endpoint and key below.
+              </p>
+            </div>
+            <span className="text-[10px] font-black uppercase bg-primary/10 text-primary px-2.5 py-0.5 rounded border border-primary/20">
+              Plus / Pro Active
+            </span>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SnippetBox label="Relay Endpoint URL" code="https://fikr.one/api/mcp/relay" mono={true} />
+            <SnippetBox label="Relay API Key" code={relayApiKey || "<your-relay-key>"} mono={true} />
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 mb-5 rounded-2xl border border-dashed border-border bg-muted/10 space-y-3 relative overflow-hidden">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="font-bold text-[14px] text-foreground flex items-center gap-1.5">
+                <Lock className="h-4 w-4 text-muted-foreground" />
+                Fikr Cloud Relay (Remote)
+              </h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5 max-w-sm leading-relaxed">
+                Connect to Fikr from remote environments without keeping the app open. Upgrade to get a dedicated relay endpoint.
+              </p>
+            </div>
+            <button
+              onClick={() => window.open("https://fikr.one/pricing", "_blank")}
+              className="text-[11px] font-bold text-primary hover:underline inline-flex items-center gap-1"
+            >
+              Upgrade to Plus <ExternalLink className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         {INTEGRATIONS.map((integration) => (
           <IntegrationRow
