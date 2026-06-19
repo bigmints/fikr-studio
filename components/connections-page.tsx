@@ -41,7 +41,7 @@ interface Integration {
   primaryActionLabel: string;
 }
 
-const getIntegrations = (mcpPort: number | null): Integration[] => {
+const getIntegrations = (mcpPort: number | null, relayApiKey?: string): Integration[] => {
   const port = mcpPort ? mcpPort.toString() : "3025";
   return [
   {
@@ -161,130 +161,57 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
     primaryActionLabel: "Copy Config",
   },
   {
-    id: "other",
-    name: "Others",
-    tagline: "Connect any other MCP-compatible AI client.",
-    description: "Use this generic configuration to connect any other MCP client (like Cline, LibreChat, or other agent tools) to Fikr Studio.",
+    id: "other-cloud",
+    name: "Others (Cloud)",
+    tagline: "Connect remotely using Fikr Cloud Relay.",
+    description: "Use this JSON configuration to connect any other MCP client (like Cline, LibreChat, or other agent tools) remotely via the Fikr Cloud Relay. Works without Fikr Studio running locally.",
     iconBg: "#4B5563", iconLetter: "O",
     category: "MCP Clients",
     connectionType: "copy-config",
     requiresPlan: null,
     steps: [
-      { label: "Copy config below", detail: "Click Copy to copy the generic configuration snippet." },
+      { label: "Copy config below", detail: "Click Copy to copy the remote configuration snippet." },
       { label: "Paste into your client", detail: "Paste this into your AI client's MCP configuration settings." },
     ],
-    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { command: "npx", args: ["-y", "fikr-studio-mcp@latest"] } } }, null, 2),
+    snippet: JSON.stringify({
+      mcpServers: {
+        "fikr-studio": {
+          command: "npx",
+          args: ["-y", "fikr-studio-mcp", "https://fikr.one/api/mcp/relay"],
+          env: {
+            MCP_RELAY_KEY: relayApiKey || "<your-relay-key>"
+          }
+        }
+      }
+    }, null, 2),
     snippetLang: "json",
     docsUrl: "https://modelcontextprotocol.io",
     primaryActionLabel: "Copy Config",
   },
   {
     id: "other-local",
-    name: "Others (Local Code)",
-    tagline: "Copy the local MCP bridge Node.js script code.",
-    description: "Use this option if you want to run the bridge as a local file without installing from npm. Copy the source code, save it to a local file, install dependencies, and configure your AI client.",
+    name: "Others (Local)",
+    tagline: "Connect locally to your running Fikr Studio app.",
+    description: "Use this JSON configuration to connect any other MCP client (like Cline, LibreChat, or other agent tools) locally to Fikr Studio. Requires Fikr Studio to be running.",
     iconBg: "#10B981", iconLetter: "L",
     category: "MCP Clients",
     connectionType: "copy-config",
     requiresPlan: null,
     steps: [
-      { label: "Copy the code below", detail: "Click Copy to copy the complete bridge source code." },
-      { label: "Save to a local file", detail: "Save the code as `mcp-bridge.mjs` on your computer." },
-      { label: "Install SDK dependency", detail: "Run `npm install @modelcontextprotocol/sdk` in the same folder." },
-      { label: "Add to your client config", detail: "Add the command `node /absolute/path/to/mcp-bridge.mjs` to your AI client's MCP configuration settings." },
+      { label: "Copy config below", detail: "Click Copy to copy the local configuration snippet." },
+      { label: "Paste into your client", detail: "Paste this into your AI client's MCP configuration settings." },
     ],
-    snippet: `#!/usr/bin/env node
-import readline from "readline";
-import path from "path";
-import os from "os";
-import fs from "fs";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-
-function getTargetUrl() {
-  if (process.argv[2]) {
-    return process.argv[2];
-  }
-
-  const home = os.homedir();
-  let userDataDir;
-  if (process.platform === "darwin") {
-    userDataDir = path.join(home, "Library", "Application Support", "fikr-studio");
-  } else if (process.platform === "win32") {
-    userDataDir = path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "fikr-studio");
-  } else {
-    userDataDir = path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "fikr-studio");
-  }
-
-  const lockfilePath = path.join(userDataDir, "mcp-port.json");
-  try {
-    if (fs.existsSync(lockfilePath)) {
-      const data = JSON.parse(fs.readFileSync(lockfilePath, "utf8"));
-      if (data && data.url) {
-        return data.url;
+    snippet: JSON.stringify({
+      mcpServers: {
+        "fikr-studio": {
+          command: "npx",
+          args: ["-y", "fikr-studio-mcp@latest"]
+        }
       }
-    }
-  } catch (err) {
-    console.error("Warning: failed to read lockfile at", lockfilePath, err.message);
-  }
-
-  return "http://127.0.0.1:${port}/sse";
-}
-
-async function main() {
-  const url = getTargetUrl();
-
-  const relayKey = process.env.MCP_RELAY_KEY || process.env.MCP_REMOTE_AUTH;
-  const headers = {};
-  if (relayKey) {
-    headers.Authorization = "Bearer " + relayKey.replace("Bearer ", "");
-  }
-
-  const transport = new SSEClientTransport(new URL(url), {
-    eventSourceInit: { headers },
-    requestInit: { headers }
-  });
-
-  transport.onmessage = (message) => {
-    console.log(JSON.stringify(message));
-  };
-
-  transport.onerror = (error) => {
-    console.error("Transport error:", error);
-  };
-
-  transport.onclose = () => {
-    process.exit(0);
-  };
-
-  try {
-    await transport.start();
-  } catch (err) {
-    console.error("Failed to connect to SSE server at " + url + ":", err);
-    process.exit(1);
-  }
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    terminal: false
-  });
-
-  rl.on("line", (line) => {
-    if (!line.trim()) return;
-    try {
-      const message = JSON.parse(line);
-      transport.send(message).catch((err) => {
-        console.error("Failed to send message:", err);
-      });
-    } catch (err) {
-      console.error("Failed to parse stdin line:", err);
-    }
-  });
-}
-
-main().catch(console.error);`,
-    snippetLang: "javascript",
+    }, null, 2),
+    snippetLang: "json",
     docsUrl: "https://modelcontextprotocol.io",
-    primaryActionLabel: "Copy Code",
+    primaryActionLabel: "Copy Config",
   },
   ];
 }
@@ -741,7 +668,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   const [installing, setInstalling] = useState<string | null>(null);
 
   const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
-  const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort), [mcpPort]);
+  const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort, relayApiKey), [mcpPort, relayApiKey]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
 
   // Auto-check 1-click integrations on mount
