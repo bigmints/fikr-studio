@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Check, Copy, ExternalLink, Loader2, Plug, Zap, AlertTriangle, RefreshCw, Wrench, Sparkles, Lock, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, Zap, AlertTriangle, RefreshCw, Wrench, Sparkles, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -58,7 +58,7 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
       { label: "Click Install below", detail: "Fikr Studio writes the config and restarts Claude automatically." },
       { label: "Open Claude Desktop", detail: "Start a new conversation — the 🔌 icon shows available tools." },
     ],
-    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { command: "npx", args: ["-y", "fikr-studio-mcp@latest", `http://localhost:${port}/sse`] } } }, null, 2),
+    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { command: "npx", args: ["-y", "fikr-studio-mcp@latest"] } } }, null, 2),
     snippetLang: "json",
     docsUrl: "https://docs.anthropic.com/en/docs/developer/mcp",
     primaryActionLabel: "Install",
@@ -589,44 +589,13 @@ function IntegrationRow({
 // -- Page Component --
 export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageProps) {
   const ipc = useIpc();
-  const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
 
   const [statuses, setStatuses] = useState<Record<string, StatusType>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
 
   const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort), [mcpPort]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
-
-  const claudeStatus = statuses["claude"] ?? "not_configured";
-  const windsurfStatus = statuses["windsurf"] ?? "not_configured";
-
-  // Generic connection config snippet for Copy Connection Code action (port-agnostic)
-  const genericSnippet = isPlusPro
-    ? JSON.stringify({
-        mcpServers: {
-          "fikr-studio": {
-            command: "npx",
-            args: ["-y", "fikr-studio-mcp", "https://fikr.one/api/mcp/relay"],
-            env: { MCP_RELAY_KEY: relayApiKey || "<your-relay-key>" }
-          }
-        }
-      }, null, 2)
-    : JSON.stringify({
-        mcpServers: {
-          "fikr-studio": {
-            command: "npx",
-            args: ["-y", "fikr-studio-mcp"]
-          }
-        }
-      }, null, 2);
-
-  const handleCopyGenericCode = async () => {
-    await navigator.clipboard.writeText(genericSnippet);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
-  };
 
   // Auto-check 1-click integrations on mount
   const checkStatus = useCallback(async (id: string) => {
@@ -671,92 +640,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   };
 
   return (
-    <div className="space-y-6">
-      {/* Connection Action Banner */}
-      <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card/60 via-card/30 to-muted/20 p-5 shadow-xs">
-        <div className="space-y-4">
-          <div className="flex items-start gap-3.5">
-            <div className="shrink-0 h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mt-0.5">
-              <Plug className="h-5 w-5 text-emerald-500" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-sm text-foreground">Connect Fikr to your AI Assistants</h3>
-                <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Active
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
-                Automatically link Fikr Studio with Claude Desktop or Windsurf, or copy the connection code to paste into Cursor, VS Code, and other tools.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 pt-1 pl-0.5">
-            {/* 1-Click Connect Claude */}
-            <Button
-              size="sm"
-              variant={claudeStatus === "installed" ? "secondary" : "default"}
-              onClick={() => {
-                if (claudeStatus === "installed") {
-                  handleUninstall("claude");
-                } else {
-                  handleInstall("claude");
-                }
-              }}
-              disabled={installing === "claude"}
-              className="font-bold text-xs px-4 h-9 cursor-pointer"
-            >
-              {installing === "claude" ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Connecting...</>
-              ) : claudeStatus === "installed" ? (
-                <><Check className="h-3.5 w-3.5 mr-1.5 text-emerald-500" /> Connected to Claude</>
-              ) : (
-                <><Zap className="h-3.5 w-3.5 mr-1.5" /> 1-Click Connect Claude</>
-              )}
-            </Button>
-
-            {/* 1-Click Connect Windsurf */}
-            <Button
-              size="sm"
-              variant={windsurfStatus === "installed" ? "secondary" : "default"}
-              onClick={() => {
-                if (windsurfStatus === "installed") {
-                  handleUninstall("windsurf");
-                } else {
-                  handleInstall("windsurf");
-                }
-              }}
-              disabled={installing === "windsurf"}
-              className="font-bold text-xs px-4 h-9 cursor-pointer"
-            >
-              {installing === "windsurf" ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Connecting...</>
-              ) : windsurfStatus === "installed" ? (
-                <><Check className="h-3.5 w-3.5 mr-1.5 text-emerald-500" /> Connected to Windsurf</>
-              ) : (
-                <><Zap className="h-3.5 w-3.5 mr-1.5" /> 1-Click Connect Windsurf</>
-              )}
-            </Button>
-
-            {/* Generic Copy Connection Code */}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCopyGenericCode}
-              className="font-semibold text-xs px-4 h-9 cursor-pointer"
-            >
-              {copiedCode ? (
-                <><Check className="h-3.5 w-3.5 mr-1.5 text-emerald-500" /> Copied Code</>
-              ) : (
-                <><Copy className="h-3.5 w-3.5 mr-1.5" /> Copy Connection Code</>
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-
+    <>
       <div className="space-y-2">
         {INTEGRATIONS.map((integration) => (
           <IntegrationRow
@@ -784,6 +668,6 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
         onUninstall={handleUninstall}
         installing={installing}
       />
-    </div>
+    </>
   );
 }
