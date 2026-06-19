@@ -41,7 +41,7 @@ interface Integration {
   primaryActionLabel: string;
 }
 
-const getIntegrations = (mcpPort: number | null, relayApiKey?: string): Integration[] => {
+const getIntegrations = (mcpPort: number | null): Integration[] => {
   const port = mcpPort ? mcpPort.toString() : "3025";
   return [
   {
@@ -142,58 +142,11 @@ const getIntegrations = (mcpPort: number | null, relayApiKey?: string): Integrat
     primaryActionLabel: "Copy Config",
   },
   {
-    id: "github",
-    name: "GitHub MCP",
-    tagline: "Browse issues, PRs, repos, and CI status from your AI.",
-    description: "Connect your AI client to GitHub. Read issues, PRs, repos, and CI/CD status — all accessible from Claude, Cursor, etc. Official GitHub MCP server (29.5k ⭐).",
-    iconSrc: "/brand-icons/github.svg",
-    iconBg: "#24292e", iconLetter: "G",
-    category: "MCP Clients",
-    connectionType: "copy-config",
-    requiresPlan: null,
-    steps: [
-      { label: "Copy config below", detail: "Add to your MCP client config (Claude, Cursor, etc)." },
-      { label: "Authenticate", detail: "First use triggers GitHub OAuth — no token stored manually." },
-    ],
-    snippet: JSON.stringify({ servers: { github: { type: "http", url: "https://api.githubcopilot.com/mcp/" } } }, null, 2),
-    snippetLang: "json",
-    docsUrl: "https://github.com/github/github-mcp-server",
-    primaryActionLabel: "Copy Config",
-  },
-  {
-    id: "other-cloud",
-    name: "Others (Cloud)",
-    tagline: "Connect remotely using Fikr Cloud Relay.",
-    description: "Use this JSON configuration to connect any other MCP client (like Cline, LibreChat, or other agent tools) remotely via the Fikr Cloud Relay. Works without Fikr Studio running locally.",
-    iconBg: "#4B5563", iconLetter: "O",
-    category: "MCP Clients",
-    connectionType: "copy-config",
-    requiresPlan: null,
-    steps: [
-      { label: "Copy config below", detail: "Click Copy to copy the remote configuration snippet." },
-      { label: "Paste into your client", detail: "Paste this into your AI client's MCP configuration settings." },
-    ],
-    snippet: JSON.stringify({
-      mcpServers: {
-        "fikr-studio": {
-          command: "npx",
-          args: ["-y", "fikr-studio-mcp", "https://fikr.one/api/mcp/relay"],
-          env: {
-            MCP_RELAY_KEY: relayApiKey || "<your-relay-key>"
-          }
-        }
-      }
-    }, null, 2),
-    snippetLang: "json",
-    docsUrl: "https://modelcontextprotocol.io",
-    primaryActionLabel: "Copy Config",
-  },
-  {
-    id: "other-local",
-    name: "Others (Local)",
-    tagline: "Connect locally to your running Fikr Studio app.",
+    id: "other",
+    name: "Others",
+    tagline: "Connect any other MCP-compatible AI client.",
     description: "Use this JSON configuration to connect any other MCP client (like Cline, LibreChat, or other agent tools) locally to Fikr Studio. Requires Fikr Studio to be running.",
-    iconBg: "#10B981", iconLetter: "L",
+    iconBg: "#4B5563", iconLetter: "O",
     category: "MCP Clients",
     connectionType: "copy-config",
     requiresPlan: null,
@@ -668,7 +621,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   const [installing, setInstalling] = useState<string | null>(null);
 
   const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
-  const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort, relayApiKey), [mcpPort, relayApiKey]);
+  const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort), [mcpPort]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
 
   // Auto-check 1-click integrations on mount
