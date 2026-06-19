@@ -595,7 +595,6 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [showConnectSheet, setShowConnectSheet] = useState(false);
 
   const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort), [mcpPort]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
@@ -675,36 +674,73 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
     <div className="space-y-6">
       {/* Connection Action Banner */}
       <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card/60 via-card/30 to-muted/20 p-5 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="space-y-4">
           <div className="flex items-start gap-3.5">
             <div className="shrink-0 h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mt-0.5">
               <Plug className="h-5 w-5 text-emerald-500" />
             </div>
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-sm text-foreground">Connect Fikr to your AI Assistants</h3>
                 <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Active
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground max-w-md leading-relaxed">
-                Connect Fikr Studio to your AI tools to let them read, write, and search your notes.
+              <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+                Automatically link Fikr Studio with Claude Desktop or Windsurf, or copy the connection code to paste into Cursor, VS Code, and other tools.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            {/* 1-Click Connect */}
+          <div className="flex flex-wrap items-center gap-3 pt-1 pl-0.5">
+            {/* 1-Click Connect Claude */}
             <Button
               size="sm"
-              onClick={() => setShowConnectSheet(true)}
+              variant={claudeStatus === "installed" ? "secondary" : "default"}
+              onClick={() => {
+                if (claudeStatus === "installed") {
+                  handleUninstall("claude");
+                } else {
+                  handleInstall("claude");
+                }
+              }}
+              disabled={installing === "claude"}
               className="font-bold text-xs px-4 h-9 cursor-pointer"
             >
-              <Zap className="h-3.5 w-3.5 mr-1.5" /> 1-Click Connect
+              {installing === "claude" ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Connecting...</>
+              ) : claudeStatus === "installed" ? (
+                <><Check className="h-3.5 w-3.5 mr-1.5 text-emerald-500" /> Connected to Claude</>
+              ) : (
+                <><Zap className="h-3.5 w-3.5 mr-1.5" /> 1-Click Connect Claude</>
+              )}
             </Button>
 
-            {/* Generic Copy Code */}
+            {/* 1-Click Connect Windsurf */}
+            <Button
+              size="sm"
+              variant={windsurfStatus === "installed" ? "secondary" : "default"}
+              onClick={() => {
+                if (windsurfStatus === "installed") {
+                  handleUninstall("windsurf");
+                } else {
+                  handleInstall("windsurf");
+                }
+              }}
+              disabled={installing === "windsurf"}
+              className="font-bold text-xs px-4 h-9 cursor-pointer"
+            >
+              {installing === "windsurf" ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Connecting...</>
+              ) : windsurfStatus === "installed" ? (
+                <><Check className="h-3.5 w-3.5 mr-1.5 text-emerald-500" /> Connected to Windsurf</>
+              ) : (
+                <><Zap className="h-3.5 w-3.5 mr-1.5" /> 1-Click Connect Windsurf</>
+              )}
+            </Button>
+
+            {/* Generic Copy Connection Code */}
             <Button
               size="sm"
               variant="outline"
@@ -734,75 +770,6 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
           />
         ))}
       </div>
-
-      {/* 1-Click Connect App Selector Sheet */}
-      <Sheet open={showConnectSheet} onOpenChange={setShowConnectSheet}>
-        <SheetContent side="right" className="w-full sm:max-w-[400px] p-6 bg-background border-l border-border/20 flex flex-col">
-          <SheetHeader className="mb-6">
-            <SheetTitle className="text-base font-bold flex items-center gap-2">
-              <Zap className="h-5 w-5 text-primary" />
-              1-Click Connect AI Apps
-            </SheetTitle>
-            <SheetDescription className="text-xs">
-              Select a supported AI app to automatically configure it to connect with Fikr Studio.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="space-y-4">
-            {/* Claude Desktop Option */}
-            <div className="p-4 rounded-xl border border-border/40 bg-card hover:bg-muted/30 transition-colors flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-[#D97757]/10 flex items-center justify-center font-bold text-[#D97757] text-sm">C</div>
-                <div>
-                  <h4 className="font-semibold text-xs text-foreground">Claude Desktop</h4>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Status: {claudeStatus === "installed" ? "Connected" : "Not connected"}</p>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant={claudeStatus === "installed" ? "secondary" : "default"}
-                onClick={() => {
-                  if (claudeStatus === "installed") {
-                    handleUninstall("claude");
-                  } else {
-                    handleInstall("claude");
-                  }
-                }}
-                disabled={installing === "claude"}
-                className="text-[10px] h-8 font-bold px-3 cursor-pointer"
-              >
-                {installing === "claude" ? "Loading..." : claudeStatus === "installed" ? "Disconnect" : "Connect"}
-              </Button>
-            </div>
-
-            {/* Windsurf Option */}
-            <div className="p-4 rounded-xl border border-border/40 bg-card hover:bg-muted/30 transition-colors flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-[#3CA6A6]/10 flex items-center justify-center font-bold text-[#3CA6A6] text-sm">W</div>
-                <div>
-                  <h4 className="font-semibold text-xs text-foreground">Windsurf</h4>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Status: {windsurfStatus === "installed" ? "Connected" : "Not connected"}</p>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant={windsurfStatus === "installed" ? "secondary" : "default"}
-                onClick={() => {
-                  if (windsurfStatus === "installed") {
-                    handleUninstall("windsurf");
-                  } else {
-                    handleInstall("windsurf");
-                  }
-                }}
-                disabled={installing === "windsurf"}
-                className="text-[10px] h-8 font-bold px-3 cursor-pointer"
-              >
-                {installing === "windsurf" ? "Loading..." : windsurfStatus === "installed" ? "Disconnect" : "Connect"}
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
 
       {/* Detail Sheet */}
       <IntegrationSheet
