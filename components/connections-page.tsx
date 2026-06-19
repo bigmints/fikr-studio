@@ -160,8 +160,26 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
     docsUrl: "https://github.com/github/github-mcp-server",
     primaryActionLabel: "Copy Config",
   },
+  {
+    id: "other",
+    name: "Others",
+    tagline: "Connect any other MCP-compatible AI client.",
+    description: "Use this generic configuration to connect any other MCP client (like Cline, LibreChat, or other agent tools) to Fikr Studio.",
+    iconBg: "#4B5563", iconLetter: "O",
+    category: "MCP Clients",
+    connectionType: "copy-config",
+    requiresPlan: null,
+    steps: [
+      { label: "Copy config below", detail: "Click Copy to copy the generic configuration snippet." },
+      { label: "Paste into your client", detail: "Paste this into your AI client's MCP configuration settings." },
+    ],
+    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { command: "npx", args: ["-y", "fikr-studio-mcp@latest"] } } }, null, 2),
+    snippetLang: "json",
+    docsUrl: "https://modelcontextprotocol.io",
+    primaryActionLabel: "Copy Config",
+  },
   ];
-};
+}
 
 // -- Helpers --
 function useIpc() {
