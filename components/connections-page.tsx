@@ -678,7 +678,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
                 Fikr Cloud Relay
               </h3>
               <p className="text-[11px] text-muted-foreground mt-0.5 max-w-sm leading-relaxed">
-                Connect to Fikr Studio from remote environments or when the local app is closed. Use the endpoint and key below.
+                Connect to Fikr Studio from remote environments. Copy the prompt below and send it to your AI assistant.
               </p>
             </div>
             <span className="text-[10px] font-black uppercase bg-primary/10 text-primary px-2.5 py-0.5 rounded border border-primary/20">
@@ -686,10 +686,11 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
             </span>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <SnippetBox label="Relay Endpoint URL" code="https://fikr.one/api/mcp/relay" mono={true} />
-            <SnippetBox label="Relay API Key" code={relayApiKey || "<your-relay-key>"} mono={true} />
-          </div>
+          <SnippetBox
+            label="Agent Connection Prompt"
+            code={`Connect to my Fikr workspace using the Fikr Cloud Relay. Here is my connection information:\n- Relay Endpoint URL: https://fikr.one/api/mcp/relay\n- Relay API Key: ${relayApiKey || "<your-relay-key>"}`}
+            mono={false}
+          />
         </div>
       ) : (
         <div className="p-4 mb-5 rounded-2xl border border-dashed border-border bg-muted/10 space-y-3 relative overflow-hidden">
