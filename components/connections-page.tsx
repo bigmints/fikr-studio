@@ -690,6 +690,24 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
             <SnippetBox label="Relay Endpoint URL" code="https://fikr.one/api/mcp/relay" mono={true} />
             <SnippetBox label="Relay API Key" code={relayApiKey || "<your-relay-key>"} mono={true} />
           </div>
+
+          <div className="mt-1">
+            <SnippetBox
+              label="MCP Config Snippet (Remote Relay)"
+              code={JSON.stringify({
+                mcpServers: {
+                  "fikr-studio-remote": {
+                    command: "npx",
+                    args: ["-y", "fikr-studio-mcp", "https://fikr.one/api/mcp/relay"],
+                    env: {
+                      MCP_RELAY_KEY: relayApiKey || "<your-relay-key>"
+                    }
+                  }
+                }
+              }, null, 2)}
+              mono={true}
+            />
+          </div>
         </div>
       ) : (
         <div className="p-4 mb-5 rounded-2xl border border-dashed border-border bg-muted/10 space-y-3 relative overflow-hidden">
