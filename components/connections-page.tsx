@@ -700,15 +700,15 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
             <TabsContent value="agent-prompt">
               <SnippetBox
                 label="Agent Connection Prompt"
-                code={`Fetch https://fikr.one/skills/fikr-studio.md and follow the instructions to connect to Fikr Studio.\n\n### Connection Information:\n- Relay Endpoint URL: https://fikr.one/api/mcp/relay\n- Relay API Key: ${relayApiKey || "<your-relay-key>"}`}
+                code={`Connect to my Fikr workspace via the Fikr Cloud Relay. The MCP server runs locally inside my Fikr Studio desktop app, and the cloud relay tunnels requests securely.\n\n### Connection Information:\n- Relay Endpoint URL: https://fikr.one/api/mcp/relay\n- Relay API Key: ${relayApiKey || "<your-relay-key>"}\n\n### How to connect:\n1. Fetch the official agent skill at https://fikr.one/skills/fikr-studio.md to understand the available note-taking, search, and canvas tools.\n2. Connect and call the tools using either the SSE protocol or by sending Stateless JSON-RPC HTTP POST requests directly to the Relay Endpoint URL with the Bearer authorization header.`}
                 mono={false}
               />
             </TabsContent>
 
             <TabsContent value="manual-instructions">
               <SnippetBox
-                label="Manual Connection Details"
-                code={`Connect to my Fikr workspace via the Fikr Cloud Relay. The MCP server runs locally inside my Fikr Studio desktop app, and the cloud relay tunnels requests securely.\n\n### Connection Information:\n- Relay Endpoint URL: https://fikr.one/api/mcp/relay\n- Relay API Key: ${relayApiKey || "<your-relay-key>"}\n\n### How to connect:\n1. Model Context Protocol (SSE Transport):\n   - Establish a Server-Sent Events (SSE) connection (GET) to the Relay Endpoint URL.\n   - Include Header: Authorization: Bearer ${relayApiKey || "<your-relay-key>"}\n   - POST JSON-RPC payloads to the endpoint URL returned by the initial SSE event.\n\n2. Stateless Webhook (POST):\n   - If you want to invoke a tool directly without a persistent SSE stream, send an HTTP POST request to the Relay Endpoint URL with the Bearer authorization header.\n\n### Example curl to list projects:\ncurl -X POST https://fikr.one/api/mcp/relay \\\n  -H "Authorization: Bearer ${relayApiKey || "<your-relay-key>"}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_projects","arguments":{}},"id":1}'`}
+                label="How to connect"
+                code={`Whether you want to configure a desktop application or run custom commands, follow the steps below:\n\n### Option 1 — Copy & Paste to your AI assistant (Easiest)\n1. Copy the prompt from the "For AI Agents" tab.\n2. Paste it directly into your AI agent's chat window (e.g. ChatGPT, Claude, Gemini).\n\n### Option 2 — Configure Desktop Clients (Cursor, Claude Desktop, Windsurf)\nAdd this to your client's MCP configuration settings:\n\`\`\`json\n{\n  "mcpServers": {\n    "fikr-studio": {\n      "command": "npx",\n      "args": ["-y", "fikr-studio-mcp", "https://fikr.one/api/mcp/relay"],\n      "env": { "MCP_RELAY_KEY": "${relayApiKey || "<your-relay-key>"}" }\n    }\n  }\n}\n\`\`\`\n\n### Option 3 — Developer HTTP API (Curl)\nRun this curl command in your terminal to verify connection:\n\`\`\`bash\ncurl -X POST https://fikr.one/api/mcp/relay \\\n  -H "Authorization: Bearer ${relayApiKey || "<your-relay-key>"}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_projects","arguments":{}},"id":1}'\n\`\`\``}
                 mono={false}
               />
             </TabsContent>
