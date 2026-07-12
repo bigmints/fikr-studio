@@ -60,6 +60,21 @@ npm run electron:build
 
 You will be prompted by macOS Keychain to authorize `codesign` — click **Always Allow** (or run the one-time setup above).
 
+electron-builder notarizes the app before it creates the disk image. Sign and
+notarize the final DMG separately so Gatekeeper can validate the image itself:
+
+```bash
+VERSION="$(node -p \"require('./package.json').version\")"
+DMG="dist/Fikr Studio-${VERSION}-arm64.dmg"
+codesign --force \
+  --sign "Developer ID Application: Pretheesh Thomas (FBG8NKYPUJ)" \
+  --timestamp "$DMG"
+xcrun notarytool submit "$DMG" \
+  --keychain-profile "notarytool-profile" \
+  --wait
+xcrun stapler staple "$DMG"
+```
+
 ## 3. Verify the exact artifacts
 
 Replace the version in the DMG filename with the release candidate version.

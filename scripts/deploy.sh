@@ -35,6 +35,15 @@ APPLE_KEYCHAIN_PROFILE="notarytool-profile" \
 APPLE_TEAM_ID="FBG8NKYPUJ" \
 npx electron-builder build --mac -p never
 
+echo "Signing and notarizing the final DMG..."
+codesign --force \
+  --sign "Developer ID Application: Pretheesh Thomas (FBG8NKYPUJ)" \
+  --timestamp "$DMG"
+xcrun notarytool submit "$DMG" \
+  --keychain-profile "notarytool-profile" \
+  --wait
+xcrun stapler staple "$DMG"
+
 node scripts/verify-macos-release.mjs "$APP" "$DMG" "$ZIP"
 
 echo "Publishing a draft GitHub release for ${VERSION}..."
