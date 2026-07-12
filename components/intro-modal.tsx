@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Cloud, Key, ChevronDown, Check, Bell, ChevronRight, Eye, EyeOff, Sparkles, Wand2 } from "lucide-react"
-import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase"
+import { getFirebaseAuth } from "@/lib/firebase"
 import { onAuthStateChanged, User, signInWithCustomToken } from "firebase/auth"
-import { doc, onSnapshot } from "firebase/firestore"
 import { useAISettings, AI_PROVIDER_PRESETS, type AIProvider, getPreset } from "@/lib/ai-settings"
 import { analytics } from "@/lib/analytics"
 import pkg from "../package.json"
@@ -59,19 +58,19 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
     return () => { document.body.style.overflow = "" }
   }, [open])
 
-  // Firebase Auth listener
+  // Firebase auth listener; plan authority comes from verified fikr.one APIs.
   useEffect(() => {
     const auth = getFirebaseAuth()
-    const db = getFirebaseDb()
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser)
       if (currentUser) {
-        onSnapshot(doc(db, "users", currentUser.uid), (snap) => {
-          if (snap.exists()) {
-            setUserPlan(snap.data().plan || "Free")
-          }
-        })
+        const token = await currentUser.getIdToken().catch(() => null)
+        const ipc = (window as any).fikrStudio
+        const profile = token && ipc?.setUser
+          ? await ipc.setUser(currentUser.uid, token).catch(() => null)
+          : null
+        setUserPlan(profile?.plan || "Free")
       } else {
         setUserPlan("Free")
       }
@@ -185,10 +184,10 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                     className="flex flex-col h-full"
                   >
                     <h2 className="text-2xl font-bold text-foreground mb-3">
-                      Intelligence emerges.
+                      Capture first. Enrich when you choose.
                     </h2>
                     <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-                      Fikr Studio is your spatial thinking environment. Capture raw thoughts, and watch as AI automatically categorises, annotates, and weaves them together in real-time.
+                      Notes stay available locally. Configure your own provider or sign in with an eligible plan when you want AI classification and annotation.
                     </p>
                     
                     <div className="space-y-4 flex-1">
@@ -197,8 +196,8 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                           <Wand2 className="h-4 w-4" />
                         </div>
                         <div>
-                          <h3 className="text-foreground text-sm font-semibold mb-0.5">Zero-friction capture</h3>
-                          <p className="text-xs text-muted-foreground leading-relaxed">No folders. No tags. Just type and hit enter. The engine structures everything seamlessly.</p>
+                          <h3 className="text-foreground text-sm font-semibold mb-0.5">Local-first capture</h3>
+                          <p className="text-xs text-muted-foreground leading-relaxed">Write and organize notes without an account. AI enrichment is optional and clearly configured.</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-4">
@@ -206,7 +205,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                           <Sparkles className="h-4 w-4" />
                         </div>
                         <div>
-                          <h3 className="text-foreground text-sm font-semibold mb-0.5">Infinite spatial canvas</h3>
+                          <h3 className="text-foreground text-sm font-semibold mb-0.5">Multiple workspace views</h3>
                           <p className="text-xs text-muted-foreground leading-relaxed">See the shape of your thoughts. Navigate visually and let unexpected connections surface.</p>
                         </div>
                       </div>

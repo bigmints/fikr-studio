@@ -102,7 +102,7 @@ export default function Page() {
     try {
       let data;
       if (typeof window !== "undefined" && (window as any).fikrStudio?.getUsage) {
-        data = await (window as any).fikrStudio.getUsage(token);
+        data = await (window as any).fikrStudio.getUsage();
       } else {
         // Fallback for non-Electron contexts (if any)
         const res = await fetch("https://fikr.one/api/user/usage", {
@@ -131,7 +131,7 @@ export default function Page() {
       if (relayKey !== undefined) setCloudRelayKey(relayKey);
       setCloudIdToken(idToken);
       setCloudPlan(plan);
-      // ── Send UID + ID token to main process so Firestore sync can fire ─────
+      // Send only the ID token; main verifies identity and plan through fikr.one.
       if (typeof window !== "undefined" && (window as any).fikrStudio?.setUser) {
         (window as any).fikrStudio.setUser(user?.uid ?? null, idToken ?? null);
       }
@@ -164,6 +164,7 @@ export default function Page() {
     setSettingsOpen(true);
   };
   const [mcpPort, setMcpPort] = useState<number | null>(null);
+  const [mcpToken, setMcpToken] = useState<string | null>(null);
   const [activeApp, setActiveApp] = useState("Fikr Intel");
   const [isIntroOpen, setIsIntroOpen] = useState(false);
   const [showHelpTooltip, setShowHelpTooltip] = useState(false);
@@ -405,10 +406,13 @@ export default function Page() {
       }
 
 
-      if (ipc && ipc.getMcpPort) {
+      if (ipc && ipc.getMcpConnection) {
         ipc
-          .getMcpPort()
-          .then((port: number) => setMcpPort(port))
+          .getMcpConnection()
+          .then(({ port, token }: { port: number; token: string }) => {
+            setMcpPort(port);
+            setMcpToken(token);
+          })
           .catch(console.error);
       }
 
@@ -503,7 +507,7 @@ export default function Page() {
           const { project } = event.payload;
           setProjects((prev) => [...prev, project]);
         } else if (event.type === "workspace-synced") {
-          // Main process pushed a fresh workspace from Firestore after sign-in.
+          // Main process pushed a server-authorized cloud workspace after sign-in.
           // Replace local state with cloud data. Suppress the save-on-change effect
           // so we don't immediately re-upload the stale pre-sync state.
           const workspace = event.payload;
@@ -542,7 +546,7 @@ export default function Page() {
     return cleanup;
   }, []);
 
-  // Hidden file input for .nodepad import — triggered from sidebar or ⌘K
+  // Hidden file input for .fikrdata import — triggered from sidebar or ⌘K
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportFile = useCallback(
@@ -564,7 +568,7 @@ export default function Page() {
             alert(err.message);
           } else {
             alert(
-              "Could not import file — make sure it's a valid .nodepad file.",
+              "Could not import file — make sure it's a valid .fikrdata file.",
             );
           }
         }
@@ -706,14 +710,12 @@ export default function Page() {
     params: import("@/lib/generate/types").GenerateParams,
     projectName: string,
   ) => {
-    console.log("[Studio] handleStudioGenerate called", { projectId, projectName, params });
     const { streamGenerate } = await import("@/lib/generate/generate-stream");
 
     let outputMarkdown = "";
     let flushBuffer = "";
     const FLUSH_EVERY = 150; // flush to state every ~150 chars for streaming feel
     try {
-      console.log("[Studio] calling streamGenerate...");
       const result = await streamGenerate(
         params,
         (chunk) => {
@@ -729,8 +731,6 @@ export default function Page() {
         },
         new AbortController().signal,
       );
-      console.log("[Studio] streamGenerate done, length:", outputMarkdown.length);
-
       setStudioProjects((prev) => {
         const updated = prev.map((p: any) => {
           if (p.id !== projectId) return p;
@@ -1173,7 +1173,6 @@ export default function Page() {
 
         setTimeout(() => generateGhostNote(projectId), 2500);
       } catch (e: any) {
-        console.warn(e);
         const isAbort = e?.name === "AbortError" || e?.message?.includes("abort") || false;
         
         // If it's an abort, it was explicitly cancelled by a newer request or timeout. Do not mutate state here.
@@ -1944,6 +1943,7 @@ export default function Page() {
           {activeApp === "Connections" ? (
             <ConnectionsPage
               mcpPort={mcpPort}
+              mcpToken={mcpToken}
               plan={cloudPlan}
               relayApiKey={cloudRelayKey}
             />
@@ -2185,6 +2185,7 @@ export default function Page() {
           aiSettings={settings}
           onUpdateAISettings={updateSettings}
           mcpPort={mcpPort}
+          mcpToken={mcpToken}
           onClose={() => setSettingsOpen(false)}
           onAuthChange={handleAuthChange}
         />

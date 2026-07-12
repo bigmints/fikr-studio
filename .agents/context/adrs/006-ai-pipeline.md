@@ -1,7 +1,7 @@
 # ADR 006 — AI Pipeline (Local Embeddings + Note Synthesis + Ghost Notes)
 
 **Date:** 2026-01-01
-**Status:** Accepted
+**Status:** Superseded by ADR 007
 **Scope:** `fikr-studio/` Electron app
 
 ---

@@ -3,13 +3,12 @@
 import { detectContentType } from "@/lib/detect-content-type";
 import {
   loadAIConfig,
-  getBaseUrl,
-  getProviderHeaders,
   resolveModel,
   getManagedAuthStatus,
 } from "@/lib/ai-settings";
 import type { ContentType } from "@/lib/content-types";
 import { LOCAL_AI_CONFIG } from "@/local-ai.config";
+import { requestByokAi } from "@/lib/ai-provider-request";
 
 // ── Provider error parser ─────────────────────────────────────────────────────
 
@@ -447,8 +446,8 @@ export async function enrichBlockClient(
 
   // Resolve the model for the synthesis/analysis task (if not managed)
   let model = isManaged ? "managed" : resolveModel(config!, "analysis");
-  let actualBaseUrl = config ? getBaseUrl(config) : "";
-  let actualHeaders = config ? getProviderHeaders(config) : {};
+  let actualBaseUrl = "";
+  let actualHeaders: Record<string, string> = {};
 
   if (isDevOverride) {
     actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
@@ -582,10 +581,7 @@ You have live web access. For this note type, include 1–2 real source citation
       rawContent = responseData.response;
       
     } else {
-      response = await fetch(`${actualBaseUrl}/chat/completions`, {
-        method: "POST",
-        headers: actualHeaders,
-        body: JSON.stringify({
+      const providerBody = {
           model,
           max_tokens: MAX_ENRICH_OUTPUT_TOKENS,
           messages: [
@@ -602,9 +598,12 @@ You have live web access. For this note type, include 1–2 real source citation
                   : { response_format: { type: "json_object" } }),
                 temperature: 0.1,
               }),
-        }),
-        signal: controller.signal,
-      });
+      };
+      response = isDevOverride
+        ? await fetch(`${actualBaseUrl}/chat/completions`, {
+            method: "POST", headers: actualHeaders, body: JSON.stringify(providerBody), signal: controller.signal,
+          })
+        : await requestByokAi(config!.provider, providerBody);
 
       if (!response.ok) {
         throw new Error(await parseProviderError(response));

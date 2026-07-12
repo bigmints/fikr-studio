@@ -831,7 +831,7 @@ export function GraphArea({
             if (!node) return null;
             const text = node.isSynthesis
               ? (node.synthesisText ?? "Synthesis")
-              : (node.block?.text ?? "");
+              : (node.block?.annotation || node.block?.text || "");
             const config = node.block
               ? CONTENT_TYPE_CONFIG[node.block.contentType]
               : null;

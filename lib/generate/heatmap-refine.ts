@@ -2,12 +2,11 @@
 
 import {
   loadAIConfig,
-  getBaseUrl,
-  getProviderHeaders,
   resolveModel,
   getManagedAuthStatus,
 } from "@/lib/ai-settings";
 import type { HeatAnnotation, GenerateParams } from "./types";
+import { requestByokAi } from "@/lib/ai-provider-request";
 
 const HEAT_INSTRUCTIONS: Record<string, string> = {
   hot:     "Expand and amplify this section. Add more detail, energy, and supporting examples. Make it more prominent and compelling.",
@@ -86,10 +85,7 @@ OUTPUT: Return ONLY the rewritten paragraph. No preamble, no quotes, no explanat
       const model = resolveModel(config, "analysis");
       if (!model) throw new Error(`No model for provider "${config.provider}".`);
 
-      const res = await fetch(`${getBaseUrl(config)}/chat/completions`, {
-        method: "POST",
-        headers: getProviderHeaders(config),
-        body: JSON.stringify({
+      const res = await requestByokAi(config.provider, {
           model,
           max_tokens: 800,
           temperature: 0.6,
@@ -97,8 +93,6 @@ OUTPUT: Return ONLY the rewritten paragraph. No preamble, no quotes, no explanat
             { role: "system", content: systemPrompt },
             { role: "user",   content: userMessage },
           ],
-        }),
-        signal: controller.signal,
       });
 
       if (!res.ok) throw new Error(`${config.provider} error: ${await parseProviderError(res)}`);

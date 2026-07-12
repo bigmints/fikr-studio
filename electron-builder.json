@@ -1,14 +1,22 @@
 {
-  "appId": "com.fikr-studio.app",
+  "appId": "com.fikr.studio",
   "productName": "Fikr Studio",
   "directories": {
     "output": "dist"
   },
+  "afterPack": "scripts/after-pack.js",
+  "protocols": [
+    {
+      "name": "Fikr Studio Authentication",
+      "schemes": ["fikr-studio"]
+    }
+  ],
   "publish": [
     {
       "provider": "github",
       "owner": "Bigmints-com",
-      "repo": "fikr-studio"
+      "repo": "fikr-studio",
+      "releaseType": "draft"
     }
   ],
   "files": [
@@ -16,14 +24,16 @@
     "main.js",
     "preload.js",
     "package.json",
-    "lib/**/*",
-    "scripts/**/*"
+    "lib/*.js",
+    "scripts/mcp-bridge.mjs"
   ],
   "mac": {
     "category": "public.app-category.productivity",
     "target": ["dmg", "zip"],
     "hardenedRuntime": true,
-    "identity": "Pretheesh Thomas (FBG8NKYPUJ)"
+    "identity": "Pretheesh Thomas (FBG8NKYPUJ)",
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.inherit.plist"
   },
   "dmg": {
     "contents": [

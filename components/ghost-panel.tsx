@@ -169,7 +169,7 @@ export function GhostPanel({
         {/* Footer */}
         <div className="border-t-0 px-3 py-2.5 shrink-0">
           <p className="text-[10px] text-muted-foreground/30 text-center">
-            Emergent from your patterns
+            Generated from enriched notes
           </p>
         </div>
       </div>

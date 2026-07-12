@@ -37,13 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { type AISettings } from "@/lib/ai-settings";
 import { signInWithCustomToken, signOut, onAuthStateChanged, User } from "firebase/auth";
-import {
-  collection,
-  onSnapshot,
-  updateDoc,
-  doc,
-} from "firebase/firestore";
-import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { limitWords } from "@/lib/utils";
 
 interface Project {
@@ -119,39 +113,21 @@ export function ProjectSidebar({
   // Firebase Auth State (kept in sidebar for continuous MCP relay)
   const [user, setUser] = useState<User | null>(null);
   const [userPlan, setUserPlan] = useState<string>("Free");
-  const [relayApiKey, setRelayApiKey] = useState<string>("");
 
-  // Firebase Auth + Auth Token Listener
+  // Firebase auth listener; plan authority comes from verified fikr.one APIs.
   useEffect(() => {
     const auth = getFirebaseAuth();
-    const db = getFirebaseDb();
-
-    let unsubscribeUserDoc: () => void;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        unsubscribeUserDoc = onSnapshot(
-          doc(db, "users", currentUser.uid),
-          async (snap) => {
-            if (snap.exists()) {
-              const data = snap.data();
-              setUserPlan(data.plan || "Free");
-              if (!data.relayApiKey) {
-                const newKey = "fp_" + crypto.randomUUID().replace(/-/g, "");
-                await updateDoc(doc(db, "users", currentUser.uid), {
-                  relayApiKey: newKey,
-                });
-                setRelayApiKey(newKey);
-              } else {
-                setRelayApiKey(data.relayApiKey);
-              }
-            }
-          },
-        );
+        const token = await currentUser.getIdToken().catch(() => null);
+        const ipc = (window as any).fikrStudio;
+        const profile = token && ipc?.setUser
+          ? await ipc.setUser(currentUser.uid, token).catch(() => null)
+          : null;
+        setUserPlan(profile?.plan || "Free");
       } else {
-        setRelayApiKey("");
-        if (unsubscribeUserDoc) unsubscribeUserDoc();
+        setUserPlan("Free");
       }
     });
 
@@ -165,62 +141,9 @@ export function ProjectSidebar({
 
     return () => {
       unsubscribeAuth();
-      if (unsubscribeUserDoc) unsubscribeUserDoc();
       if (unsubscribeIpc) unsubscribeIpc();
     };
   }, []);
-
-  // Listen to Firestore MCP Queue when Relay is Enabled (must stay active)
-  useEffect(() => {
-    if (!user) return;
-
-    const db = getFirebaseDb();
-    const queueRef = collection(db, "users", user.uid, "mcp_queue");
-
-    console.log("[Fikr Studio Relay] Listening for cloud MCP payloads...");
-    const unsubscribeQueue = onSnapshot(queueRef, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        if (change.type === "added" || change.type === "modified") {
-          const data = change.doc.data();
-          if (data.status === "pending" && data.payload) {
-            console.log(
-              "[Fikr Studio Relay] Received payload:",
-              data.payload.method,
-            );
-
-            try {
-              const payload =
-                typeof data.payload === "string"
-                  ? JSON.parse(data.payload)
-                  : data.payload;
-              // @ts-expect-error - external IPC method
-              const result = await window.fikrStudio.executeMcp(payload);
-
-              if (result !== null && payload.id !== undefined) {
-                await updateDoc(
-                  doc(db, "users", user.uid, "mcp_queue", change.doc.id),
-                  { status: "completed", result },
-                ).catch(console.error);
-              } else {
-                await updateDoc(
-                  doc(db, "users", user.uid, "mcp_queue", change.doc.id),
-                  { status: "completed", result: null },
-                ).catch(console.error);
-              }
-            } catch (err: any) {
-              const errMsg = err.message || "Unknown error";
-              await updateDoc(
-                doc(db, "users", user.uid, "mcp_queue", change.doc.id),
-                { status: "error", error: errMsg },
-              ).catch(console.error);
-            }
-          }
-        }
-      });
-    });
-
-    return () => unsubscribeQueue();
-  }, [user]);
 
 
   useEffect(() => {
@@ -678,5 +601,4 @@ export function ProjectSidebar({
     </div>
   );
 }
-
 

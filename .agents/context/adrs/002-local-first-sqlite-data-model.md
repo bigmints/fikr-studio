@@ -1,7 +1,7 @@
 # ADR 002 — Local-First Data Model (SQLite + workspace.json)
 
 **Date:** 2026-01-01
-**Status:** Accepted
+**Status:** Superseded by ADR 007
 **Scope:** `fikr-studio/` Electron app
 
 ---

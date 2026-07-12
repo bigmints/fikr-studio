@@ -6,12 +6,11 @@
 
 import {
   loadAIConfig,
-  getBaseUrl,
-  getProviderHeaders,
   resolveModel,
   getManagedAuthStatus,
 } from "@/lib/ai-settings";
 import { LOCAL_AI_CONFIG } from "@/local-ai.config";
+import { requestByokAi } from "@/lib/ai-provider-request";
 
 const TIMEOUT_MS = 60_000;
 
@@ -35,22 +34,21 @@ export async function refineSelection(
   const { isManaged, token } = await getManagedAuthStatus();
   const isDevOverride = LOCAL_AI_CONFIG.enabled;
 
-  let actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
+  const actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
   let actualModel = LOCAL_AI_CONFIG.model;
   if (typeof window !== "undefined") {
     const stored = localStorage.getItem("dev_local_model");
     if (stored) actualModel = stored;
   }
-  let actualHeaders: Record<string, string> = { "Content-Type": "application/json" };
+  let byokProvider: import("@/lib/ai-settings").AIProvider | null = null;
 
   if (!isDevOverride && !isManaged) {
     const config = loadAIConfig();
     if (!config || !config.apiKey) throw new Error("No API key configured and Fikr Cloud Pro is inactive.");
     const resolved = resolveModel(config, "analysis");
     if (!resolved) throw new Error("No model configured.");
-    actualBaseUrl = getBaseUrl(config);
     actualModel = resolved;
-    actualHeaders = getProviderHeaders(config);
+    byokProvider = config.provider;
   }
 
   const controller = new AbortController();
@@ -83,10 +81,7 @@ export async function refineSelection(
       return result;
     }
 
-    const res = await fetch(`${actualBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: actualHeaders,
-      body: JSON.stringify({
+    const providerBody = {
         model: actualModel,
         max_tokens: 1500,
         temperature: 0.7,
@@ -94,9 +89,12 @@ export async function refineSelection(
           { role: "system", content: systemPrompt },
           { role: "user", content: text },
         ],
-      }),
-      signal: controller.signal,
-    });
+    };
+    const res = isDevOverride
+      ? await fetch(`${actualBaseUrl}/chat/completions`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(providerBody), signal: controller.signal,
+        })
+      : await requestByokAi(byokProvider!, providerBody);
 
     if (!res.ok) {
       const body = await res.text();

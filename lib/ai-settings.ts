@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { getFirebaseAuth, getFirebaseDb } from "./firebase"
-import { doc, getDoc } from "firebase/firestore"
+import { getFirebaseAuth } from "./firebase"
 
 // ── Provider types ────────────────────────────────────────────────────────────
 
@@ -103,7 +102,6 @@ export const AVAILABLE_MODELS: Record<AITask, Partial<Record<AIProvider, string[
 export interface AIProviderPreset {
   id:             AIProvider
   label:          string
-  baseUrl:        string
   keyUrl:         string
   keyPlaceholder: string
 }
@@ -112,21 +110,18 @@ export const AI_PROVIDER_PRESETS: AIProviderPreset[] = [
   {
     id:             "openrouter",
     label:          "OpenRouter",
-    baseUrl:        "https://openrouter.ai/api/v1",
     keyUrl:         "https://openrouter.ai/settings/keys",
     keyPlaceholder: "sk-or-v1-...",
   },
   {
     id:             "openai",
     label:          "OpenAI",
-    baseUrl:        "https://api.openai.com/v1",
     keyUrl:         "https://platform.openai.com/api-keys",
     keyPlaceholder: "sk-...",
   },
   {
     id:             "gemini",
     label:          "Google Gemini",
-    baseUrl:        "https://generativelanguage.googleapis.com/v1beta",
     keyUrl:         "https://aistudio.google.com/app/apikey",
     keyPlaceholder: "AIza...",
   },
@@ -167,6 +162,8 @@ export interface AISettings {
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "fikr-ai-settings"
+const SECURE_KEY_MASK = "••••••••"
+let runtimeApiKey = ""
 
 const DEFAULT_SETTINGS: AISettings = {
   provider:        "openrouter",
@@ -198,7 +195,8 @@ function loadSettings(): AISettings {
     // Try new key, then old key for migration
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("nodepad-ai-settings")
     if (!raw) return DEFAULT_SETTINGS
-    return migrate(JSON.parse(raw))
+    const migrated = migrate(JSON.parse(raw))
+    return { ...migrated, apiKey: runtimeApiKey || migrated.apiKey }
   } catch {
     return DEFAULT_SETTINGS
   }
@@ -235,22 +233,6 @@ export function resolveModel(config: AIConfig, task: AITask): string {
   return PRESET_MODELS[task][config.provider] ?? ""
 }
 
-export function getBaseUrl(config: AIConfig): string {
-  return getPreset(config.provider).baseUrl
-}
-
-export function getProviderHeaders(config: AIConfig): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" }
-  if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`
-  if (config.provider === "openrouter") {
-    headers["HTTP-Referer"] = "https://fikr.one"
-    headers["X-Title"] = "Fikr Studio"
-  }
-  // Gemini REST uses ?key= query param — caller handles auth separately.
-  // We still pass the header for completeness but Gemini ignores it gracefully.
-  return headers
-}
-
 // ── Legacy shim (used by components not yet migrated) ────────────────────────
 // Returns the analysis model + metadata in the shape that page.tsx expects.
 
@@ -267,15 +249,16 @@ export async function getManagedAuthStatus(): Promise<{ isManaged: boolean; toke
     const user = auth.currentUser
     if (!user) return { isManaged: false, token: null }
     
-    const db = getFirebaseDb()
-    const userDoc = await getDoc(doc(db, "users", user.uid))
-    if (!userDoc.exists()) return { isManaged: false, token: null }
-    
-    const plan = (userDoc.data()?.plan as string) || "Free"
-    const isPro = plan.toLowerCase().includes("pro") || plan.toLowerCase().includes("plus")
+    const token = await user.getIdToken()
+    const ipc = typeof window !== "undefined" ? (window as any).fikrStudio : null
+    const profile = ipc?.setUser
+      ? await ipc.setUser(user.uid, token)
+      : await fetch("https://fikr.one/api/user/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(response => response.ok ? response.json() : null)
+    const isPro = profile?.plan === "pro" || profile?.plan === "plus"
     
     if (isPro) {
-      const token = await user.getIdToken()
       return { isManaged: true, token }
     }
     return { isManaged: false, token: null }
@@ -292,14 +275,54 @@ export function useAISettings() {
   const [isHydrated, setIsHydrated] = useState(false)
 
   useEffect(() => {
-    setSettings(loadSettings())
-    setIsHydrated(true)
+    let cancelled = false
+    const hydrate = async () => {
+      const stored = loadSettings()
+      const ipc = (window as any).fikrStudio
+      let apiKey = stored.apiKey
+
+      if (ipc?.hasSecureAiKey && ipc?.setSecureAiKey) {
+        let hasSecureKey = await ipc.hasSecureAiKey(stored.provider)
+        if (!hasSecureKey && apiKey) {
+          await ipc.setSecureAiKey(stored.provider, apiKey)
+          hasSecureKey = true
+        }
+        apiKey = hasSecureKey ? SECURE_KEY_MASK : ""
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...stored, apiKey: "" }))
+        localStorage.removeItem("nodepad-ai-settings")
+      }
+
+      runtimeApiKey = apiKey
+      if (!cancelled) {
+        setSettings({ ...stored, apiKey })
+        setIsHydrated(true)
+      }
+    }
+    hydrate().catch((error) => {
+      console.error("Failed to load secure AI settings", error)
+      if (!cancelled) setIsHydrated(true)
+    })
+    return () => { cancelled = true }
   }, [])
 
   const updateSettings = useCallback((patch: Partial<AISettings>) => {
     setSettings(prev => {
       const next = { ...prev, ...patch }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      const ipc = (window as any).fikrStudio
+      if (ipc?.setSecureAiKey) {
+        if (next.apiKey !== SECURE_KEY_MASK) {
+          void ipc.setSecureAiKey(next.provider, next.apiKey).catch((error: unknown) => {
+            console.error("Failed to save secure AI key", error)
+          })
+        }
+        const displayKey = next.apiKey ? SECURE_KEY_MASK : ""
+        runtimeApiKey = displayKey
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, apiKey: "" }))
+        return { ...next, apiKey: displayKey }
+      } else {
+        runtimeApiKey = next.apiKey
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      }
       return next
     })
   }, [])

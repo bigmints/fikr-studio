@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-06-02T11:30:55Z"
+  last_seen: "2026-07-11T22:26:26Z"
   host: "BigMac-2"
-  task: "Committed: fix(ui): revert to full-page settings layout while keeping simple centered content"
+  task: "Session end: external relay live delivery verified"
   status: alive

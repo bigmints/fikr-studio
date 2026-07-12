@@ -1,8 +1,11 @@
 # ADR 003 — MCP Two-Tier Architecture (Local + Cloud Relay)
 
 **Date:** 2026-01-01
-**Status:** Accepted
+**Status:** Superseded by ADR 008
 **Scope:** `fikr-studio/` + `fikr-studio-mcp/` + `fikr.one/`
+
+> Historical record only. The cloud-only and unauthenticated-local claims below
+> are not current product capabilities; ADR 008 defines the production boundary.
 
 ---
 
@@ -11,7 +14,7 @@
 Fikr Studio needed to expose its canvas to AI IDEs (Cursor, Windsurf, Claude Desktop, GitHub Copilot) via the Model Context Protocol (MCP). Two constraints made this hard:
 1. AI IDEs run in strict sandboxes — they often can't find `npx` in `$PATH`
 2. MCP requires `stdio` transport, but Fikr Studio uses SSE internally
-3. Some users want MCP to work even when their laptop is closed (cloud-only)
+3. A cloud-only mode was considered, but it was not implemented safely.
 
 ---
 
@@ -26,20 +29,20 @@ AI IDE  →  stdio  →  fikr-studio-mcp (npx)  →  HTTP/SSE  →  localhost:30
 ```
 
 - Endpoint: `http://localhost:3025/sse`
-- No auth (loopback only)
+- Per-install token authentication, even on loopback
 - `install-mcp` IPC handler runs `which npx` and writes the absolute path into the generated config — bypasses IDE sandbox PATH issues
 
 ### Tier 2 — Plus/Pro (Cloud, Studio not required)
 
 ```
-AI IDE  →  SSE  →  fikr.one/api/mcp/sse  →  Firestore  →  Fikr Studio (if open) OR direct Firestore
+AI IDE  →  HTTPS  →  fikr.one/api/mcp/relay  →  authenticated queue  →  Fikr Studio
 ```
 
-- Endpoint: `https://fikr.one/api/mcp/sse`
+- Endpoint: `https://fikr.one/api/mcp/relay`
 - Auth: `Bearer fkr_<48 hex>` relay API key
 - Plan check at the SSE gate — `403` if Free tier
-- Direct Firestore read/write for read ops (no Studio needed)
-- Queue-based relay (`/api/mcp/relay`) for operations requiring local AI enrichment
+- Fikr Studio must be running to poll and execute queued requests.
+- The desktop never receives direct Firestore credentials or collection access.
 
 ### The Proxy Package (`fikr-studio-mcp`)
 
@@ -57,7 +60,7 @@ AI IDE  →  SSE  →  fikr.one/api/mcp/sse  →  Firestore  →  Fikr Studio (i
 
 **Positive:**
 - Free users get full local MCP without any cloud dependency
-- Plus/Pro users get 24/7 MCP access without keeping their laptop open
+- Plus/Pro users can tunnel remote MCP requests while Fikr Studio is running.
 - Proxy decouples IDE sandbox limitations from Studio's SSE architecture
 - `@latest` flag means proxy updates ship without a Studio release
 

@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export interface ConnectionsPageProps {
   mcpPort: number | null;
+  mcpToken: string | null;
   plan: string;
   relayApiKey: string;
 }
@@ -42,8 +43,9 @@ interface Integration {
   primaryActionLabel: string;
 }
 
-const getIntegrations = (mcpPort: number | null): Integration[] => {
+const getIntegrations = (mcpPort: number | null, mcpToken: string | null): Integration[] => {
   const port = mcpPort ? mcpPort.toString() : "3025";
+  const endpoint = `http://localhost:${port}/sse?token=${encodeURIComponent(mcpToken ?? "<local-token>")}`;
   return [
   {
     id: "claude",
@@ -56,10 +58,10 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
     connectionType: "1-click",
     requiresPlan: null,
     steps: [
-      { label: "Click Install below", detail: "Fikr Studio writes the config and restarts Claude automatically." },
-      { label: "Open Claude Desktop", detail: "Start a new conversation — the 🔌 icon shows available tools." },
+      { label: "Click Install below", detail: "Fikr Studio writes the local MCP configuration securely." },
+      { label: "Restart Claude Desktop", detail: "Start a new conversation — the 🔌 icon shows available tools." },
     ],
-    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { url: `http://localhost:${port}/sse`, type: "sse" } } }, null, 2),
+    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { url: endpoint, type: "sse" } } }, null, 2),
     snippetLang: "json",
     docsUrl: "https://docs.anthropic.com/en/docs/developer/mcp",
     primaryActionLabel: "Install",
@@ -78,7 +80,7 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
       { label: "Click Install below", detail: "Fikr Studio writes to ~/.codeium/windsurf/mcp_settings.json automatically." },
       { label: "Restart Windsurf", detail: "Open Cascade — the Fikr tools will be available." },
     ],
-    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { serverUrl: `http://localhost:${port}/sse` } } }, null, 2),
+    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { serverUrl: endpoint } } }, null, 2),
     snippetLang: "json",
     docsUrl: "https://docs.codeium.com/windsurf/mcp",
     primaryActionLabel: "Install",
@@ -98,7 +100,7 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
       { label: "Edit ~/.cursor/mcp.json", detail: "Create or edit the file and paste the config." },
       { label: "Restart Cursor", detail: "In Cursor Chat, type: @fikr-studio list my recent notes" },
     ],
-    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { url: `http://localhost:${port}/sse`, type: "sse" } } }, null, 2),
+    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { url: endpoint, type: "sse" } } }, null, 2),
     snippetLang: "json",
     docsUrl: "https://cursor.com",
     primaryActionLabel: "Copy Config",
@@ -118,7 +120,7 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
       { label: "Copy config below", detail: "Create .vscode/mcp.json in your workspace root and paste." },
       { label: "Switch to Agent mode", detail: "Open Copilot Chat → toggle Agent mode in the chat input." },
     ],
-    snippet: JSON.stringify({ servers: { "fikr-studio": { type: "http", url: `http://localhost:${port}/sse` } } }, null, 2),
+    snippet: JSON.stringify({ servers: { "fikr-studio": { type: "http", url: endpoint } } }, null, 2),
     snippetLang: "json",
     docsUrl: "https://github.com/features/copilot",
     primaryActionLabel: "Copy Config",
@@ -137,7 +139,7 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
       { label: "Copy config below", detail: "Edit ~/.gemini/settings.json and paste the config." },
       { label: "Ensure Gemini CLI is installed", detail: "npm install -g @google/gemini-cli" },
     ],
-    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { httpUrl: `http://localhost:${port}/sse` } } }, null, 2),
+    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { httpUrl: endpoint } } }, null, 2),
     snippetLang: "json",
     docsUrl: "https://ai.google.dev/gemini-api/docs",
     primaryActionLabel: "Copy Config",
@@ -158,7 +160,7 @@ const getIntegrations = (mcpPort: number | null): Integration[] => {
     snippet: JSON.stringify({
       mcpServers: {
         "fikr-studio": {
-          url: `http://localhost:${port}/sse`,
+          url: endpoint,
           type: "sse"
         }
       }
@@ -322,11 +324,11 @@ function CodeSnippet({ code }: { code: string }) {
 }
 
 // -- Agent Prompt Card --
-function AgentPromptCard({ mcpPort, plan, relayApiKey }: { mcpPort: number | null; plan: string; relayApiKey: string }) {
-  const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
+function AgentPromptCard({ mcpPort, mcpToken }: { mcpPort: number | null; mcpToken: string | null }) {
   const port = mcpPort ?? 3025;
-  const skillUrl = isPlusPro ? "https://fikr.one/skills/fikr-studio.md" : `http://localhost:${port}/skill.md`;
-  const agentPrompt = `Fetch ${skillUrl} and follow the instructions to connect to Fikr Studio.`;
+  const skillUrl = `http://localhost:${port}/skill.md?token=${encodeURIComponent(mcpToken ?? "<local-token>")}`;
+  const endpoint = `http://localhost:${port}/sse?token=${encodeURIComponent(mcpToken ?? "<local-token>")}`;
+  const agentPrompt = `Fetch ${skillUrl}, then connect to the local MCP endpoint ${endpoint}.`;
   return <SnippetBox label="Agent Prompt" code={agentPrompt} mono={false} />;
 }
 
@@ -373,6 +375,7 @@ function IntegrationSheet({
   open,
   onClose,
   mcpPort,
+  mcpToken,
   plan,
   relayApiKey,
   statuses,
@@ -384,6 +387,7 @@ function IntegrationSheet({
   open: boolean;
   onClose: () => void;
   mcpPort: number | null;
+  mcpToken: string | null;
   plan: string;
   relayApiKey: string;
   statuses: Record<string, StatusType>;
@@ -445,7 +449,7 @@ function IntegrationSheet({
 
           {/* Agent Prompt box — MCP clients only */}
           {isMcpClient && (
-            <AgentPromptCard mcpPort={mcpPort} plan={plan} relayApiKey={relayApiKey} />
+            <AgentPromptCard mcpPort={mcpPort} mcpToken={mcpToken} />
           )}
 
           {/* Setup steps */}
@@ -614,7 +618,7 @@ function IntegrationRow({
 }
 
 // -- Page Component --
-export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageProps) {
+export function ConnectionsPage({ mcpPort, mcpToken, plan, relayApiKey }: ConnectionsPageProps) {
   const ipc = useIpc();
 
   const [statuses, setStatuses] = useState<Record<string, StatusType>>({});
@@ -622,7 +626,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
   const [installing, setInstalling] = useState<string | null>(null);
 
   const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
-  const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort), [mcpPort]);
+  const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort, mcpToken), [mcpPort, mcpToken]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
 
   // Auto-check 1-click integrations on mount
@@ -723,7 +727,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
                 Fikr Cloud Relay (Remote)
               </h3>
               <p className="text-[11px] text-muted-foreground mt-0.5 max-w-sm leading-relaxed">
-                Connect to Fikr from remote environments without keeping the app open. Upgrade to get a dedicated relay endpoint.
+                Connect from remote environments while Fikr Studio is running. Upgrade for the authenticated cloud tunnel.
               </p>
             </div>
             <button
@@ -756,6 +760,7 @@ export function ConnectionsPage({ mcpPort, plan, relayApiKey }: ConnectionsPageP
         open={!!selectedId}
         onClose={() => setSelectedId(null)}
         mcpPort={mcpPort}
+        mcpToken={mcpToken}
         plan={plan}
         relayApiKey={relayApiKey}
         statuses={statuses}

@@ -6,7 +6,6 @@ export const GENERATION_MODES: GenerationMode[] = [
     label:           "Articles & Blogs",
     icon:            "FileText",
     platforms:       ["linkedin", "substack"],
-    comingSoon:      false,
     maxOutputTokens: 2000,
     systemPromptTpl: `You are an expert writer creating a {{platform}} post about "{{topic}}".
 Tone: {{tone}}/100 (0=professional, 100=fun). Depth: {{depth}}/100 (0=brief, 100=detailed). Audience: {{audience}}/100 (0=expert, 100=beginner).
@@ -20,24 +19,6 @@ OUTPUT RULES — CRITICAL:
 - Do NOT write sentences like "Note: Since no topic was specified…", "Here is a post on…", "I have written…", or anything similar.
 - Do NOT wrap your output in markdown code fences.
 - Output ONLY the article in Markdown.`,
-  },
-  {
-    id:              "podcast",
-    label:           "Podcasts",
-    icon:            "Mic",
-    platforms:       [],
-    comingSoon:      true,
-    maxOutputTokens: 3000,
-    systemPromptTpl: "",
-  },
-  {
-    id:              "video-script",
-    label:           "Video Scripts",
-    icon:            "Video",
-    platforms:       [],
-    comingSoon:      true,
-    maxOutputTokens: 3000,
-    systemPromptTpl: "",
   },
 ];
 

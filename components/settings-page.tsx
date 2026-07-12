@@ -26,8 +26,7 @@ import {
 } from "lucide-react";
 import { AI_PROVIDER_PRESETS, getPreset, type AISettings } from "@/lib/ai-settings";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { onSnapshot, updateDoc, doc } from "firebase/firestore";
-import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { analytics } from "@/lib/analytics";
 import { ConnectionsPage } from "@/components/connections-page";
 
@@ -39,6 +38,7 @@ interface SettingsPageProps {
   aiSettings: AISettings;
   onUpdateAISettings: (patch: Partial<AISettings>) => void;
   mcpPort?: number | null;
+  mcpToken?: string | null;
   onClose: () => void;
   /** Lifted auth state for usage polling in parent */
   onAuthChange?: (user: any, idToken: string | null, plan: string, relayKey?: string) => void;
@@ -56,6 +56,7 @@ export function SettingsPage({
   aiSettings,
   onUpdateAISettings,
   mcpPort,
+  mcpToken,
   onClose,
   onAuthChange,
 }: SettingsPageProps) {
@@ -89,31 +90,29 @@ export function SettingsPage({
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  // Firebase
+  // Firebase authentication; account authority comes from verified fikr.one APIs.
   useEffect(() => {
     const auth = getFirebaseAuth();
-    const db = getFirebaseDb();
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
         const token = await u.getIdToken().catch(() => null);
-        onSnapshot(doc(db, "users", u.uid), async (snap) => {
-          if (!snap.exists()) return;
-          const data = snap.data();
-          const planRaw = data.plan || "Free";
-          const plan = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
-          setUserPlan(plan);
-          if (!data.relayApiKey) {
-            const newKey = "fp_" + crypto.randomUUID().replace(/-/g, "");
-            await updateDoc(doc(db, "users", u.uid), { relayApiKey: newKey });
-            setRelayApiKey(newKey);
-            onAuthChange?.(u, token, plan, newKey);
-          } else {
-            setRelayApiKey(data.relayApiKey);
-            onAuthChange?.(u, token, plan, data.relayApiKey);
-          }
-        });
+        const ipc = (window as any).fikrStudio;
+        const verified = token && ipc?.setUser
+          ? await ipc.setUser(u.uid, token).catch(() => null)
+          : null;
+        const account = verified && ipc?.getAccount
+          ? await ipc.getAccount().catch(() => verified)
+          : verified;
+        const planRaw = account?.plan || "free";
+        const plan = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
+        const relayKey = account?.relayApiKey || "";
+        setUserPlan(plan);
+        setRelayApiKey(relayKey);
+        onAuthChange?.(u, token, plan, relayKey);
       } else {
+        const ipc = (window as any).fikrStudio;
+        if (ipc?.setUser) await ipc.setUser(null, null).catch(() => null);
         setUserPlan("Free");
         setRelayApiKey("");
         onAuthChange?.(null, null, "Free", "");
@@ -238,6 +237,7 @@ export function SettingsPage({
                 {section === "connections" && (
                   <ConnectionsPage
                     mcpPort={mcpPort ?? null}
+                    mcpToken={mcpToken ?? null}
                     plan={userPlan}
                     relayApiKey={relayApiKey}
                   />
@@ -303,7 +303,7 @@ export function SettingsPage({
                         </button>
                       </div>
                       <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">Stored locally — never sent to our servers.</p>
+                        <p className="text-xs text-muted-foreground">Stored on this Mac and sent only to the selected AI provider.</p>
                         {currentPreset.keyUrl && currentPreset.keyUrl !== "#" && (
                           <a href={currentPreset.keyUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary hover:underline">
                             Get a key <ExternalLink className="h-3 w-3" />
@@ -411,7 +411,7 @@ export function SettingsPage({
                             Unlock Fikr Cloud
                           </h3>
                           <p className="text-muted-foreground text-[15px] leading-relaxed mb-8">
-                            Supercharge your workflow with seamless sync, premium AI models, and powerful integrations across all your devices.
+                            Add account-scoped cloud sync, managed AI access, and an authenticated relay while Studio is running.
                           </p>
 
                           <div className="grid grid-cols-2 gap-x-6 gap-y-4 w-full text-left mb-10">
@@ -420,8 +420,8 @@ export function SettingsPage({
                                 <RefreshCw className="h-4 w-4" />
                               </div>
                               <div>
-                                <p className="font-semibold text-sm text-foreground">Real-time Sync</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Notes synced everywhere</p>
+                                <p className="font-semibold text-sm text-foreground">Cloud Sync</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Account-scoped workspace mirror</p>
                               </div>
                             </div>
                             <div className="flex items-start gap-3">
@@ -429,8 +429,8 @@ export function SettingsPage({
                                 <Sparkles className="h-4 w-4" />
                               </div>
                               <div>
-                                <p className="font-semibold text-sm text-foreground">Managed Models</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Claude 3.5 & more</p>
+                                <p className="font-semibold text-sm text-foreground">Managed AI</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Verified Plus or Pro access</p>
                               </div>
                             </div>
                             <div className="flex items-start gap-3">
@@ -439,7 +439,7 @@ export function SettingsPage({
                               </div>
                               <div>
                                 <p className="font-semibold text-sm text-foreground">Cloud Relay</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">External agent hooks</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Remote access while Studio is open</p>
                               </div>
                             </div>
                             <div className="flex items-start gap-3">

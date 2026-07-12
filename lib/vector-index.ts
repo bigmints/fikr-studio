@@ -9,7 +9,7 @@ import {
 import { type TextBlock } from "@/components/tile-card";
 export { type TextBlock };
 
-/** Default threshold below which a semantic match is considered irrelevant. */
+/** Default threshold below which a relevance match is ignored. */
 const DEFAULT_SIMILARITY_THRESHOLD = 0.3;
 
 /** Per-type thresholds based on confidence and content type requirements */
@@ -33,10 +33,10 @@ interface IndexEntry {
 }
 
 /**
- * In-memory vector index for semantic search over Fikr Studio notes.
+ * In-memory vector index for deterministic lexical relevance search.
  *
- * Each note is represented by a 384-dim embedding (via @xenova/transformers).
- * Search embeds a query string and ranks notes by cosine similarity.
+ * Each note is represented by a dependency-free 384-dimensional feature vector.
+ * Search projects the query using the same tokenizer and ranks cosine similarity.
  *
  * Typical usage:
  *
@@ -91,7 +91,7 @@ export class VectorIndex {
   ): Promise<void> {
     if (!isModelLoaded()) {
       throw new Error(
-        "VectorIndex.add: embedding model is not loaded yet. Wait for the model to finish loading before indexing.",
+        "VectorIndex.add: local search index is not ready yet.",
       );
     }
 
@@ -117,7 +117,7 @@ export class VectorIndex {
   }
 
   /**
-   * Search the index for notes semantically similar to the query.
+   * Search the index for notes relevant to the query.
    *
    * @param query - Free-text query to match against indexed notes.
    * @param limit - Maximum number of results to return (default 20).
@@ -128,14 +128,14 @@ export class VectorIndex {
     query: string,
     limit: number = DEFAULT_LIMIT,
   ): Promise<Array<{ blockId: string; projectId: string; score: number }>> {
-    // Edge case: empty query is meaningless for semantic search.
+    // Edge case: empty query is meaningless for relevance search.
     if (!query || !query.trim()) {
       return [];
     }
 
     if (!isModelLoaded()) {
       throw new Error(
-        "VectorIndex.search: embedding model is not loaded yet.",
+        "VectorIndex.search: local search index is not ready yet.",
       );
     }
 
@@ -185,7 +185,7 @@ export class VectorIndex {
   async reindex(projects: Array<{ id: string; blocks: TextBlock[]; ghostNotes?: { id: string; text: string; category: string }[] }>): Promise<void> {
     if (!isModelLoaded()) {
       throw new Error(
-        "VectorIndex.reindex: embedding model is not loaded yet.",
+        "VectorIndex.reindex: local search index is not ready yet.",
       );
     }
 

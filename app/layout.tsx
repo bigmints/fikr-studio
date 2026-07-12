@@ -1,28 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Vazirmatn } from "next/font/google";
-import Script from "next/script";
 import { MobileWall } from "@/components/mobile-wall";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-  preload: false,
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-  preload: false,
-});
-
-const vazirmatn = Vazirmatn({
-  subsets: ["arabic"],
-  variable: "--font-vazirmatn",
-  display: "swap",
-  preload: false,
-});
 
 export const metadata: Metadata = {
   title: "Fikr Studio",
@@ -36,7 +15,7 @@ export const metadata: Metadata = {
     title: "Fikr Studio",
     description:
       "A spatial research tool where AI augments your thinking — not replaces it.",
-    url: "https://Fikr Studio.space",
+    url: "https://fikr.one/studio",
     siteName: "Fikr Studio",
     locale: "en_US",
     type: "website",
@@ -57,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${vazirmatn.variable} font-sans antialiased`}
+        className="font-sans antialiased"
         suppressHydrationWarning
       >
         <ThemeProvider
@@ -68,13 +47,6 @@ export default function RootLayout({
         >
           <MobileWall />
           {children}
-          {/* Umami analytics — Fikr Studio.space only. Remove or replace with your
-              own data-website-id if self-hosting. Safe to delete entirely. */}
-          <Script
-            src="https://cloud.umami.is/script.js"
-            data-website-id="e292316e-48ff-4e1b-ac45-353ea9783dea"
-            strategy="afterInteractive"
-          />
         </ThemeProvider>
       </body>
     </html>

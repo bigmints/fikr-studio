@@ -93,5 +93,4 @@ export interface GenerationMode {
   platforms:       Platform[];
   systemPromptTpl: string;
   maxOutputTokens: number;
-  comingSoon?:     boolean;
 }

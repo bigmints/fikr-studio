@@ -1,25 +1,49 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Fikr Studio Automated Deployment Script
-# This script loads the GitHub token from .env.local and executes the production build,
-# code signing, notarization, and GitHub OTA release publishing workflow.
+# Build a signed and notarized release candidate, prove the exact DMG and ZIP,
+# then publish a draft OTA release. Credentials must already be in the current
+# shell or macOS Keychain; this script never reads them from project files.
 
-# 1. Load environment variables from .env.local if present
-if [ -f .env.local ]; then
-  export $(grep -v '^#' .env.local | xargs)
+if [[ -z "${GH_TOKEN:-}" ]] && command -v gh >/dev/null 2>&1; then
+  GH_TOKEN="$(gh auth token 2>/dev/null || true)"
 fi
 
-# 2. Ensure GH_TOKEN is available
-if [ -z "$GH_TOKEN" ]; then
-  echo "Error: GH_TOKEN is not set. Please add GH_TOKEN=... to your .env.local file."
+if [[ -z "${GH_TOKEN:-}" ]]; then
+  echo "GH_TOKEN must be exported before publishing a draft release." >&2
   exit 1
 fi
 
-echo "🚀 Starting Fikr Studio macOS Build, Sign, Notarize & Publish..."
-echo "Using Team ID: FBG8NKYPUJ"
-echo "Using Keychain Profile: notarytool-profile"
+if ! security find-identity -v -p codesigning | grep -q 'Developer ID Application: Pretheesh Thomas (FBG8NKYPUJ)'; then
+  echo "Required Developer ID Application signing identity is unavailable." >&2
+  exit 1
+fi
 
-# 3. Execute the build and release process
+if ! xcrun notarytool history --keychain-profile notarytool-profile >/dev/null 2>&1; then
+  echo "notarytool-profile is unavailable or cannot be used." >&2
+  exit 1
+fi
+
+VERSION="$(node -p \"require('./package.json').version\")"
+APP="dist/mac-arm64/Fikr Studio.app"
+DMG="dist/Fikr Studio-${VERSION}-arm64.dmg"
+ZIP="dist/Fikr Studio-${VERSION}-arm64-mac.zip"
+
+echo "Building signed and notarized Fikr Studio ${VERSION} release candidate..."
+npm run verify
+APPLE_KEYCHAIN="${HOME}/Library/Keychains/login.keychain-db" \
 APPLE_KEYCHAIN_PROFILE="notarytool-profile" \
 APPLE_TEAM_ID="FBG8NKYPUJ" \
-npm run electron:build -- -p always
+npx electron-builder build --mac -p never
+
+node scripts/verify-macos-release.mjs "$APP" "$DMG" "$ZIP"
+
+echo "Publishing a draft GitHub release for ${VERSION}..."
+GH_TOKEN="$GH_TOKEN" gh release create "v${VERSION}" \
+  --draft \
+  --title "Fikr Studio ${VERSION}" \
+  "$DMG" \
+  "${DMG}.blockmap" \
+  "$ZIP" \
+  "${ZIP}.blockmap" \
+  dist/latest-mac.yml

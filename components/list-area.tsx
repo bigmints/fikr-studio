@@ -175,6 +175,7 @@ export function ListArea({
                   return `${Math.floor(h / 24)}d ago`;
                 })();
                 const config = CONTENT_TYPE_CONFIG[block.contentType] || CONTENT_TYPE_CONFIG.general;
+                const displayTitle = block.title || (typeof block.text === 'string' ? block.text.split('\n').find(line => line.trim().length > 0)?.replace(/^#+\s*/, '') : null) || <span className="text-muted-foreground/50 italic font-normal">Untitled</span>;
 
                 return (
                   <div
@@ -197,7 +198,7 @@ export function ListArea({
                         style={{ backgroundColor: block.isEnriching ? "hsl(var(--muted-foreground))" : config.accentVar }}
                       />
                       <p className="text-[14px] text-foreground/90 group-hover:text-foreground transition-colors truncate font-semibold tracking-tight">
-                        {block.title || block.text || <span className="text-muted-foreground/50 italic font-normal">Untitled</span>}
+                        {displayTitle}
                       </p>
                     </div>
 

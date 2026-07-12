@@ -1,8 +1,9 @@
 "use client"
 
-import { loadAIConfig, getBaseUrl, getProviderHeaders, resolveModel, getManagedAuthStatus } from "@/lib/ai-settings"
+import { loadAIConfig, resolveModel, getManagedAuthStatus } from "@/lib/ai-settings"
 import { parseProviderError } from "@/lib/ai-enrich"
 import { LOCAL_AI_CONFIG } from "@/local-ai.config"
+import { requestByokAi } from "@/lib/ai-provider-request"
 
 export interface GhostContext {
   text: string
@@ -27,8 +28,7 @@ export async function generateGhostClient(
 
   // Ghost falls back to a lighter model if none is set (when unmanaged)
   let model = isManaged ? "managed" : resolveModel(config!, "analysis");
-  let actualBaseUrl = config ? getBaseUrl(config) : "";
-  let actualHeaders = config ? getProviderHeaders(config) : {};
+  let actualBaseUrl = "";
 
   if (isDevOverride) {
     actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
@@ -37,7 +37,6 @@ export async function generateGhostClient(
       const stored = localStorage.getItem("dev_local_model");
       if (stored) model = stored;
     }
-    actualHeaders = { "Content-Type": "application/json" };
   }
 
   const categories = [...new Set(context.map(c => c.category).filter(Boolean))]
@@ -99,17 +98,18 @@ Return ONLY valid JSON:
     const data = await response.json();
     rawContent = data.response;
   } else {
-    const response = await fetch(`${actualBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: actualHeaders,
-      body: JSON.stringify({
+    const providerBody = {
         model,
         max_tokens: MAX_GHOST_OUTPUT_TOKENS,
         messages: [{ role: "user", content: prompt }],
         // Local models and some OpenRouter models don't support response_format well — rely on prompt instructions
         temperature: 0.7,
-      }),
-    })
+    };
+    const response = isDevOverride
+      ? await fetch(`${actualBaseUrl}/chat/completions`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(providerBody),
+        })
+      : await requestByokAi(config!.provider, providerBody)
 
     if (!response.ok) {
       throw new Error(await parseProviderError(response))
