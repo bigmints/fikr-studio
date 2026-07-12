@@ -73,6 +73,7 @@ xcrun notarytool submit "$DMG" \
   --keychain-profile "notarytool-profile" \
   --wait
 xcrun stapler staple "$DMG"
+node scripts/refresh-mac-update-metadata.mjs
 ```
 
 ## 3. Verify the exact artifacts
