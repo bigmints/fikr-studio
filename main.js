@@ -91,6 +91,7 @@ let pendingAuthExpiresAt = 0;
 let pendingAuthCallbackUrl = 'fikr-studio://auth/callback';
 let pendingAuthServer = null;
 let pendingAuthServerTimer = null;
+let pendingRendererAuthToken = null;
 
 function getRendererContentSecurityPolicy() {
   const scriptSources = ["'self'", "'unsafe-inline'"];
@@ -191,8 +192,19 @@ function handleAuthCallback(url) {
   pendingAuthState = null;
   pendingAuthExpiresAt = 0;
   closePendingAuthServer();
-  if (mainWindow) pushToRenderer(mainWindow, 'auth-token', { token: result.token });
+  pendingRendererAuthToken = result.token;
+  deliverPendingAuthToken();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
   return true;
+}
+
+function deliverPendingAuthToken() {
+  if (pendingRendererAuthToken && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('fikr-studio:auth-token', pendingRendererAuthToken);
+  }
 }
 
 function closePendingAuthServer() {
@@ -628,6 +640,7 @@ ipcMain.handle('fikr-studio:get-account', async (event) => {
 });
 ipcMain.handle("fikr-studio:open-auth", async (event) => {
   assertTrustedIpc(event);
+  pendingRendererAuthToken = null;
   pendingAuthState = randomBytes(32).toString('hex');
   pendingAuthExpiresAt = Date.now() + 10 * 60 * 1000;
   pendingAuthCallbackUrl = IS_DEV
@@ -641,6 +654,17 @@ ipcMain.handle("fikr-studio:open-auth", async (event) => {
   const login = new URL('/login', authBaseUrl);
   login.searchParams.set('returnUrl', callback.toString());
   return openExternalAuth(login.toString());
+});
+
+ipcMain.handle('fikr-studio:consume-auth-token', event => {
+  assertTrustedIpc(event);
+  return pendingRendererAuthToken;
+});
+
+ipcMain.handle('fikr-studio:ack-auth-token', event => {
+  assertTrustedIpc(event);
+  pendingRendererAuthToken = null;
+  return true;
 });
 
 /**
@@ -1956,6 +1980,8 @@ function createWindow() {
       console.error('[Fikr Studio] Failed to load main window:', err);
     });
   }
+
+  mainWindow.webContents.once('did-finish-load', deliverPendingAuthToken);
 
   mainWindow.on('close', event => {
     if (!isQuiting) {

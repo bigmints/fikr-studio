@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { type AISettings } from "@/lib/ai-settings";
-import { signInWithCustomToken, signOut, onAuthStateChanged, User } from "firebase/auth";
+import { signOut, onAuthStateChanged, User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { limitWords } from "@/lib/utils";
 
@@ -131,18 +131,7 @@ export function ProjectSidebar({
       }
     });
 
-    // Listen to deep-linked auth tokens from Electron
-    // @ts-expect-error - external IPC method
-    const unsubscribeIpc = window.fikrStudio?.onExternalEvent?.((eventData) => {
-      if (eventData.type === "auth-token" && eventData.payload?.token) {
-        signInWithCustomToken(auth, eventData.payload.token).catch(() => {});
-      }
-    });
-
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeIpc) unsubscribeIpc();
-    };
+    return () => unsubscribeAuth();
   }, []);
 
 
@@ -601,4 +590,3 @@ export function ProjectSidebar({
     </div>
   );
 }
-

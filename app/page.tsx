@@ -44,6 +44,8 @@ import {
 import { detectContentType } from "@/lib/detect-content-type";
 import { analytics } from "@/lib/analytics";
 import { limitWords } from "@/lib/utils";
+import { signInWithCustomToken } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -97,6 +99,8 @@ export default function Page() {
   const [cloudRelayKey, setCloudRelayKey] = useState<string>("");
   const [wordUsage, setWordUsage] = useState<WordUsage | null>(null);
   const usagePollRef = useRef<NodeJS.Timeout | null>(null);
+  const authCallbackInFlightRef = useRef(false);
+  const [authCallbackError, setAuthCallbackError] = useState("");
 
   const fetchWordUsage = useCallback(async (token: string) => {
     try {
@@ -145,6 +149,37 @@ export default function Page() {
     },
     [fetchWordUsage],
   );
+
+  const completePendingAuth = useCallback(async (deliveredToken?: string) => {
+    const ipc = typeof window !== "undefined" ? (window as any).fikrStudio : null;
+    if (!ipc || authCallbackInFlightRef.current) return;
+
+    const token = deliveredToken || await ipc.consumeAuthToken?.();
+    if (!token) return;
+
+    authCallbackInFlightRef.current = true;
+    setAuthCallbackError("");
+    try {
+      const credential = await signInWithCustomToken(getFirebaseAuth(), token);
+      const idToken = await credential.user.getIdToken();
+      await ipc.setUser?.(credential.user.uid, idToken);
+      await ipc.ackAuthToken?.();
+    } catch (error) {
+      console.error("[Auth] Failed to complete desktop sign-in", error);
+      setAuthCallbackError("Fikr Studio could not complete sign-in. Please retry.");
+    } finally {
+      authCallbackInFlightRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const ipc = (window as any).fikrStudio;
+    const unsubscribe = ipc?.onAuthToken?.((token: string) => {
+      void completePendingAuth(token);
+    });
+    void completePendingAuth();
+    return () => unsubscribe?.();
+  }, [completePendingAuth]);
 
   // Cleanup poll on unmount
   useEffect(() => () => { if (usagePollRef.current) clearInterval(usagePollRef.current); }, []);
@@ -1848,6 +1883,29 @@ export default function Page() {
     <SearchProvider>
       <GlobalSearchEngine projects={projects} />
       <div className="flex h-dvh overflow-hidden bg-background">
+        {authCallbackError && (
+          <div
+            role="alert"
+            className="fixed left-1/2 top-4 z-[1000] flex -translate-x-1/2 items-center gap-3 rounded-md border border-destructive/30 bg-background px-4 py-3 text-sm shadow-lg"
+          >
+            <span>{authCallbackError}</span>
+            <button
+              type="button"
+              onClick={() => void completePendingAuth()}
+              className="font-medium text-teal hover:underline"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthCallbackError("")}
+              aria-label="Dismiss sign-in error"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              ×
+            </button>
+          </div>
+        )}
         {/* Hidden file input for .fikrdata import */}
         <input
           ref={importInputRef}

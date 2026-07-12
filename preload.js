@@ -63,6 +63,15 @@ contextBridge.exposeInMainWorld("fikrStudio", {
   /** Open Fikr.One SSO login in browser */
   openAuth: () => ipcRenderer.invoke("fikr-studio:open-auth"),
 
+  /** Complete the one-shot desktop SSO handoff without losing early callbacks. */
+  consumeAuthToken: () => ipcRenderer.invoke('fikr-studio:consume-auth-token'),
+  ackAuthToken: () => ipcRenderer.invoke('fikr-studio:ack-auth-token'),
+  onAuthToken: (callback) => {
+    const handler = (_event, token) => callback(token);
+    ipcRenderer.on('fikr-studio:auth-token', handler);
+    return () => ipcRenderer.removeListener('fikr-studio:auth-token', handler);
+  },
+
   /** 1-Click MCP Installations */
   checkMcp: (client) => ipcRenderer.invoke("fikr-studio:check-mcp", client),
   installMcp: (client) => ipcRenderer.invoke("fikr-studio:install-mcp", client),

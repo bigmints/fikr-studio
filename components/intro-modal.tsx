@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Cloud, Key, ChevronDown, Check, Bell, ChevronRight, Eye, EyeOff, Sparkles, Wand2 } from "lucide-react"
 import { getFirebaseAuth } from "@/lib/firebase"
-import { onAuthStateChanged, User, signInWithCustomToken } from "firebase/auth"
+import { onAuthStateChanged, User } from "firebase/auth"
 import { useAISettings, AI_PROVIDER_PRESETS, type AIProvider, getPreset } from "@/lib/ai-settings"
 import { analytics } from "@/lib/analytics"
 import pkg from "../package.json"
@@ -25,7 +25,6 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
   const [providerOpen, setProviderOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [userPlan, setUserPlan] = useState<string>("Free")
-  const [loginError, setLoginError] = useState("")
 
   const { settings, updateSettings } = useAISettings()
   const [draftProvider, setDraftProvider] = useState<AIProvider>(settings.provider)
@@ -76,21 +75,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
       }
     })
 
-    // @ts-expect-error - IPC method
-    const unsubscribeIpc = window.fikrStudio?.onExternalEvent?.((eventData: any) => {
-      if (eventData.type === "auth-token" && eventData.payload?.token) {
-        signInWithCustomToken(auth, eventData.payload.token).then(() => {
-          setStep("notifications")
-        }).catch((err) =>
-          setLoginError(err.message)
-        )
-      }
-    })
-
-    return () => {
-      unsubscribeAuth()
-      if (unsubscribeIpc) unsubscribeIpc()
-    }
+    return () => unsubscribeAuth()
   }, [])
 
   const handleSaveByok = () => {
@@ -253,7 +238,6 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                             {user ? "Continue with Fikr Cloud" : "Sign in with Fikr Cloud"}
                           </button>
                           
-                          {loginError && <p className="text-xs text-red-500 text-center -mt-2">{loginError}</p>}
 
                           <button 
                             onClick={() => setAuthMode("byok")}
