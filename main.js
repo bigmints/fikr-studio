@@ -15,6 +15,13 @@ const { selectFirstSyncWorkspace } = require('./lib/cloud-seed');
 const { embedRelevanceVector } = require('./lib/relevance-vectors');
 const { validateMcpRpc, validateToolCall } = require('./lib/mcp-validation');
 const { externalRelayMessageToRpc } = require('./lib/external-relay-message');
+const { configureSafeStorageProfile } = require('./lib/secure-storage-profile');
+const { loadOrCreateLocalMcpAuthToken } = require('./lib/local-mcp-auth');
+
+// Configure the Keychain service identity before the first safeStorage call.
+// Retain the historical userData path because the external MCP bridge reads it.
+const IS_DEV = process.env.ELECTRON_IS_DEV === '1';
+const secureStorageProfile = configureSafeStorageProfile(app, IS_DEV);
 
 // ─── Authenticated cloud-sync client ─────────────────────────────────────────
 // Firebase Admin credentials remain on fikr.one; the desktop sends only an ID token.
@@ -78,7 +85,6 @@ async function setCurrentUser(uid, idToken) {
 
 // In dev mode (launched by electron:dev) Electron loads from the Next.js HMR
 // dev server instead of the static export in out/.
-const IS_DEV = process.env.ELECTRON_IS_DEV === '1';
 const DEV_SERVER_URL = 'http://localhost:3741';
 let pendingAuthState = null;
 let pendingAuthExpiresAt = 0;
@@ -265,8 +271,8 @@ const WORKSPACE_DIR = path.join(app.getPath("home"), ".fikr-studio");
 const WORKSPACE_FILE = path.join(WORKSPACE_DIR, "workspace.json");
 const WORKSPACE_BACKUP_FILE = path.join(WORKSPACE_DIR, "workspace.backup.json");
 const INTRO_FILE = path.join(WORKSPACE_DIR, "intro-seen");
-const SECURE_AI_KEYS_FILE = path.join(app.getPath('userData'), 'ai-keys.secure');
-const MCP_AUTH_FILE = path.join(app.getPath('userData'), 'mcp-auth.secure');
+const SECURE_AI_KEYS_FILE = secureStorageProfile.secureAiKeysFile;
+const MCP_AUTH_FILE = path.join(secureStorageProfile.userDataPath, 'mcp-auth.json');
 let mcpAuthToken = null;
 const workspaceStore = createWorkspaceStore({
   fs,
@@ -497,18 +503,7 @@ function assertAiProvider(provider) {
 }
 
 function loadOrCreateMcpAuthToken() {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is unavailable');
-  if (fs.existsSync(MCP_AUTH_FILE)) {
-    const encrypted = Buffer.from(fs.readFileSync(MCP_AUTH_FILE, 'utf8'), 'base64');
-    const token = safeStorage.decryptString(encrypted);
-    if (/^[a-f0-9]{64}$/.test(token)) return token;
-  }
-  const token = randomBytes(32).toString('hex');
-  const encrypted = safeStorage.encryptString(token);
-  fs.mkdirSync(path.dirname(MCP_AUTH_FILE), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(MCP_AUTH_FILE, encrypted.toString('base64'), { mode: 0o600 });
-  fs.chmodSync(MCP_AUTH_FILE, 0o600);
-  return token;
+  return loadOrCreateLocalMcpAuthToken({ fs, filePath: MCP_AUTH_FILE, randomBytes });
 }
 
 function isAuthorizedMcpRequest(req, url) {

@@ -1,6 +1,6 @@
 {
   "name": "fikr-studio",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Local-first knowledge and writing workspace for macOS",
   "author": "Bigmints",
   "main": "main.js",
