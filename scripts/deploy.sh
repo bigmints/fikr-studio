@@ -31,7 +31,6 @@ ZIP="dist/Fikr Studio-${VERSION}-arm64-mac.zip"
 
 echo "Building signed and notarized Fikr Studio ${VERSION} release candidate..."
 npm run verify
-APPLE_KEYCHAIN="${HOME}/Library/Keychains/login.keychain-db" \
 APPLE_KEYCHAIN_PROFILE="notarytool-profile" \
 APPLE_TEAM_ID="FBG8NKYPUJ" \
 npx electron-builder build --mac -p never

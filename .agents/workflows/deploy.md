@@ -16,7 +16,6 @@ Keychain, invokes `notarytool`, and uploads a draft GitHub release. Publish only
 after verifying the downloaded draft artifacts.
 
 ```bash
-APPLE_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db" \
 APPLE_KEYCHAIN_PROFILE="notarytool-profile" \
 APPLE_TEAM_ID="FBG8NKYPUJ" \
 GH_TOKEN="<fresh-release-token>" \

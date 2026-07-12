@@ -48,11 +48,11 @@ npm run verify
 
 ## 2. Build, sign, and notarize a release candidate
 
-Do not publish from this step. `APPLE_KEYCHAIN` and
-`APPLE_KEYCHAIN_PROFILE` activate electron-builder's notarytool integration.
+Do not publish from this step. `APPLE_KEYCHAIN_PROFILE` activates
+electron-builder's notarytool integration. Do not set `APPLE_KEYCHAIN` unless
+the profile was explicitly stored in that exact keychain.
 
 ```bash
-APPLE_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db" \
 APPLE_KEYCHAIN_PROFILE="notarytool-profile" \
 APPLE_TEAM_ID="FBG8NKYPUJ" \
 npm run electron:build
