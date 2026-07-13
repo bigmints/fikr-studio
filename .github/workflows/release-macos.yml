@@ -13,7 +13,7 @@ jobs:
     runs-on: macos-15
     env:
       APPLE_TEAM_ID: FBG8NKYPUJ
-      KEYCHAIN_PATH: ${{ runner.temp }}/fikr-studio-release.keychain-db
+      KEYCHAIN_PATH: /tmp/fikr-studio-release.keychain-db
       KEYCHAIN_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
