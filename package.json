@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "NEXT_STATIC_EXPORT=1 next build",
+    "build": "NEXT_STATIC_EXPORT=1 next build --webpack",
     "start": "next start",
     "lint": "eslint app/ components/ lib/ tests/ main.js preload.js scripts/*.js scripts/*.mjs --ext .js,.mjs,.ts,.tsx",
     "typecheck": "tsc --noEmit",
