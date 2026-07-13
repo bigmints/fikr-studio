@@ -43,7 +43,7 @@ jobs:
           test -n "$APPLE_CERTIFICATE_P12"
           test -n "$APPLE_CERTIFICATE_PASSWORD"
           CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
-          printf '%s' "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERTIFICATE_PATH"
+          printf '%s' "$APPLE_CERTIFICATE_P12" | base64 -D > "$CERTIFICATE_PATH"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
