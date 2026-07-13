@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, Menu, Tray, nativeImage, safeStorage, session } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog, Menu, Tray, nativeImage, safeStorage, session, clipboard } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
@@ -1830,6 +1830,8 @@ Run this skill:
 
   server.once("listening", () => {
     MCP_PORT = currentPort;
+    isMcpServerReady = true;
+    refreshTrayMenu();
     console.log(`[Fikr Studio] MCP server running at http://localhost:${MCP_PORT}`);
 
     // Resolve ready promise
@@ -1889,6 +1891,7 @@ let mcpServer    = null;
 let tray         = null;
 let isQuiting    = false;
 let isManualUpdateCheck = false;
+let isMcpServerReady = false;
 
 /** Buffered progress events sent before the splash page was ready */
 let _splashQueue = [];
@@ -1916,6 +1919,108 @@ function showMainWindow() {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+}
+
+function getMcpServerUrl(port = MCP_PORT) {
+  return `http://localhost:${port}/sse?token=${encodeURIComponent(mcpAuthToken)}`;
+}
+
+function getMcpConfigJson(port = MCP_PORT) {
+  return JSON.stringify({
+    mcpServers: {
+      "fikr-studio": {
+        command: "npx",
+        args: ["-y", "fikr-studio-mcp@latest", getMcpServerUrl(port)],
+      },
+    },
+  }, null, 2);
+}
+
+async function syncWorkspaceFromCloud() {
+  if (!currentUserId) return { success: false, error: "Not signed in" };
+
+  try {
+    const cloudWorkspace = await loadCloudWorkspaceWithFirstSyncSeed();
+    if (cloudWorkspace && Array.isArray(cloudWorkspace.projects)) {
+      saveProjectsToDisk(cloudWorkspace);
+      updateLastSyncedIds(cloudWorkspace);
+      if (mainWindow) pushToRenderer(mainWindow, "workspace-synced", cloudWorkspace);
+      return { success: true };
+    }
+    return { success: false, error: "No projects found in cloud" };
+  } catch (err) {
+    console.error("[CloudSync] Tray sync failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
+
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: "Open Canvas",
+      click: () => {
+        showMainWindow();
+      },
+    },
+    { type: "separator" },
+    {
+      label: isMcpServerReady ? `MCP running ${MCP_PORT}` : "MCP starting",
+      enabled: false,
+    },
+    {
+      label: "Copy MCP Config",
+      click: async () => {
+        const port = await mcpServerReadyPromise.catch(() => MCP_PORT);
+        clipboard.writeText(getMcpConfigJson(port));
+      },
+    },
+    {
+      label: "Sync Now",
+      click: async () => {
+        showMainWindow();
+        const result = await syncWorkspaceFromCloud();
+        if (!result.success) {
+          dialog.showMessageBox(mainWindow, {
+            type: "warning",
+            title: "Sync unavailable",
+            message: "Fikr Studio could not sync right now.",
+            detail: result.error || "Try again after signing in.",
+            buttons: ["OK"],
+          }).catch(() => {});
+        }
+      },
+    },
+    {
+      label: "Add New Note",
+      click: async () => {
+        showMainWindow();
+        try {
+          await executeTool("create_note", {
+            text: "New note",
+            idempotency_key: `tray-note-${Date.now()}`,
+          }, mainWindow);
+        } catch (error) {
+          dialog.showMessageBox(mainWindow, {
+            type: "error",
+            title: "Could not add note",
+            message: "Fikr Studio could not add a new note.",
+            detail: error instanceof Error ? error.message : "Unknown error",
+            buttons: ["OK"],
+          }).catch(() => {});
+        }
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Quit Fikr Studio",
+      click: () => {
+        isQuiting = true;
+        app.quit();
+      },
+    },
+  ]));
 }
 
 /** Send a progress update to the splash screen window */
@@ -2131,24 +2236,7 @@ app.whenReady().then(async () => {
   // Use a scaled-down version of the icon for the tray (ideally 16x16 or 22x22)
   tray = new Tray(createTrayIcon());
   tray.setToolTip("Fikr Studio");
-  
-  const trayMenu = Menu.buildFromTemplate([
-    {
-      label: "Open Canvas",
-      click: () => {
-        showMainWindow();
-      }
-    },
-    { type: "separator" },
-    {
-      label: "Quit Fikr Studio",
-      click: () => {
-        isQuiting = true;
-        app.quit();
-      }
-    }
-  ]);
-  tray.setContextMenu(trayMenu);
+  refreshTrayMenu();
 
   // ─── Native Application Menu ──────────────────────────────────────────────────
   const isMac = process.platform === 'darwin';
