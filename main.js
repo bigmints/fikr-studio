@@ -194,10 +194,7 @@ function handleAuthCallback(url) {
   closePendingAuthServer();
   pendingRendererAuthToken = result.token;
   deliverPendingAuthToken();
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-  }
+  showMainWindow();
   return true;
 }
 
@@ -267,10 +264,7 @@ if (!gotTheLock) {
   process.exit(0);
 } else {
   app.on("second-instance", (event, commandLine, workingDirectory) => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+  showMainWindow();
     // Handle URL from second instance (e.g. Windows/Linux or macOS dev mode)
     const url = commandLine.find(arg => arg.startsWith("fikr-studio://"));
     if (url) handleAuthCallback(url);
@@ -1900,6 +1894,30 @@ let isManualUpdateCheck = false;
 let _splashQueue = [];
 let _splashReady = false;
 
+function showDockIcon() {
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.show();
+  }
+}
+
+function hideDockIcon() {
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.hide();
+  }
+}
+
+function showMainWindow() {
+  showDockIcon();
+
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+  }
+
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 /** Send a progress update to the splash screen window */
 function splashProgress(phase, label, percent) {
   if (!splashWindow || splashWindow.isDestroyed()) return;
@@ -1987,6 +2005,7 @@ function createWindow() {
     if (!isQuiting) {
       event.preventDefault();
       mainWindow.hide();
+      hideDockIcon();
     }
   });
 
@@ -2054,10 +2073,7 @@ async function runStartupSequence() {
   splashProgress('ready', 'Ready', 100);
   await new Promise(r => setTimeout(r, 600));  // brief pause so user sees "Ready"
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-  }
+  showMainWindow();
 
   // Push synced workspace to renderer now that it's ready
   if (currentUserId && mainWindow) {
@@ -2120,12 +2136,7 @@ app.whenReady().then(async () => {
     {
       label: "Open Canvas",
       click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        } else {
-          createWindow();
-        }
+        showMainWindow();
       }
     },
     { type: "separator" },
@@ -2262,13 +2273,13 @@ app.whenReady().then(async () => {
   runStartupSequence().catch(err => {
     console.error('[Startup] Startup sequence failed:', err.message);
     // Ensure main window shows even if startup fails
-    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+    showMainWindow();
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
   });
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+app.on('activate', () => {
+  showMainWindow();
+});
 });
 
 app.on("open-url", (event, url) => {
