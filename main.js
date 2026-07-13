@@ -2077,6 +2077,28 @@ async function runStartupSequence() {
   }, 300);
 }
 
+function createTrayIcon() {
+  const candidatePaths = [
+    path.join(__dirname, "out", "logo-icon.png"),
+    path.join(__dirname, "public", "logo-icon.png"),
+    path.join(__dirname, "build", "icon.png"),
+    path.join(process.resourcesPath || __dirname, "icon.icns"),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (!fs.existsSync(candidatePath)) continue;
+
+    const image = nativeImage.createFromPath(candidatePath);
+    if (image.isEmpty()) continue;
+
+    image.setTemplateImage(false);
+    return image.resize({ width: 16, height: 16 });
+  }
+
+  console.warn("[Tray] No usable tray icon found", candidatePaths);
+  return nativeImage.createEmpty();
+}
+
 app.whenReady().then(async () => {
   session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
@@ -2090,10 +2112,8 @@ app.whenReady().then(async () => {
   mcpServer = startMcpServer(mainWindow);
 
   // ─── System Tray ──────────────────────────────────────────────────────────────
-  const iconPath = path.join(__dirname, "build/icon.png");
   // Use a scaled-down version of the icon for the tray (ideally 16x16 or 22x22)
-  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
-  tray = new Tray(trayIcon);
+  tray = new Tray(createTrayIcon());
   tray.setToolTip("Fikr Studio");
   
   const trayMenu = Menu.buildFromTemplate([
