@@ -1,6 +1,8 @@
 {
   "name": "fikr-studio",
-  "version": "0.1.14",
+  "version": "0.1.20",
+  "description": "Local-first knowledge and writing workspace for macOS",
+  "author": "Bigmints",
   "main": "main.js",
   "private": true,
   "bin": {
@@ -10,27 +12,21 @@
     "dev": "next dev",
     "build": "NEXT_STATIC_EXPORT=1 next build",
     "start": "next start",
-    "lint": "eslint app/ components/ lib/ --ext .ts,.tsx",
+    "lint": "eslint app/ components/ lib/ tests/ main.js preload.js scripts/*.js scripts/*.mjs --ext .js,.mjs,.ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.js tests/*.test.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "check:history-secrets": "node scripts/check-history-secrets.mjs",
+    "check:asar": "node scripts/check-asar.mjs",
+    "check:mac-package": "node scripts/check-macos-package.mjs",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run check:secrets && npm run check:history-secrets && npm audit",
     "electron:dev": "NODE_PATH=./node_modules concurrently -k -n NEXT,ELECTRON -c cyan,yellow \"next dev -p 3741 --webpack\" \"wait-on http://localhost:3741 && cross-env ELECTRON_IS_DEV=1 electron .\"",
     "electron:prod": "npm run build && NODE_ENV=production electron .",
-    "electron:build": "npm run build && electron-builder build --mac",
+    "electron:build": "npm run verify && npm run build && electron-builder build --mac",
     "deploy": "./scripts/deploy.sh"
   },
   "dependencies": {
-    "@lobehub/icons": "^5.6.0",
-    "@tiptap/extension-bubble-menu": "^3.22.5",
-    "@tiptap/extension-highlight": "^3.22.5",
-    "@tiptap/pm": "^3.22.5",
-    "@tiptap/react": "^3.22.5",
-    "@tiptap/starter-kit": "^3.22.5",
-    "@types/react-textfit": "^1.1.4",
-    "@xenova/transformers": "^2.17.2",
-    "electron-updater": "^6.8.3",
-    "firebase-admin": "^13.8.0",
-    "html-to-image": "^1.11.13",
-    "marked": "^18.0.2",
-    "react-textfit": "^1.1.1",
-    "tiptap-markdown": "^0.9.0"
+    "electron-updater": "^6.8.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
@@ -66,6 +62,10 @@
     "@radix-ui/react-tooltip": "1.2.8",
     "@tailwindcss/postcss": "^4.2.0",
     "@tailwindcss/typography": "^0.5.19",
+    "@tiptap/extension-highlight": "^3.27.3",
+    "@tiptap/pm": "^3.27.3",
+    "@tiptap/react": "^3.27.3",
+    "@tiptap/starter-kit": "^3.27.3",
     "@types/d3": "^7.4.3",
     "@types/node": "^22",
     "@types/react": "19.2.14",
@@ -89,8 +89,10 @@
     "firebase": "^12.12.1",
     "framer-motion": "^11.18.0",
     "globals": "^17.6.0",
+    "html-to-image": "^1.11.13",
     "input-otp": "1.4.2",
     "lucide-react": "^0.564.0",
+    "marked": "^18.0.6",
     "next": "^16.2.2",
     "next-themes": "^0.4.6",
     "postcss": "^8.5",
@@ -113,5 +115,8 @@
     "vaul": "^1.1.2",
     "wait-on": "^8.0.5",
     "zod": "^3.24.1"
+  },
+  "overrides": {
+    "postcss": "$postcss"
   }
 }

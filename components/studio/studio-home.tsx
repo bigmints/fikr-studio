@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutGrid, List, FileText, FileAudio, Clapperboard,
+  LayoutGrid, List, FileText,
   Plus, X, Check, Archive, Copy, Loader2,
 } from "lucide-react";
 import type { StudioProject, ContentMode, Platform } from "@/lib/generate/types";
@@ -15,8 +15,6 @@ function generateId() {
 
 const MODE_ICONS: Record<string, React.ElementType> = {
   article:       FileText,
-  podcast:       FileAudio,
-  "video-script": Clapperboard,
 };
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -265,24 +263,18 @@ export function StudioHome({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto w-full px-8 py-8 flex flex-col gap-8">
 
-          {/* Quick-start content type cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Quick-start content type */}
+          <div className="grid grid-cols-1 max-w-sm gap-3">
           {GENERATION_MODES.map((mode) => {
             const Icon = MODE_ICONS[mode.id] ?? FileText;
             return (
               <button
                 key={mode.id}
                 onClick={() => {
-                  if (mode.comingSoon) return;
                   setSelectedMode(mode.id);
                   setShowModal(true);
                 }}
-                disabled={mode.comingSoon}
-                className={`group relative flex items-center gap-3 p-4 rounded-xl border text-left transition-all overflow-hidden ${
-                  mode.comingSoon
-                    ? "border-border/20 bg-card/40 opacity-50 cursor-not-allowed"
-                    : "border-border/40 bg-card hover:border-primary/50 cursor-pointer"
-                }`}
+                className="group relative flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card hover:border-primary/50 text-left transition-all overflow-hidden cursor-pointer"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                 <div className="flex items-center justify-center size-9 rounded-lg bg-primary/10 text-primary shrink-0">
@@ -291,16 +283,9 @@ export function StudioHome({
                 <div>
                   <p className="font-semibold text-sm">{mode.label}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {mode.id === "article" && "Long-form for LinkedIn or Substack"}
-                    {mode.id === "podcast" && "Two-speaker conversational scripts"}
-                    {mode.id === "video-script" && "YouTube or short-form scripts"}
+                    Long-form for LinkedIn or Substack
                   </p>
                 </div>
-                {mode.comingSoon && (
-                  <span className="ml-auto text-[10px] bg-foreground/10 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
-                    Soon
-                  </span>
-                )}
               </button>
             );
           })}
@@ -397,20 +382,16 @@ export function StudioHome({
                     return (
                       <button
                         key={mode.id}
-                        disabled={mode.comingSoon}
                         onClick={() => setSelectedMode(mode.id)}
                         className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
                           selectedMode === mode.id
                             ? "border-primary bg-primary/10"
                             : "border-border/40 hover:border-primary/30"
-                        } ${mode.comingSoon ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                        } cursor-pointer`}
                       >
                         <Icon className="size-5 text-primary shrink-0" />
                         <span className="font-medium text-sm">{mode.label}</span>
-                        {mode.comingSoon && (
-                          <span className="ml-auto text-[10px] bg-foreground/10 px-1.5 py-0.5 rounded font-bold uppercase">Soon</span>
-                        )}
-                        {selectedMode === mode.id && !mode.comingSoon && (
+                        {selectedMode === mode.id && (
                           <Check className="size-4 text-primary ml-auto" />
                         )}
                       </button>

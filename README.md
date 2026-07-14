@@ -1,105 +1,61 @@
 # Fikr Studio
 
-**A design experiment in spatial, AI-augmented thinking.**
+Fikr Studio is a macOS desktop workspace for capturing notes, organizing them
+across list, masonry, and graph views, and optionally enriching them with AI.
 
-Part of the Fikr family. A spatial research tool that reads what you write and enriches it with AI — no prompting, no chat. Just capture your thinking and let the structure emerge. Desktop companion for Fikr Voice Notes.
+This project is based on [Nodepad](https://github.com/mskayyali/nodepad) by
+Saleh Kayyali and retains its MIT attribution.
 
-*This application is a fork of [Nodepad](https://github.com/mskayyali/nodepad) by Saleh Kayyali, modified and rebranded for the Fikr ecosystem.*
+## Supported product
 
----
+- Local note capture works without an account.
+- Electron stores the workspace in `~/.fikr-studio/workspace.json`.
+- Projects can be exported to and imported from `.fikrdata` files.
+- BYOK enrichment supports OpenRouter, OpenAI, and Google Gemini; credentials
+  remain in Electron secure storage and provider requests run in the main process.
+- Note content sent for enrichment goes directly to the selected provider.
+- Plus and Pro users can opt into cloud synchronization through `fikr.one`.
+- The local MCP server requires Fikr Studio to be running.
 
-Most AI tools are built around a chat interface: you ask, it answers, you ask again. The interaction is sequential, conversational, and optimised for producing output. Fikr Studio is built around a different premise: that thinking is spatial and associative, and that AI is most useful when it works quietly in the background rather than at the centre of attention.
+Fikr Studio does not currently promise production browser hosting, custom LLM
+endpoints, Voice Notes integration, or fully offline generative AI.
 
-You add notes. The AI classifies them, finds connections between them, surfaces what you haven't said yet, and occasionally synthesises an emergent insight from the whole canvas. You stay in control of the space. The AI earns its place by being genuinely useful rather than prominent.
+## Development
 
----
-
-## How it works
-
-Notes are typed into the input bar and placed onto a spatial canvas. Each note is automatically classified into one of 14 types — claim, question, idea, task, entity, quote, reference, definition, opinion, reflection, narrative, comparison, thesis, general — and enriched with a short annotation that adds something the note doesn't already say.
-
-Connections between notes are inferred from content. When you hover a connection indicator, unrelated notes dim. When enough notes accumulate, a synthesis emerges — a single sentence that bridges the tensions across the canvas. You can solidify it into a thesis note or dismiss it.
-
-Three views: **tiling** (spatial BSP grid), **kanban** (grouped by type), **graph** (force-directed, centrality-radial).
-
----
-
-## Setup
-
-**Requirements**: macOS (for the desktop app) or a modern browser, plus an API key from one of the supported providers.
+Requirements: Node.js 20 or newer and macOS for Electron packaging.
 
 ```bash
-git clone https://github.com/Bigmints-com/fikr-studio.git
-cd fikr-studio
 npm install
-
-# Run in development (browser)
-npm run dev
-
-# Build the macOS DMG application
-APPLE_KEYCHAIN_PROFILE="notarytool-profile" APPLE_TEAM_ID="FBG8NKYPUJ" npm run electron:build
+npm run electron:dev
 ```
 
-**Add your API key**: click the menu icon (top-left) → Settings → choose your provider → paste your key. The key is stored locally and goes directly to the AI provider.
+Validation:
 
-**Enable web grounding** (optional): toggle "Web grounding" in Settings to let the AI cite real sources for claims, questions, and references. Supported on OpenRouter `:online` models and OpenAI search-preview models.
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
 
----
+Release builds must follow `.agents/workflows/release.md`. A distributable build
+is not considered complete until its signature and notarization ticket have been
+verified against the exact published artifact.
 
-## Providers & Models
+## Data and network behavior
 
-Select provider and model from the sidebar Settings panel. Each provider remembers its key independently.
+| Capability | Local storage | Network use |
+|---|---|---|
+| Notes and projects | `~/.fikr-studio/workspace.json` | None for local-only use |
+| BYOK enrichment | Provider settings on this Mac | Sends selected note context to the configured AI provider |
+| Plus/Pro sync | Local workspace cache | Sends workspace data to authenticated `fikr.one` sync APIs |
+| Local relevance search | In-memory and workspace vectors | None |
+| Plus/Pro semantic search | Cloud workspace | Authenticated `fikr.one` request |
 
-### OpenRouter *(default)*
-Access to all major models through a single key. Create a free account at [openrouter.ai](https://openrouter.ai).
-- `openai/gpt-4o` (Default)
-- `anthropic/claude-sonnet-4-5`
-- `google/gemini-2.5-pro`
-- `deepseek/deepseek-chat`
-- `nvidia/nemotron-3-nano-30b-a3b:free`
+## File formats
 
-### OpenAI *(direct)*
-Use your OpenAI API key directly.
-- `gpt-4o`
-- `gpt-4o-mini`
-- `o4-mini`
-
-### Custom Local Providers
-Fikr Studio also supports Custom LLM Providers (e.g. self-hosted models or custom inferencing endpoints). You can configure a Custom Base URL and API key from the settings.
-
----
-
-## Keyboard shortcuts
-
-| | |
-|---|---|
-| `Enter` | Add note |
-| `⌘K` | Command palette (views, navigation, export) |
-| `⌘Z` | Undo |
-| `Escape` | Deselect / close panels |
-
-Double-click any note to edit. Click the type label to reclassify manually.
-
----
-
-## Data
-
-Everything lives locally. No account, no server, no database.
-
-- Notes are persisted to `localStorage` under `fikr-studio-projects`
-- A silent rolling backup is written on every change to `fikr-studio-backup`
-- Export to `.md` or `.fikr-studio` (versioned JSON) via `⌘K`
-- Import `.fikr-studio` files via the sidebar
-
----
-
-## Tech
-
-Next.js · React 19 · TypeScript · Tailwind CSS v4 · Electron · D3.js · Framer Motion
-
----
+- `.fikrdata`: versioned project export and import
+- `.md`: Markdown export
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
-Based on the open-source project Nodepad by [Saleh Kayyali](https://github.com/mskayyali).
+MIT. See [LICENSE](LICENSE).

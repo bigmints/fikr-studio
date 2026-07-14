@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-06-02T11:30:55Z"
-  host: "BigMac-2"
-  task: "Committed: fix(ui): revert to full-page settings layout while keeping simple centered content"
+  last_seen: "2026-07-14T09:12:38Z"
+  host: "Mac"
+  task: "release 0.1.20: verifying mandatory gate"
   status: alive

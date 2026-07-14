@@ -7,7 +7,6 @@ import {
   ArrowLeft, Copy, Download, ExternalLink, Check,
   Sparkles, Image as ImageIcon, Share2, X, Shuffle, Layout,
 } from "lucide-react";
-import { Textfit } from "react-textfit";
 import type { StudioProject } from "@/lib/generate/types";
 
 // ── Platform config ─────────────────────────────────────────────────────────
@@ -121,14 +120,14 @@ function SocialCard({ title, snippet, platform, gradientIdx, ratioOverride }: {
       {/* Middle: title + snippet */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: isTall ? "32px 0" : "24px 0", gap: 16, overflow: "hidden" }}>
         <div style={{ flex: 4, minHeight: 0 }}>
-          <Textfit mode="multi" min={16} max={cfg.titleSize * 1.6} style={{ width: "100%", height: "100%", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.02em" }}>
+          <div style={{ width: "100%", height: "100%", overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: isTall ? 5 : 3, fontSize: `clamp(16px, ${cfg.titleSize / 8}vw, ${cfg.titleSize * 1.6}px)`, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.02em" }}>
             {title}
-          </Textfit>
+          </div>
         </div>
         <div style={{ flex: 6, minHeight: 0 }}>
-          <Textfit mode="multi" min={10} max={21} style={{ width: "100%", height: "100%", lineHeight: 1.5, opacity: 0.85 }}>
+          <div style={{ width: "100%", height: "100%", overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: isTall ? 10 : 5, fontSize: "clamp(10px, 2.2vw, 21px)", lineHeight: 1.5, opacity: 0.85 }}>
             {snippet}
-          </Textfit>
+          </div>
         </div>
       </div>
 
@@ -251,8 +250,8 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
   const RATIOS = [
     { id: "auto", label: "Auto Ratio" },
     { id: "1/1", label: "Square" },
-    { id: "9/10", label: "9:10" },
-    { id: "10/9", label: "10:9" },
+    { id: "4/5", label: "4:5" },
+    { id: "16/9", label: "16:9" },
   ];
   const currentRatioLabel = RATIOS.find(r => r.id === ratioMode)?.label ?? "Auto Ratio";
 

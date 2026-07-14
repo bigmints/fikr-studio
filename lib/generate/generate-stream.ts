@@ -2,8 +2,6 @@
 
 import {
   loadAIConfig,
-  getBaseUrl,
-  getProviderHeaders,
   resolveModel,
   getManagedAuthStatus,
 } from "@/lib/ai-settings";
@@ -12,6 +10,7 @@ import { getModeById } from "./generation-modes";
 import { PLATFORM_CONFIGS } from "./platform-config";
 import { LOCAL_AI_CONFIG } from "@/local-ai.config";
 import PRESETS from "./presets.json";
+import { requestByokAi } from "@/lib/ai-provider-request";
 
 const MAX_OUTPUT_TOKENS = 2500;
 const TIMEOUT_MS = 300_000; // Increased to 5 minutes for slow local models
@@ -128,13 +127,12 @@ export async function streamGenerate(
     } else {
       // ── BYOK path ─────────────────────────────────────────────────────────
 
-      let actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
+      const actualBaseUrl = LOCAL_AI_CONFIG.baseUrl;
       let actualModel = LOCAL_AI_CONFIG.model;
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("dev_local_model");
         if (stored) actualModel = stored;
       }
-      let actualHeaders: Record<string, string> = { "Content-Type": "application/json" };
       let providerName = "Local Model";
 
       if (!isDevOverride) {
@@ -146,18 +144,13 @@ export async function streamGenerate(
         if (!resolved) {
           throw new Error(`No model configured for provider "${config.provider}".`);
         }
-        actualBaseUrl = getBaseUrl(config);
         actualModel = resolved;
-        actualHeaders = getProviderHeaders(config);
         providerName = config.provider;
       }
 
       // Gemini native REST uses a different path — route through OpenAI-compat endpoint
       // All three supported providers (OpenAI, OpenRouter, Gemini via OR) use /chat/completions
-      const res = await fetch(`${actualBaseUrl}/chat/completions`, {
-        method: "POST",
-        headers: actualHeaders,
-        body: JSON.stringify({
+      const providerBody = {
           model: actualModel,
           max_tokens: MAX_OUTPUT_TOKENS,
           temperature: 0.7,
@@ -165,9 +158,15 @@ export async function streamGenerate(
             { role: "system", content: systemPrompt },
             { role: "user",   content: userMessage },
           ],
-        }),
-        signal: controller.signal,
-      });
+      };
+      const res = isDevOverride
+        ? await fetch(`${actualBaseUrl}/chat/completions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(providerBody),
+            signal: controller.signal,
+          })
+        : await requestByokAi(loadAIConfig()!.provider, providerBody);
 
       if (!res.ok) {
         throw new Error(
@@ -178,7 +177,6 @@ export async function streamGenerate(
       let responseData: unknown;
       try {
         responseData = await res.json();
-        console.log("[Dev Override] Raw API Response:", JSON.stringify(responseData, null, 2));
       } catch {
         throw new Error(
           `${providerName} returned invalid JSON. The model may have timed out.`,

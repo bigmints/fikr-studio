@@ -20,7 +20,7 @@ export function EmptyWorkspace({ title }: EmptyWorkspaceProps) {
         </div>
         <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary mb-8 shadow-sm">
           <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-[pulse_3s_ease-in-out_infinite]"></span>
-          AI-Powered Spatial Thinking
+          Local-First Spatial Thinking
         </div>
 
         <div className="flex flex-col gap-3 mb-6">
@@ -39,9 +39,8 @@ export function EmptyWorkspace({ title }: EmptyWorkspaceProps) {
         </div>
 
         <p className="text-base sm:text-lg text-muted-foreground leading-relaxed mb-12 max-w-md mx-auto">
-          Fikr Studio transforms your thinking into an organised, spatial
-          workspace. Write freely, and let the AI categorise, connect, and
-          synthesise.
+          Capture and organize notes across list, masonry, and graph views.
+          Configure AI only when you want classification and synthesis.
         </p>
       </div>
     </div>

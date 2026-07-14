@@ -1,19 +1,34 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, Menu, Tray, nativeImage, safeStorage } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog, Menu, Tray, nativeImage, safeStorage, session } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
 const os = require("os");
+const { randomBytes } = require('crypto');
+const { consumeAuthCallback } = require('./lib/auth-callback');
+const { isAuthorizedMcpRequest: authorizeMcpRequest } = require('./lib/mcp-auth');
+const { createWorkspaceStore } = require('./lib/workspace-store');
+const { updateJsonConfig } = require('./lib/json-config-store');
+const { performAiRequest } = require('./lib/ai-request');
+const { clearLocalFiles } = require('./lib/local-data');
+const { selectFirstSyncWorkspace } = require('./lib/cloud-seed');
+const { embedRelevanceVector } = require('./lib/relevance-vectors');
+const { validateMcpRpc, validateToolCall } = require('./lib/mcp-validation');
+const { externalRelayMessageToRpc } = require('./lib/external-relay-message');
 
-// ─── Studio Firestore layer (studio_projects / studio_notes collections) ──────
-// Completely separate from the Fikr Flutter app's users/{uid}/notes collection.
-const dc = require('./lib/studio-firestore');
+// ─── Authenticated cloud-sync client ─────────────────────────────────────────
+// Firebase Admin credentials remain on fikr.one; the desktop sends only an ID token.
+const dc = require('./lib/studio-cloud');
 
 /** Firebase UID of the currently signed-in user (null = offline / Free) */
 let currentUserId = null;
 
 /** Firebase ID token for calling fikr.one APIs (refreshed on auth state change) */
 let currentIdToken = null;
+let currentAccountProfile = null;
+
+/** True after the renderer has reported the current Firebase auth state. */
+let authStateResolved = false;
 
 /**
  * True once runStartupSequence() has finished.
@@ -24,36 +39,207 @@ let isStartupComplete = false;
 
 /**
  * True once the startup cloud load has completed (or we confirmed user is offline/Free).
- * Blocks all Firestore saves until we know what the cloud state is.
+ * Blocks all cloud saves until we know what the server-authorized state is.
  * Without this gate the renderer's initial disk-state save fires before the cloud
  * data arrives, potentially overwriting cloud data from another device.
  */
 let isCloudSyncReady = false;
 
-/** Whether the user is signed in as Plus/Pro (uid present = cloud sync enabled) */
+/** Enable cloud sync only after fikr.one verifies both identity and plan. */
 async function setCurrentUser(uid, idToken) {
   const prev = currentUserId;
-  currentUserId = uid;
   currentIdToken = idToken ?? null;
-  if (prev !== uid) {
-    console.log(uid ? `[DataConnect] User signed in: ${uid}` : '[DataConnect] User signed out — local mode');
+  currentUserId = null;
+  currentAccountProfile = null;
+
+  if (currentIdToken) {
+    try {
+      const profile = await dc.getCurrentUser(currentIdToken);
+      currentAccountProfile = profile;
+      if (profile.canSync && (profile.plan === 'plus' || profile.plan === 'pro')) {
+        currentUserId = profile.uid;
+      }
+    } catch (error) {
+      console.warn('[CloudSync] Token verification failed; staying local:', error.message);
+    }
   }
+  authStateResolved = true;
+
+  if (prev !== currentUserId) {
+    console.log(currentUserId
+      ? `[CloudSync] Verified managed user: ${currentUserId}`
+      : '[CloudSync] Cloud sync disabled — local mode');
+  }
+  scheduleRelayPoll();
+  scheduleExternalRelayPoll();
+  return currentAccountProfile;
 }
 
-
-process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
 
 // In dev mode (launched by electron:dev) Electron loads from the Next.js HMR
 // dev server instead of the static export in out/.
 const IS_DEV = process.env.ELECTRON_IS_DEV === '1';
 const DEV_SERVER_URL = 'http://localhost:3741';
+let pendingAuthState = null;
+let pendingAuthExpiresAt = 0;
+let pendingAuthCallbackUrl = 'fikr-studio://auth/callback';
+let pendingAuthServer = null;
+let pendingAuthServerTimer = null;
 
+function getRendererContentSecurityPolicy() {
+  const scriptSources = ["'self'", "'unsafe-inline'"];
+  const connectSources = [
+    "'self'",
+    'https:',
+    'http://127.0.0.1:*',
+    'http://localhost:*',
+  ];
 
-if (process.defaultApp) {
-  if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient("fikr-studio", process.execPath, [path.resolve(process.argv[1])]);
+  if (IS_DEV) {
+    // Next.js React Refresh evaluates its development runtime and uses HMR sockets.
+    scriptSources.push("'unsafe-eval'");
+    connectSources.push('ws://127.0.0.1:*', 'ws://localhost:*');
   }
-} else {
+
+  return [
+    "default-src 'self' file:",
+    `script-src ${scriptSources.join(' ')}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    `connect-src ${connectSources.join(' ')}`,
+    "font-src 'self' data:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'none'",
+  ].join('; ');
+}
+
+function applyRendererContentSecurityPolicy() {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (details.resourceType !== 'mainFrame' || !isTrustedRendererUrl(details.url)) {
+      callback({ responseHeaders: details.responseHeaders });
+      return;
+    }
+
+    const responseHeaders = { ...details.responseHeaders };
+    for (const name of Object.keys(responseHeaders)) {
+      if (name.toLowerCase() === 'content-security-policy') delete responseHeaders[name];
+    }
+    responseHeaders['Content-Security-Policy'] = [getRendererContentSecurityPolicy()];
+    callback({ responseHeaders });
+  });
+}
+
+function isTrustedRendererUrl(url) {
+  if (IS_DEV) return url.startsWith(`${DEV_SERVER_URL}/`) || url === DEV_SERVER_URL;
+  return url.startsWith('file:');
+}
+
+function openExternalHttps(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error('Invalid URL'); }
+  if (parsed.protocol !== 'https:') throw new Error('Only HTTPS links are allowed');
+  return shell.openExternal(parsed.toString());
+}
+
+function openExternalAuth(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error('Invalid auth URL'); }
+  const isSecure = parsed.protocol === 'https:';
+  const isDevLoopback = IS_DEV
+    && parsed.protocol === 'http:'
+    && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost');
+  if (!isSecure && !isDevLoopback) throw new Error('Invalid auth URL');
+  return shell.openExternal(parsed.toString());
+}
+
+function hardenWindow(window) {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalHttps(url).catch(error => {
+      console.warn('[Security] Blocked external window:', error.message);
+    });
+    return { action: 'deny' };
+  });
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedRendererUrl(url)) {
+      event.preventDefault();
+      console.warn('[Security] Blocked renderer navigation');
+    }
+  });
+}
+
+function handleAuthCallback(url) {
+  const result = consumeAuthCallback(
+    url,
+    pendingAuthState,
+    pendingAuthExpiresAt,
+    Date.now(),
+    pendingAuthCallbackUrl,
+  );
+  if (!result.accepted) {
+    console.warn('[Auth] Rejected invalid or expired deep-link callback');
+    return false;
+  }
+  pendingAuthState = null;
+  pendingAuthExpiresAt = 0;
+  closePendingAuthServer();
+  if (mainWindow) pushToRenderer(mainWindow, 'auth-token', { token: result.token });
+  return true;
+}
+
+function closePendingAuthServer() {
+  if (pendingAuthServerTimer) clearTimeout(pendingAuthServerTimer);
+  pendingAuthServerTimer = null;
+  if (pendingAuthServer) pendingAuthServer.close();
+  pendingAuthServer = null;
+}
+
+function startDevelopmentAuthCallback() {
+  closePendingAuthServer();
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((request, response) => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : null;
+      const callbackUrl = port
+        ? new URL(request.url || '/', `http://127.0.0.1:${port}`).toString()
+        : '';
+      const accepted = request.method === 'GET' && handleAuthCallback(callbackUrl);
+      response.writeHead(accepted ? 200 : 400, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      response.end(accepted
+        ? '<!doctype html><meta charset="utf-8"><script>history.replaceState(null,"","/auth/complete")</script><p>Sign-in complete. You can return to Fikr Studio.</p>'
+        : '<!doctype html><meta charset="utf-8"><p>This sign-in callback is invalid or expired.</p>');
+    });
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address !== 'object') {
+        server.close();
+        reject(new Error('Unable to start the development auth callback'));
+        return;
+      }
+      pendingAuthServer = server;
+      pendingAuthServerTimer = setTimeout(() => {
+        closePendingAuthServer();
+        pendingAuthState = null;
+        pendingAuthExpiresAt = 0;
+      }, 10 * 60 * 1000);
+      resolve(`http://127.0.0.1:${address.port}/auth/callback`);
+    });
+  });
+}
+
+
+// Only an installed app may claim the system-wide SSO callback. A development
+// Electron process uses the generic Electron executable and would otherwise
+// steal fikr-studio:// from the installed product, opening a blank dev window.
+if (app.isPackaged) {
   app.setAsDefaultProtocolClient("fikr-studio");
 }
 
@@ -69,15 +255,7 @@ if (!gotTheLock) {
     }
     // Handle URL from second instance (e.g. Windows/Linux or macOS dev mode)
     const url = commandLine.find(arg => arg.startsWith("fikr-studio://"));
-    if (url) {
-      const parsed = new URL(url);
-      if (parsed.hostname === "auth" && parsed.pathname === "/callback") {
-        const token = parsed.searchParams.get("token");
-        if (token && mainWindow) {
-          pushToRenderer(mainWindow, "auth-token", { token });
-        }
-      }
-    }
+    if (url) handleAuthCallback(url);
   });
 }
 
@@ -85,9 +263,17 @@ if (!gotTheLock) {
 let MCP_PORT = 3025;
 const WORKSPACE_DIR = path.join(app.getPath("home"), ".fikr-studio");
 const WORKSPACE_FILE = path.join(WORKSPACE_DIR, "workspace.json");
+const WORKSPACE_BACKUP_FILE = path.join(WORKSPACE_DIR, "workspace.backup.json");
 const INTRO_FILE = path.join(WORKSPACE_DIR, "intro-seen");
-const MODEL_CACHE_DIR = path.join(WORKSPACE_DIR, "models");
-const EMBED_MODEL = "Xenova/all-MiniLM-L6-v2";
+const SECURE_AI_KEYS_FILE = path.join(app.getPath('userData'), 'ai-keys.secure');
+const MCP_AUTH_FILE = path.join(app.getPath('userData'), 'mcp-auth.secure');
+let mcpAuthToken = null;
+const workspaceStore = createWorkspaceStore({
+  fs,
+  directory: WORKSPACE_DIR,
+  primaryFile: WORKSPACE_FILE,
+  backupFile: WORKSPACE_BACKUP_FILE,
+});
 
 // ─── Node / npx resolver ──────────────────────────────────────────────────────
 /**
@@ -140,50 +326,17 @@ function findCompatibleNpx() {
 }
 
 
-/** Resolves to the pipeline once the model is loaded */
-let pipelineReady = null;
+/** Resolves once the deterministic local relevance engine is ready. */
+const pipelineReady = Promise.resolve(true);
 
-/**
- * Load the sentence embedding model.
- * Model weights (~25MB) are cached in ~/.fikr-studio/models/ so subsequent
- * launches load instantly from disk.
- */
 function loadEmbeddingModel() {
-  // Dynamic import — @xenova/transformers is ESM-only inside its pipeline helper
-  pipelineReady = (async () => {
-    try {
-      ensureWorkspaceDir();
-      if (!fs.existsSync(MODEL_CACHE_DIR)) fs.mkdirSync(MODEL_CACHE_DIR, { recursive: true });
-
-      const { pipeline, env } = await import("@xenova/transformers");
-      env.cacheDir = MODEL_CACHE_DIR;
-      env.allowLocalModels = true;
-
-      const extractor = await pipeline("feature-extraction", EMBED_MODEL, {
-        quantized: true,   // use INT8 quantized weights (~6MB instead of 25MB)
-      });
-      console.log("[Fikr Studio] Embedding model ready:", EMBED_MODEL);
-      return extractor;
-    } catch (e) {
-      console.error("[Fikr Studio] Failed to load embedding model:", e);
-      return null;
-    }
-  })();
   return pipelineReady;
 }
 
-/** Generate a 384-dim float32 embedding for a text string. Returns null on failure. */
+/** Generate a deterministic 384-dim local relevance vector. */
 async function embedText(text) {
-  try {
-    const extractor = await pipelineReady;
-    if (!extractor) return null;
-    const output = await extractor(text, { pooling: "mean", normalize: true });
-    // output.data is a Float32Array — convert to plain Array for JSON serialisation
-    return Array.from(output.data);
-  } catch (e) {
-    console.error("[Fikr Studio] Embedding failed:", e.message);
-    return null;
-  }
+  await pipelineReady;
+  return Array.from(embedRelevanceVector(text));
 }
 
 /** Cosine similarity between two equal-length float arrays */
@@ -201,7 +354,7 @@ function cosineSimilarity(a, b) {
 
 /**
  * Background embedding queue.
- * Re-embeds any note in the workspace that is missing an embedding.
+ * Re-indexes any note in the workspace that is missing a relevance vector.
  * Debounced — runs at most once every 30 s regardless of how many saves fire.
  */
 let embedQueueRunning = false;
@@ -298,32 +451,68 @@ async function triggerServerEmbed(workspace) {
 
 
 function ensureWorkspaceDir() {
-  if (!fs.existsSync(WORKSPACE_DIR)) {
-    fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
-  }
+  workspaceStore.ensureDirectory();
 }
 
 function loadProjectsFromDisk() {
-  ensureWorkspaceDir();
-  try {
-    if (fs.existsSync(WORKSPACE_FILE)) {
-      return JSON.parse(fs.readFileSync(WORKSPACE_FILE, "utf-8"));
-    }
-  } catch (e) {
-    console.error("[Fikr Studio] Failed to load workspace:", e);
-  }
-  return null;
+  return workspaceStore.load();
 }
 
 function saveProjectsToDisk(data) {
-  ensureWorkspaceDir();
-  try {
-    fs.writeFileSync(WORKSPACE_FILE, JSON.stringify(data, null, 2), "utf-8");
-    return true;
-  } catch (e) {
-    console.error("[Fikr Studio] Failed to save workspace:", e);
-    return false;
+  return workspaceStore.save(data);
+}
+
+async function loadCloudWorkspaceWithFirstSyncSeed() {
+  const state = await dc.loadWorkspaceState(currentIdToken);
+  const selected = selectFirstSyncWorkspace({
+    cloudWorkspace: state.workspace,
+    initialized: state.initialized,
+    localWorkspace: loadProjectsFromDisk(),
+  });
+  if (selected.shouldSeed) {
+    await dc.saveWorkspace(currentIdToken, selected.workspace, new Set(), new Set(), new Set());
   }
+  return selected.workspace;
+}
+
+const ALLOWED_AI_PROVIDERS = new Set(['openrouter', 'openai', 'gemini']);
+
+function readSecureAiKeys() {
+  if (!fs.existsSync(SECURE_AI_KEYS_FILE)) return {};
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is unavailable');
+  const encrypted = Buffer.from(fs.readFileSync(SECURE_AI_KEYS_FILE, 'utf8'), 'base64');
+  return JSON.parse(safeStorage.decryptString(encrypted));
+}
+
+function writeSecureAiKeys(keys) {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is unavailable');
+  const encrypted = safeStorage.encryptString(JSON.stringify(keys));
+  fs.mkdirSync(path.dirname(SECURE_AI_KEYS_FILE), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(SECURE_AI_KEYS_FILE, encrypted.toString('base64'), { mode: 0o600 });
+  fs.chmodSync(SECURE_AI_KEYS_FILE, 0o600);
+}
+
+function assertAiProvider(provider) {
+  if (!ALLOWED_AI_PROVIDERS.has(provider)) throw new Error('Unsupported AI provider');
+}
+
+function loadOrCreateMcpAuthToken() {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is unavailable');
+  if (fs.existsSync(MCP_AUTH_FILE)) {
+    const encrypted = Buffer.from(fs.readFileSync(MCP_AUTH_FILE, 'utf8'), 'base64');
+    const token = safeStorage.decryptString(encrypted);
+    if (/^[a-f0-9]{64}$/.test(token)) return token;
+  }
+  const token = randomBytes(32).toString('hex');
+  const encrypted = safeStorage.encryptString(token);
+  fs.mkdirSync(path.dirname(MCP_AUTH_FILE), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(MCP_AUTH_FILE, encrypted.toString('base64'), { mode: 0o600 });
+  fs.chmodSync(MCP_AUTH_FILE, 0o600);
+  return token;
+}
+
+function isAuthorizedMcpRequest(req, url) {
+  return authorizeMcpRequest(req, url, mcpAuthToken);
 }
 
 function generateId() {
@@ -356,22 +545,37 @@ function updateLastSyncedIds(workspace) {
 
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
+function assertTrustedIpc(event) {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+    throw new Error('Blocked IPC from an untrusted renderer');
+  }
+}
+
+function assertWorkspacePayload(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Invalid workspace payload');
+  }
+  const bytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
+  if (bytes > 32 * 1024 * 1024) throw new Error('Workspace payload exceeds 32 MB');
+}
+
 /**
- * Load projects — from Data Connect if signed in, else fall back to local disk.
+ * Load projects through the authenticated Studio API, else fall back to local disk.
  * Always also write through to local disk as offline cache.
  */
-ipcMain.handle("fikr-studio:load-projects", async () => {
-  // Plus/Pro: load from Data Connect, fall back to local disk cache on failure
+ipcMain.handle("fikr-studio:load-projects", async (event) => {
+  assertTrustedIpc(event);
+  // Plus/Pro: load through fikr.one, fall back to local disk cache on failure.
   if (currentUserId) {
     try {
-      const workspace = await dc.loadWorkspace(currentUserId);
+      const workspace = await loadCloudWorkspaceWithFirstSyncSeed();
       if (workspace) {
         updateLastSyncedIds(workspace);
         saveProjectsToDisk(workspace); // keep local cache warm
         return workspace;
       }
     } catch (err) {
-      console.error('[DataConnect] load-projects failed, using local cache:', err.message);
+      console.error('[CloudSync] load-projects failed, using local cache:', err.message);
     }
   }
   // Free / offline
@@ -381,94 +585,125 @@ ipcMain.handle("fikr-studio:load-projects", async () => {
 });
 
 /**
- * Save projects — to Data Connect if signed in, always to local disk.
+ * Save projects through fikr.one if eligible, always to local disk.
  */
 ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
+  assertTrustedIpc(_event);
+  assertWorkspacePayload(data);
   const ok = saveProjectsToDisk(data);  // always write local cache
   scheduleEmbedQueue();  // debounced — at most once per 30s
-  // Plus/Pro: background sync to Firestore — only after startup cloud load is done.
+  // Plus/Pro: background sync through the authenticated API after cloud load.
   // If we haven't loaded from cloud yet, we don't know what the authoritative state
   // is — saving now risks overwriting another device's data with our stale disk cache.
   if (currentUserId && isCloudSyncReady) {
-    dc.saveWorkspace(currentUserId, data, lastSyncedNoteIds, lastSyncedProjectIds, lastSyncedGenProjectIds)
+    dc.saveWorkspace(currentIdToken, data, lastSyncedNoteIds, lastSyncedProjectIds, lastSyncedGenProjectIds)
       .then(() => {
         updateLastSyncedIds(data);
         triggerServerEmbed(data);
       })
       .catch((err) => {
-        console.error('[DataConnect] save-projects sync failed:', err.message);
+        console.error('[CloudSync] save-projects sync failed:', err.message);
       });
   } else if (currentUserId && !isCloudSyncReady) {
-    console.log('[DataConnect] save-projects: blocking Firestore write — cloud sync not ready yet');
+    console.log('[CloudSync] save-projects: cloud write blocked until initial sync completes');
   }
   return ok;
 });
-ipcMain.handle("fikr-studio:get-mcp-port", async () => mcpServerReadyPromise);
-ipcMain.handle("fikr-studio:open-auth", async () => {
-  shell.openExternal("https://www.fikr.one/login?returnUrl=fikr-studio://auth/callback");
+ipcMain.handle("fikr-studio:get-mcp-port", async (event) => {
+  assertTrustedIpc(event);
+  return mcpServerReadyPromise;
+});
+ipcMain.handle('fikr-studio:get-mcp-connection', async (event) => {
+  assertTrustedIpc(event);
+  const port = await mcpServerReadyPromise;
+  return { port, token: mcpAuthToken };
+});
+ipcMain.handle('fikr-studio:get-account', async (event) => {
+  assertTrustedIpc(event);
+  if (!currentIdToken || !currentAccountProfile) return null;
+  let relayApiKey = '';
+  if (currentUserId) {
+    try {
+      relayApiKey = (await dc.getRelayKey(currentIdToken)).relayApiKey || '';
+    } catch (error) {
+      if (error.status !== 403) console.warn('[CloudRelay] Failed to load relay key:', error.message);
+    }
+  }
+  return { ...currentAccountProfile, relayApiKey };
+});
+ipcMain.handle("fikr-studio:open-auth", async (event) => {
+  assertTrustedIpc(event);
+  pendingAuthState = randomBytes(32).toString('hex');
+  pendingAuthExpiresAt = Date.now() + 10 * 60 * 1000;
+  pendingAuthCallbackUrl = IS_DEV
+    ? await startDevelopmentAuthCallback()
+    : 'fikr-studio://auth/callback';
+  const callback = new URL(pendingAuthCallbackUrl);
+  callback.searchParams.set('state', pendingAuthState);
+  const authBaseUrl = IS_DEV
+    ? process.env.FIKR_AUTH_BASE_URL || 'http://localhost:3000'
+    : 'https://www.fikr.one';
+  const login = new URL('/login', authBaseUrl);
+  login.searchParams.set('returnUrl', callback.toString());
+  return openExternalAuth(login.toString());
 });
 
 /**
  * Called by the renderer whenever Firebase Auth state changes.
  * uid = null means the user signed out.
- * On sign-in: loads from Firestore and pushes to renderer (fixes race
+ * On sign-in: loads through fikr.one and pushes to renderer (fixes race
  * condition where loadProjects fires before auth resolves).
  */
-ipcMain.handle("fikr-studio:set-user", async (_event, { uid, idToken }) => {
+ipcMain.handle("fikr-studio:set-user", async (_event, payload) => {
+  assertTrustedIpc(_event);
+  const { uid, idToken } = payload ?? {};
+  if (uid !== null && typeof uid !== 'string') throw new Error('Invalid user id');
+  if (idToken !== null && (typeof idToken !== 'string' || idToken.length > 16_384)) {
+    throw new Error('Invalid ID token');
+  }
   const wasSignedIn = !!currentUserId;
-  await setCurrentUser(uid ?? null, idToken ?? null);
+  const profile = await setCurrentUser(uid ?? null, idToken ?? null);
 
-  if (!uid) {
+  if (!currentUserId) {
     // User signed out — reset the gate so if they sign back in we re-load from cloud
-    // before allowing any Firestore saves.
+    // before allowing any cloud saves.
     isCloudSyncReady = false;
-    return true;
+    return profile;
   }
 
   // Only trigger a post-auth cloud load if startup is already complete.
   // During startup, runStartupSequence() handles the sync itself.
-  if (uid && !wasSignedIn && mainWindow && isStartupComplete) {
+  if (currentUserId && !wasSignedIn && mainWindow && isStartupComplete) {
     try {
-      const cloudWorkspace = await dc.loadWorkspace(uid);
-      if (cloudWorkspace && cloudWorkspace.projects && cloudWorkspace.projects.length > 0) {
-        // If cloud has no studioProjects yet, preserve whatever is on local disk
-        // so the Studio tab isn't wiped while gen projects are still being synced.
-        if (!cloudWorkspace.studioProjects || cloudWorkspace.studioProjects.length === 0) {
-          const disk = loadProjectsFromDisk();
-          cloudWorkspace.studioProjects        = disk?.studioProjects        ?? [];
-          cloudWorkspace.activeStudioProjectId = disk?.activeStudioProjectId ?? '';
-        }
+      const cloudWorkspace = await loadCloudWorkspaceWithFirstSyncSeed();
+      if (cloudWorkspace && Array.isArray(cloudWorkspace.projects)) {
         saveProjectsToDisk(cloudWorkspace);
         updateLastSyncedIds(cloudWorkspace);
         pushToRenderer(mainWindow, "workspace-synced", cloudWorkspace);
-        console.log('[DataConnect] Post-auth workspace pushed to renderer');
+        console.log('[CloudSync] Post-auth workspace pushed to renderer');
         // Trigger server-side embedding for any notes not yet embedded
         triggerServerEmbed(cloudWorkspace).catch(e =>
           console.warn('[Fikr Studio] Post-auth embed failed:', e.message)
         );
       }
     } catch (err) {
-      console.error('[DataConnect] Post-auth load failed:', err.message);
+      console.error('[CloudSync] Post-auth load failed:', err.message);
     } finally {
       // Allow saves now that we have the authoritative cloud state
       isCloudSyncReady = true;
-      console.log('[DataConnect] isCloudSyncReady = true after post-auth load');
+      console.log('[CloudSync] Initial cloud load completed');
     }
   }
-  return true;
+  return profile;
 });
 
 
-ipcMain.handle("fikr-studio:sync-workspace", async () => {
+ipcMain.handle("fikr-studio:sync-workspace", async (event) => {
+  assertTrustedIpc(event);
   if (currentUserId) {
     try {
-      const cloudWorkspace = await dc.loadWorkspace(currentUserId);
-      if (cloudWorkspace && cloudWorkspace.projects && cloudWorkspace.projects.length > 0) {
-        if (!cloudWorkspace.studioProjects || cloudWorkspace.studioProjects.length === 0) {
-          const disk = loadProjectsFromDisk();
-          cloudWorkspace.studioProjects        = disk?.studioProjects        ?? [];
-          cloudWorkspace.activeStudioProjectId = disk?.activeStudioProjectId ?? '';
-        }
+      const cloudWorkspace = await loadCloudWorkspaceWithFirstSyncSeed();
+      if (cloudWorkspace && Array.isArray(cloudWorkspace.projects)) {
         saveProjectsToDisk(cloudWorkspace);
         updateLastSyncedIds(cloudWorkspace);
         if (mainWindow) {
@@ -478,7 +713,7 @@ ipcMain.handle("fikr-studio:sync-workspace", async () => {
       }
       return { success: false, error: 'No projects found in cloud' };
     } catch (err) {
-      console.error('[DataConnect] Manual sync failed:', err.message);
+      console.error('[CloudSync] Manual sync failed:', err.message);
       return { success: false, error: err.message };
     }
   }
@@ -487,20 +722,31 @@ ipcMain.handle("fikr-studio:sync-workspace", async () => {
 
 /**
  * Proper logout flow:
- * 1. If the user is signed in (Plus/Pro), attempt a final sync to Firestore.
+ * 1. If the user is signed in (Plus/Pro), attempt a final API sync.
  * 2. Show a native dialog: "Keep local data" vs "Clear everything".
  * 3. If the user picks "Clear", delete workspace.json and clear studio localStorage key.
  * 4. Tell the renderer to reset its state, then the renderer calls Firebase signOut.
  *
  * Returns { cleared: boolean } so the renderer knows what to do next.
  */
-ipcMain.handle("fikr-studio:logout", async (_event, { currentData } = {}) => {
+ipcMain.handle("fikr-studio:logout", async (_event, payload) => {
+  assertTrustedIpc(_event);
+  const { currentData } = payload ?? {};
+  if (currentData) assertWorkspacePayload(currentData);
+  let finalSyncFailed = Boolean(currentUserId && !currentData);
   // ── Step 1: Final cloud sync (best-effort, don't block logout) ────────────
   if (currentUserId && currentData) {
     try {
-      await dc.saveWorkspace(currentUserId, currentData);
-      console.log('[Logout] Final sync to Firestore completed for', currentUserId);
+      await dc.saveWorkspace(
+        currentIdToken,
+        currentData,
+        lastSyncedNoteIds,
+        lastSyncedProjectIds,
+        lastSyncedGenProjectIds,
+      );
+      console.log('[Logout] Final cloud sync completed for', currentUserId);
     } catch (err) {
+      finalSyncFailed = true;
       console.warn('[Logout] Final sync failed (continuing):', err.message);
     }
   }
@@ -510,8 +756,8 @@ ipcMain.handle("fikr-studio:logout", async (_event, { currentData } = {}) => {
     type: 'question',
     title: 'Signing out',
     message: 'What should happen to your local data?',
-    detail: 'Your cloud data is safe either way. This only affects what is stored on this device.',
-    buttons: ['Keep local data', 'Clear everything', 'Cancel'],
+    detail: 'This choice affects only the local workspace cache. It does not delete cloud data.',
+    buttons: ['Keep local workspace', 'Clear local workspace', 'Cancel'],
     defaultId: 0,
     cancelId: 2,
     icon: undefined,
@@ -522,22 +768,39 @@ ipcMain.handle("fikr-studio:logout", async (_event, { currentData } = {}) => {
     return { cleared: false, cancelled: true };
   }
 
-  const clearLocal = response === 1; // "Clear everything"
+  let clearLocal = response === 1;
+
+  if (clearLocal && finalSyncFailed) {
+    const warning = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Cloud sync did not finish',
+      message: 'Keep the local workspace to avoid losing unsynced changes.',
+      detail: 'Fikr Studio could not confirm the final cloud save. Clearing now may permanently remove changes that exist only on this Mac.',
+      buttons: ['Keep local workspace', 'Clear anyway'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    clearLocal = warning.response === 1;
+  }
 
   // ── Step 3: Optionally wipe local cache ───────────────────────────────────
   if (clearLocal) {
-    try {
-      if (fs.existsSync(WORKSPACE_FILE)) {
-        fs.unlinkSync(WORKSPACE_FILE);
-        console.log('[Logout] workspace.json deleted');
-      }
-    } catch (err) {
-      console.warn('[Logout] Failed to delete workspace.json:', err.message);
+    const removal = clearLocalFiles(fs, [WORKSPACE_FILE, WORKSPACE_BACKUP_FILE]);
+    if (!removal.cleared) {
+      clearLocal = false;
+      console.warn('[Logout] Local workspace could not be fully cleared');
+      await dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'Local workspace was not cleared',
+        message: 'Fikr Studio could not remove every local workspace file.',
+        detail: 'Your data has not been reported as cleared. Check file permissions and try again.',
+        buttons: ['OK'],
+      });
     }
   }
 
   // ── Step 4: Clear the in-memory user so future saves don't cloud-sync ─────
-  await setCurrentUser(null);
+  await setCurrentUser(null, null);
 
   // Push reset event so renderer re-initialises with empty / fresh state
   if (clearLocal && mainWindow) {
@@ -548,16 +811,50 @@ ipcMain.handle("fikr-studio:logout", async (_event, { currentData } = {}) => {
 });
 
 ipcMain.handle("fikr-studio:open-url", async (_event, url) => {
-  shell.openExternal(url);
+  assertTrustedIpc(_event);
+  if (typeof url !== 'string' || url.length > 4096) throw new Error('Invalid URL');
+  return openExternalHttps(url);
 });
-ipcMain.handle("fikr-studio:execute-tool", async (event, { name, args }) => {
+ipcMain.handle("fikr-studio:execute-tool", async (event, payload) => {
+  assertTrustedIpc(event);
+  const { name, args } = payload ?? {};
+  validateToolCall(name, args);
   return await executeTool(name, args, mainWindow);
 });
-ipcMain.handle("fikr-studio:get-intro-seen", () => fs.existsSync(INTRO_FILE));
-ipcMain.handle("fikr-studio:set-intro-seen", () => {
+ipcMain.handle("fikr-studio:get-intro-seen", (event) => {
+  assertTrustedIpc(event);
+  return fs.existsSync(INTRO_FILE);
+});
+ipcMain.handle("fikr-studio:set-intro-seen", (event) => {
+  assertTrustedIpc(event);
   ensureWorkspaceDir();
   fs.writeFileSync(INTRO_FILE, "1");
   return true;
+});
+
+ipcMain.handle('fikr-studio:secure-has-ai-key', (event, provider) => {
+  assertTrustedIpc(event);
+  assertAiProvider(provider);
+  return Boolean(readSecureAiKeys()[provider]);
+});
+
+ipcMain.handle('fikr-studio:secure-set-ai-key', (event, provider, apiKey) => {
+  assertTrustedIpc(event);
+  assertAiProvider(provider);
+  if (typeof apiKey !== 'string' || apiKey.length > 16_384) throw new Error('Invalid API key');
+  const keys = readSecureAiKeys();
+  if (apiKey) keys[provider] = apiKey;
+  else delete keys[provider];
+  writeSecureAiKeys(keys);
+  return true;
+});
+
+ipcMain.handle('fikr-studio:request-ai', async (event, payload) => {
+  assertTrustedIpc(event);
+  const { provider, body } = payload ?? {};
+  assertAiProvider(provider);
+  const apiKey = readSecureAiKeys()[provider] ?? '';
+  return performAiRequest({ provider, body, apiKey });
 });
 
   function getMcpConfigPath(client) {
@@ -571,6 +868,7 @@ ipcMain.handle("fikr-studio:set-intro-seen", () => {
   }
 
   ipcMain.handle("fikr-studio:check-mcp", async (_event, client) => {
+    assertTrustedIpc(_event);
     const configPath = getMcpConfigPath(client);
     if (!configPath || !fs.existsSync(configPath)) return false;
     try {
@@ -582,44 +880,41 @@ ipcMain.handle("fikr-studio:set-intro-seen", () => {
   });
 
   ipcMain.handle("fikr-studio:install-mcp", async (_event, client) => {
+    assertTrustedIpc(_event);
     const configPath = getMcpConfigPath(client);
     if (!configPath) throw new Error("Unknown client");
 
-    const dir = path.dirname(configPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    let config = { mcpServers: {} };
-    if (fs.existsSync(configPath)) {
-      try { config = JSON.parse(fs.readFileSync(configPath, "utf8")); }
-      catch { config = { mcpServers: {} }; }
-    }
-    if (!config.mcpServers) config.mcpServers = {};
-
-    if (client === "claude") {
-      config.mcpServers["fikr-studio"] = {
-        url: `http://localhost:${MCP_PORT}/sse`,
-        type: "sse"
-      };
-    } else if (client === "windsurf") {
-      config.mcpServers["fikr-studio"] = {
-        serverUrl: `http://localhost:${MCP_PORT}/sse`
-      };
-    }
-
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    updateJsonConfig({ fs, filePath: configPath, mutate(config) {
+      if (!config.mcpServers || typeof config.mcpServers !== 'object' || Array.isArray(config.mcpServers)) {
+        config.mcpServers = {};
+      }
+      if (client === "claude") {
+        config.mcpServers["fikr-studio"] = {
+          url: `http://localhost:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}`,
+          type: "sse"
+        };
+      } else if (client === "windsurf") {
+        config.mcpServers["fikr-studio"] = {
+          serverUrl: `http://localhost:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}`
+        };
+      }
+      return config;
+    } });
     return true;
   });
 
   ipcMain.handle("fikr-studio:uninstall-mcp", async (_event, client) => {
+    assertTrustedIpc(_event);
     const configPath = getMcpConfigPath(client);
     if (!configPath || !fs.existsSync(configPath)) return false;
 
     try {
-      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-      if (config.mcpServers && config.mcpServers["fikr-studio"]) {
-        delete config.mcpServers["fikr-studio"];
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-      }
+      updateJsonConfig({ fs, filePath: configPath, mutate(config) {
+        if (config.mcpServers && typeof config.mcpServers === 'object') {
+          delete config.mcpServers["fikr-studio"];
+        }
+        return config;
+      } });
       return true;
     } catch {
       return false;
@@ -627,6 +922,7 @@ ipcMain.handle("fikr-studio:set-intro-seen", () => {
   });
 
   ipcMain.handle("fikr-studio:test-mcp", async (_event, client) => {
+    assertTrustedIpc(_event);
     // First check config is installed
     const configPath = getMcpConfigPath(client);
     const configInstalled = configPath && fs.existsSync(configPath) && (() => {
@@ -641,7 +937,7 @@ ipcMain.handle("fikr-studio:set-intro-seen", () => {
     return new Promise((resolve) => {
       const req = http.request(
         { hostname: "localhost", port: MCP_PORT, path: "/sse", method: "GET",
-          headers: { Accept: "text/event-stream" }, timeout: 3000 },
+          headers: { Accept: "text/event-stream", Authorization: `Bearer ${mcpAuthToken}` }, timeout: 3000 },
         (res) => {
           res.destroy(); // we only need headers
           resolve({ ok: res.statusCode === 200, status: res.statusCode });
@@ -653,14 +949,16 @@ ipcMain.handle("fikr-studio:set-intro-seen", () => {
     });
   });
 
-  ipcMain.handle("fikr-studio:get-usage", async (_event, token) => {
+  ipcMain.handle("fikr-studio:get-usage", async (_event) => {
+    assertTrustedIpc(_event);
+    if (!currentIdToken) return null;
     try {
       const fetchModule = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
       // Using global fetch if available (Node 18+), fallback to node-fetch if we imported it in another way or it's not available
       const doFetch = typeof fetch !== 'undefined' ? fetch : fetchModule;
       
       const res = await doFetch("https://fikr.one/api/user/usage", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${currentIdToken}` },
       });
       if (!res.ok) return null;
       return await res.json();
@@ -678,12 +976,13 @@ const sseSessions = new Map();
 const MCP_TOOLS = [
   {
     name: "create_note",
-    description: "Add a new note/thought to the active Fikr Studio canvas. The local AI will automatically classify and enrich it.",
+    description: "Add a new note to the active Fikr Studio canvas. Configured AI may classify and enrich it afterward.",
     inputSchema: {
       type: "object",
       properties: {
         text: { type: "string", description: "The raw text content of the note" },
         project_id: { type: "string", description: "Target project ID. Omit to use the first project." },
+        idempotency_key: { type: "string", description: "Optional stable delivery ID used to prevent duplicate notes." },
       },
       required: ["text"],
     },
@@ -767,7 +1066,7 @@ const MCP_TOOLS = [
   },
   {
     name: "create_note_synthesized",
-    description: "Add a pre-synthesized note to Fikr Studio. Use this when you have already enriched the note using the fikr-studio-skill pre-synthesis step. Fikr Studio will vectorize and store it immediately without running its own AI enrichment pass. The note will appear on the canvas instantly as fully annotated.",
+    description: "Add a pre-synthesized note to Fikr Studio. Use this when you have already enriched the note using the fikr-studio-skill pre-synthesis step. Fikr Studio will index and store it immediately without running its own AI enrichment pass. The note will appear on the canvas instantly as fully annotated.",
     inputSchema: {
       type: "object",
       properties: {
@@ -796,6 +1095,7 @@ function pushToRenderer(mainWindow, type, payload) {
 
 /** Execute an MCP tool call and return the result */
 async function executeTool(name, args, mainWindow) {
+  validateToolCall(name, args);
   const workspace = loadProjectsFromDisk() || { projects: [], activeProjectId: "" };
   // Support both the new { projects, activeProjectId } shape and a legacy raw array
   const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
@@ -803,10 +1103,16 @@ async function executeTool(name, args, mainWindow) {
     const data = Array.isArray(workspace) ? projects : { ...workspace, projects };
     saveProjectsToDisk(data);  // always write local cache
     scheduleEmbedQueue();  // debounced
-    // Plus/Pro: background sync to Data Connect
+    // Plus/Pro: background sync through the authenticated Studio API.
     if (currentUserId) {
-      dc.saveWorkspace(currentUserId, data).catch((err) => {
-        console.error('[DataConnect] MCP sync failed:', err.message);
+      dc.saveWorkspace(
+        currentIdToken,
+        data,
+        lastSyncedNoteIds,
+        lastSyncedProjectIds,
+        lastSyncedGenProjectIds,
+      ).then(() => updateLastSyncedIds(data)).catch((err) => {
+        console.error('[CloudSync] MCP sync failed:', err.message);
       });
     }
   };
@@ -849,8 +1155,8 @@ async function executeTool(name, args, mainWindow) {
       const limit    = Math.min(args.limit || 10, 50);
       const searchIn = args.project_id ? [getProject(args.project_id)].filter(Boolean) : projects;
 
-      // ── Tier 1: Local semantic search (Xenova all-MiniLM-L6-v2, 384-dim) ──
-      // Fully offline. The Electron app is the AI brain — no server calls.
+      // ── Tier 1: deterministic local relevance search (384 dimensions) ────
+      // Fully offline and dependency-free; no server call or model download.
       const queryEmbedding = await embedText(query);
       if (queryEmbedding) {
         const scored = [];
@@ -878,7 +1184,7 @@ async function executeTool(name, args, mainWindow) {
         return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
       }
 
-      // ── Tier 2: Keyword fallback (Xenova model not yet loaded) ─────────────
+      // Keyword fallback when no stored relevance vector is available.
       const q = query.toLowerCase();
       const kwResults = [];
       for (const proj of searchIn) {
@@ -895,6 +1201,14 @@ async function executeTool(name, args, mainWindow) {
     }
 
     case "create_note": {
+      if (args.idempotency_key) {
+        const existing = projects
+          .flatMap((project) => project.blocks || [])
+          .find((note) => note.externalRelayMessageId === args.idempotency_key);
+        if (existing) {
+          return { content: [{ type: "text", text: `Note already created with id: ${existing.id}` }] };
+        }
+      }
       const proj = getProject(args.project_id);
       if (!proj) return { content: [{ type: "text", text: "Project not found" }], isError: true };
       const newNote = {
@@ -904,6 +1218,7 @@ async function executeTool(name, args, mainWindow) {
         contentType: "general",
         isEnriching: true, // Let the frontend auto-enrich
         fromMcp: true,
+        ...(args.idempotency_key ? { externalRelayMessageId: args.idempotency_key } : {}),
       };
       // Generate embedding synchronously before saving (MCP caller already waits)
       const embedding = await embedText(args.text);
@@ -1009,7 +1324,7 @@ async function executeTool(name, args, mainWindow) {
       return {
         content: [{
           type: "text",
-          text: `Pre-synthesized note stored with id: ${newNote.id} in project "${proj.name}". Type: ${newNote.contentType}, Category: "${newNote.category}". Embedding: ${embedding ? `generated (${embedding.length} dims)` : "skipped — model not ready yet, will be embedded on next save"}.`
+          text: `Pre-synthesized note stored with id: ${newNote.id} in project "${proj.name}". Type: ${newNote.contentType}, Category: "${newNote.category}". Relevance vector: ${embedding ? `generated (${embedding.length} dims)` : "scheduled for the next save"}.`
         }],
       };
     }
@@ -1020,10 +1335,10 @@ async function executeTool(name, args, mainWindow) {
 }
 
 // ─── Direct MCP Execution via IPC ─────────────────────────────────────────────
-ipcMain.handle("fikr-studio:execute-mcp", async (event, rpc) => {
+async function executeMcpRpc(rpc) {
+  validateMcpRpc(rpc);
   switch (rpc.method) {
     case "initialize":
-      console.log("[Fikr Studio] IPC received initialize!");
       return {
         protocolVersion: "2024-11-05",
         capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false }, prompts: { listChanged: false } },
@@ -1099,7 +1414,6 @@ Instructions:
     case "notifications/initialized":
     case "notifications/cancelled":
     case "notifications/progress":
-      console.log(`[Fikr Studio] Received MCP notification: ${rpc.method}`, rpc.params || "");
       return null; // Notifications have no response
 
     // Optional MCP methods — not implemented, acknowledge gracefully
@@ -1110,7 +1424,100 @@ Instructions:
     default:
       throw new Error(`Method not found: ${rpc.method}`);
   }
+}
+
+ipcMain.handle("fikr-studio:execute-mcp", async (event, rpc) => {
+  assertTrustedIpc(event);
+  return executeMcpRpc(rpc);
 });
+
+let relayPollTimer = null;
+let relayPollRunning = false;
+let relayIdlePolls = 0;
+
+function scheduleRelayPoll(delayMs = 2_000) {
+  if (relayPollTimer) clearTimeout(relayPollTimer);
+  relayPollTimer = null;
+  if (!currentUserId || !currentIdToken || !isStartupComplete) return;
+  relayPollTimer = setTimeout(pollCloudRelay, delayMs);
+}
+
+async function pollCloudRelay() {
+  if (relayPollRunning || !currentUserId || !currentIdToken) return scheduleRelayPoll();
+  relayPollRunning = true;
+  let foundMessage = false;
+  try {
+    const message = await dc.consumeRelay(currentIdToken);
+    if (message?.id && message.payload) {
+      foundMessage = true;
+      try {
+        const result = await executeMcpRpc(message.payload);
+        await dc.acknowledgeRelay(currentIdToken, message.id, { status: 'completed', result });
+      } catch (error) {
+        await dc.acknowledgeRelay(currentIdToken, message.id, {
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+  } catch (error) {
+    if (error.status !== 404 && error.status !== 401 && error.status !== 403) {
+      console.warn('[CloudRelay] Poll failed:', error.message);
+    }
+  } finally {
+    relayPollRunning = false;
+    relayIdlePolls = foundMessage ? 0 : Math.min(relayIdlePolls + 1, 5);
+    scheduleRelayPoll(foundMessage ? 2_000 : Math.min(60_000, 2_000 * (2 ** relayIdlePolls)));
+  }
+}
+
+let externalRelayPollTimer = null;
+let externalRelayPollRunning = false;
+let externalRelayIdlePolls = 0;
+
+function scheduleExternalRelayPoll(delayMs = 5_000) {
+  if (externalRelayPollTimer) clearTimeout(externalRelayPollTimer);
+  externalRelayPollTimer = null;
+  if (!currentUserId || !currentIdToken || !isStartupComplete) return;
+  externalRelayPollTimer = setTimeout(pollExternalRelay, delayMs);
+}
+
+async function pollExternalRelay() {
+  if (externalRelayPollRunning || !currentUserId || !currentIdToken) {
+    return scheduleExternalRelayPoll();
+  }
+  externalRelayPollRunning = true;
+  let processed = 0;
+  try {
+    const response = await dc.leaseExternalMessages(currentIdToken, 5);
+    const messages = Array.isArray(response?.messages) ? response.messages : [];
+    for (const message of messages) {
+      try {
+        const result = await executeMcpRpc(externalRelayMessageToRpc(message));
+        if (result?.isError) throw new Error(result.content?.[0]?.text || 'Studio rejected the external message');
+        await dc.acknowledgeExternalMessage(currentIdToken, message.id, message.leaseToken, result);
+        processed += 1;
+      } catch (error) {
+        await dc.rejectExternalMessage(
+          currentIdToken,
+          message.id,
+          message.leaseToken,
+          error instanceof Error ? error.message : 'External message processing failed',
+        );
+      }
+    }
+  } catch (error) {
+    if (error.status !== 401 && error.status !== 403) {
+      console.warn('[ExternalRelay] Poll failed:', error.message);
+    }
+  } finally {
+    externalRelayPollRunning = false;
+    externalRelayIdlePolls = processed > 0 ? 0 : Math.min(externalRelayIdlePolls + 1, 5);
+    scheduleExternalRelayPoll(processed > 0
+      ? 2_000
+      : Math.min(120_000, 5_000 * (2 ** externalRelayIdlePolls)));
+  }
+}
 
 /** Start the MCP HTTP/SSE server */
 function startMcpServer(mainWindow) {
@@ -1118,17 +1525,29 @@ function startMcpServer(mainWindow) {
     const url = new URL(req.url, `http://localhost:${MCP_PORT}`);
 
     // ── CORS ──────────────────────────────────────────────────────────────────
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    const origin = req.headers.origin;
+    const allowedOrigin = origin === DEV_SERVER_URL;
+    if (allowedOrigin) res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization");
     if (req.method === "OPTIONS") {
-      res.writeHead(204);
+      res.writeHead(allowedOrigin ? 204 : 403);
       res.end();
       return;
     }
 
     // ── SSE endpoint (MCP transport) ──────────────────────────────────────────
     if (req.method === "GET" && url.pathname === "/sse") {
+      if (!isAuthorizedMcpRequest(req, url)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
+      if (sseSessions.size >= 20) {
+        res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "5" });
+        res.end(JSON.stringify({ error: 'Too many MCP sessions' }));
+        return;
+      }
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -1141,7 +1560,7 @@ function startMcpServer(mainWindow) {
       // Send the MCP server info on connect
       const send = (event, data) => res.write(`event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`);
 
-      send("endpoint", `/message?sessionId=${sessionId}`);
+      send("endpoint", `/message?sessionId=${sessionId}&token=${encodeURIComponent(mcpAuthToken)}`);
       
       req.on("close", () => sseSessions.delete(sessionId));
       return;
@@ -1149,9 +1568,12 @@ function startMcpServer(mainWindow) {
 
     // ── JSON-RPC message endpoint ─────────────────────────────────────────────
     if (req.method === "POST") {
-      console.log("[Fikr Studio] POST request to:", req.url);
-      
       if (url.pathname === "/message") {
+        if (!isAuthorizedMcpRequest(req, url)) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: 'Unauthorized' }));
+          return;
+        }
         const sessionId = url.searchParams.get("sessionId");
         const sseRes = sseSessions.get(sessionId);
 
@@ -1162,14 +1584,25 @@ function startMcpServer(mainWindow) {
         }
 
       let body = "";
-      req.on("data", (chunk) => (body += chunk));
+      let bodyTooLarge = false;
+      req.on("data", (chunk) => {
+        if (bodyTooLarge) return;
+        body += chunk;
+        if (Buffer.byteLength(body, 'utf8') > 1024 * 1024) bodyTooLarge = true;
+      });
       req.on("end", () => {
+        if (bodyTooLarge) {
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: 'Request body too large' }));
+          return;
+        }
         let rpc;
         try {
           rpc = JSON.parse(body);
+          validateMcpRpc(rpc);
         } catch {
-          res.writeHead(400, { "Content-Type": "text/plain" });
-          res.end("Invalid JSON");
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: 'Invalid MCP request' }));
           return;
         }
 
@@ -1185,100 +1618,16 @@ function startMcpServer(mainWindow) {
           sseRes.write(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: rpc.id, error: { code, message } })}\n\n`);
         };
 
-        switch (rpc.method) {
-          case "initialize":
-            respondSse({
-              protocolVersion: "2024-11-05",
-              capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false }, prompts: { listChanged: false } },
-              serverInfo: { name: "fikr-studio", version: "1.0.0" },
-            });
-            break;
-
-          case "prompts/list":
-            respondSse({
-              prompts: [
-                {
-                  name: "pre_synthesis",
-                  description: "Instructions for performing local AI note synthesis and classification before storing in Fikr Studio",
-                  arguments: [
-                    { name: "text", description: "The raw text of the note to synthesize", required: true }
-                  ]
-                }
-              ]
-            });
-            break;
-
-          case "prompts/get": {
-            if (rpc.params?.name === "pre_synthesis") {
-              respondSse({
-                description: "Instructions for Fikr Studio Note Synthesis",
-                messages: [
-                  {
-                    role: "user",
-                    content: {
-                      type: "text",
-                      text: `You are an expert Fikr Studio synthesis AI. Your task is to analyze the following raw note and enrich it before storing it.
-                      
-Raw Note:
-"${rpc.params?.arguments?.text || ""}"
-
-Instructions:
-1. Classify the note into ONE of these content types: claim, question, task, idea, entity, quote, reference, definition, opinion, reflection, narrative, comparison, general.
-2. Determine a short 'category' label (e.g. 'Product Strategy', 'Philosophy', 'Engineering').
-3. Write a 2-4 sentence 'annotation' summarizing the core insight or context.
-4. Estimate a 'confidence' score (0-100) for your classification.
-5. Finally, call the \`create_note_synthesized\` tool with your generated fields and the original raw text.`
-                    }
-                  }
-                ]
-              });
-            } else {
-              respondErrorSse(-32602, "Unknown prompt");
+        executeMcpRpc(rpc)
+          .then((result) => {
+            // JSON-RPC notifications are accepted but never receive a response.
+            if (rpc.id !== undefined && rpc.id !== null) respondSse(result);
+          })
+          .catch((error) => {
+            if (rpc.id !== undefined && rpc.id !== null) {
+              respondErrorSse(-32603, error instanceof Error ? error.message : "Internal error");
             }
-            break;
-          }
-
-          case "tools/list":
-            respondSse({ tools: MCP_TOOLS });
-            break;
-
-          case "tools/call": {
-            const { name, arguments: args } = rpc.params || {};
-            executeTool(name, args || {}, mainWindow)
-              .then(result => respondSse(result))
-              .catch(err => respondErrorSse(-32603, err.message || "Internal error"));
-            return;
-          }
-
-          case "resources/list":
-            respondSse({
-              resources: [
-                { uri: "fikr-studio://projects", name: "All Projects", description: "Full workspace dump", mimeType: "application/json" },
-              ],
-            });
-            break;
-
-          case "resources/read": {
-            if (rpc.params?.uri === "fikr-studio://projects") {
-              const workspace = loadProjectsFromDisk() || { projects: [] };
-              const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
-              respondSse({ contents: [{ uri: "fikr-studio://projects", mimeType: "application/json", text: JSON.stringify(projects, null, 2) }] });
-            } else {
-              respondErrorSse(-32602, "Unknown resource URI");
-            }
-            break;
-          }
-
-          case "notifications/initialized":
-            // Notifications don't require a response
-            break;
-
-          default:
-            // Could be a notification like ping, only respond if there is an ID
-            if (rpc.id !== undefined) {
-              respondErrorSse(-32601, `Method not found: ${rpc.method}`);
-            }
-        }
+          });
       });
       return;
     }
@@ -1293,6 +1642,11 @@ Instructions:
 
     // ── Skill files — curl http://localhost:3025/skill.md and follow instructions
     if (req.method === "GET" && (url.pathname === "/skill.md" || url.pathname.startsWith("/skills/"))) {
+      if (!isAuthorizedMcpRequest(req, url)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
       const MASTER_SKILL = `# Fikr Studio MCP — Agent Skill
 
 > Curl this file and follow the instructions to autonomously connect your AI agent to Fikr Studio.
@@ -1317,7 +1671,7 @@ If it does, merge this config into the \`mcpServers\` key. If not, create it:
   "mcpServers": {
     "fikr-studio": {
       "command": "npx",
-      "args": ["-y", "fikr-studio-mcp@latest", "http://localhost:${MCP_PORT}/sse"]
+      "args": ["-y", "fikr-studio-mcp@latest", "http://localhost:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}"]
     }
   }
 }
@@ -1330,7 +1684,7 @@ Create or edit \`~/.cursor/mcp.json\`:
 {
   "mcpServers": {
     "fikr-studio": {
-      "url": "http://localhost:${MCP_PORT}/sse",
+      "url": "http://localhost:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}",
       "type": "sse"
     }
   }
@@ -1343,7 +1697,7 @@ Create or edit \`~/.codeium/windsurf/mcp_settings.json\`:
 {
   "mcpServers": {
     "fikr-studio": {
-      "serverUrl": "http://localhost:${MCP_PORT}/sse"
+      "serverUrl": "http://localhost:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}"
     }
   }
 }
@@ -1355,7 +1709,7 @@ Edit \`~/.gemini/settings.json\`:
 {
   "mcpServers": {
     "fikr-studio": {
-      "httpUrl": "http://localhost:${MCP_PORT}/sse"
+      "httpUrl": "http://localhost:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}"
     }
   }
 }
@@ -1366,7 +1720,7 @@ Edit \`~/.gemini/settings.json\`:
 | Tool | Description |
 |------|-------------|
 | \`create_note\` | Add a note to the active canvas |
-| \`search_notes\` | Semantic + keyword search across all notes |
+| \`search_notes\` | Local relevance + keyword search across all notes |
 | \`get_canvas\` | Read all notes from a project |
 | \`list_projects\` | List all Fikr spaces |
 | \`update_note\` | Edit an existing note |
@@ -1377,13 +1731,7 @@ Edit \`~/.gemini/settings.json\`:
 ## Step 4 — Synthesis Skill
 After connecting, fetch and follow the synthesis skill:
 \`\`\`
-curl http://localhost:${MCP_PORT}/skills/synthesis.md
-\`\`\`
-
-## Step 5 — Auto-Summary Skill
-To enable automatic summaries after major canvas changes:
-\`\`\`
-curl http://localhost:${MCP_PORT}/skills/auto-summary.md
+curl "http://localhost:${MCP_PORT}/skills/synthesis.md?token=${encodeURIComponent(mcpAuthToken)}"
 \`\`\`
 
 ## Confirm the connection
@@ -1443,86 +1791,10 @@ Run this skill:
 - Before generating a weekly summary
 `;
 
-      const AUTO_SUMMARY_SKILL = `# Fikr Studio — Auto-Summary Skill
-
-> Use this skill to generate and post canvas summaries after major changes.
-
-## What this skill does
-After significant canvas activity, this skill:
-1. Reads the active canvas (\`get_canvas\`)
-2. Reads AI-generated insights (\`get_synthesis\`)
-3. Generates a structured summary
-4. Posts it to a connected channel (Slack, Discord, Telegram, or saves as a new note)
-
-## Trigger conditions — when to run
-- After 10+ notes added in a session
-- After a batch synthesis pass completes
-- On a scheduled cadence (daily at end of day, weekly on Friday)
-- When explicitly asked: "summarise my canvas"
-
-## Step-by-step
-
-### 1. Gather canvas state
-\`\`\`
-call get_canvas → store notes
-call get_synthesis → store insight clusters
-\`\`\`
-
-### 2. Generate the summary
-Structure the summary as:
-\`\`\`
-## Fikr Canvas Summary — [date]
-
-**Active project**: [project name]
-**Notes this session**: [count]
-**Top categories**: [list top 3 categories by count]
-
-### Key Insights
-[Pull top 3-5 ghost/synthesis notes — these are the AI-generated patterns]
-
-### Notable Notes
-[Pull 3-5 notes with highest confidence annotation]
-
-### Open Questions
-[Pull all notes classified as "question"]
-\`\`\`
-
-### 3. Post the summary
-
-#### To Slack (if configured)
-\`\`\`
-POST https://hooks.slack.com/services/YOUR_WEBHOOK_URL
-Content-Type: application/json
-{"text": "[your summary]"}
-\`\`\`
-
-#### To Discord (if configured)
-\`\`\`
-POST https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN
-Content-Type: application/json
-{"content": "[your summary]"}
-\`\`\`
-
-#### Save as a note (always safe)
-Call \`create_note_synthesized\` with:
-- text: the summary markdown
-- contentType: "narrative"
-- category: "Weekly Summary"
-- annotation: "Auto-generated canvas summary for [date]"
-
-## Autonomous weekly digest
-To generate a weekly digest every Friday:
-1. Call \`get_canvas\` across all projects
-2. Filter notes from the past 7 days (check \`timestamp\` field)
-3. Generate summary per project
-4. Post to your configured channel
-5. Call \`create_note_synthesized\` to archive the digest on the canvas
-`;
 
       const routes = {
         "/skill.md": MASTER_SKILL,
         "/skills/synthesis.md": SYNTHESIS_SKILL,
-        "/skills/auto-summary.md": AUTO_SUMMARY_SKILL,
       };
 
       const content = routes[url.pathname];
@@ -1560,12 +1832,13 @@ To generate a weekly digest every Friday:
     try {
       const portData = {
         port: MCP_PORT,
-        url: `http://127.0.0.1:${MCP_PORT}/sse`,
+        url: `http://127.0.0.1:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}`,
         pid: process.pid,
         updatedAt: new Date().toISOString()
       };
       const lockfilePath = path.join(app.getPath("userData"), "mcp-port.json");
-      fs.writeFileSync(lockfilePath, JSON.stringify(portData, null, 2), "utf8");
+      fs.writeFileSync(lockfilePath, JSON.stringify(portData, null, 2), { encoding: 'utf8', mode: 0o600 });
+      fs.chmodSync(lockfilePath, 0o600);
       console.log(`[Fikr Studio] Wrote MCP port configuration to ${lockfilePath}`);
     } catch (err) {
       console.error("[Fikr Studio] Failed to write mcp-port.json lockfile:", err);
@@ -1636,9 +1909,11 @@ function createSplashWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  hardenWindow(splashWindow);
 
   splashWindow.loadFile(path.join(__dirname, 'out/splash.html'));
 
@@ -1670,9 +1945,11 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  hardenWindow(mainWindow);
 
   if (IS_DEV) {
     mainWindow.loadURL(DEV_SERVER_URL).catch(err => {
@@ -1698,7 +1975,7 @@ function createWindow() {
 /**
  * Full startup sequence:
  *  1. Show splash immediately
- *  2. Load embedding model (may download ~6MB on first run)
+ *  2. Initialize the deterministic local relevance index
  *  3. If signed in: sync cloud workspace → disk
  *  4. Run embed queue (fill missing vectors from disk)
  *  5. Show main window, close splash
@@ -1708,9 +1985,9 @@ function createWindow() {
  * doesn't (Free / offline user), we proceed without cloud sync.
  */
 async function runStartupSequence() {
-  // ── Phase 1: Load embedding model ─────────────────────────────────────────
-  splashProgress('loading-model', 'Loading AI model', 5);
-  const modelPromise = loadEmbeddingModel();
+  // ── Phase 1: Initialize local relevance index ─────────────────────────────
+  splashProgress('loading-model', 'Preparing search index', 5);
+  const indexReady = loadEmbeddingModel();
 
   // ── Phase 2: Wait for auth to resolve (max 8s) ────────────────────────────
   // The renderer fires set-user once onAuthStateChanged resolves.
@@ -1721,7 +1998,7 @@ async function runStartupSequence() {
   await new Promise(resolve => {
     const poll = setInterval(() => {
       authWaitMs += 200;
-      if (currentUserId || authWaitMs >= AUTH_TIMEOUT) {
+      if (authStateResolved || authWaitMs >= AUTH_TIMEOUT) {
         clearInterval(poll);
         resolve(null);
       }
@@ -1732,13 +2009,8 @@ async function runStartupSequence() {
   if (currentUserId) {
     splashProgress('syncing', 'Syncing from cloud', 35);
     try {
-      const cloudWorkspace = await dc.loadWorkspace(currentUserId);
-      if (cloudWorkspace && cloudWorkspace.projects && cloudWorkspace.projects.length > 0) {
-        if (!cloudWorkspace.studioProjects || cloudWorkspace.studioProjects.length === 0) {
-          const disk = loadProjectsFromDisk();
-          cloudWorkspace.studioProjects        = disk?.studioProjects        ?? [];
-          cloudWorkspace.activeStudioProjectId = disk?.activeStudioProjectId ?? '';
-        }
+      const cloudWorkspace = await loadCloudWorkspaceWithFirstSyncSeed();
+      if (cloudWorkspace && Array.isArray(cloudWorkspace.projects)) {
         saveProjectsToDisk(cloudWorkspace);
         updateLastSyncedIds(cloudWorkspace);
         console.log('[Startup] Cloud workspace synced to disk');
@@ -1747,13 +2019,13 @@ async function runStartupSequence() {
       console.warn('[Startup] Cloud sync failed (non-fatal):', err.message);
     }
   }
-  // Cloud load is done (or user is Free/offline) — now allow Firestore saves.
+  // Cloud load is done (or user is Free/offline) — now allow cloud saves.
   isCloudSyncReady = true;
-  console.log('[Startup] isCloudSyncReady = true — Firestore saves unblocked');
+  console.log('[Startup] Initial cloud state resolved');
 
-  // ── Phase 4: Wait for model + run embed queue ─────────────────────────────
-  splashProgress('loading-model', 'Warming up AI model', 55);
-  await modelPromise;  // ensure model is loaded before embedding
+  // ── Phase 4: Prepare deterministic relevance vectors ─────────────────────
+  splashProgress('loading-model', 'Preparing local search', 55);
+  await indexReady;
   splashProgress('embedding', 'Building search index', 70);
   await runEmbedQueue().catch(e => console.warn('[Startup] Embed queue error:', e.message));
 
@@ -1775,6 +2047,8 @@ async function runStartupSequence() {
   // Mark startup as complete so subsequent set-user calls (e.g. mid-session sign-in)
   // can trigger the post-auth cloud load path.
   isStartupComplete = true;
+  scheduleRelayPoll();
+  scheduleExternalRelayPoll();
 
   // Close splash with a short fade delay
   setTimeout(() => {
@@ -1782,7 +2056,33 @@ async function runStartupSequence() {
   }, 300);
 }
 
+function createTrayIcon() {
+  const candidatePaths = [
+    path.join(__dirname, "out", "logo-icon.png"),
+    path.join(__dirname, "public", "logo-icon.png"),
+    path.join(__dirname, "build", "icon.png"),
+    path.join(process.resourcesPath || __dirname, "icon.icns"),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (!fs.existsSync(candidatePath)) continue;
+
+    const image = nativeImage.createFromPath(candidatePath);
+    if (image.isEmpty()) continue;
+
+    image.setTemplateImage(false);
+    return image.resize({ width: 16, height: 16 });
+  }
+
+  console.warn("[Tray] No usable tray icon found", candidatePaths);
+  return nativeImage.createEmpty();
+}
+
 app.whenReady().then(async () => {
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  applyRendererContentSecurityPolicy();
+  mcpAuthToken = loadOrCreateMcpAuthToken();
   // Show splash immediately — before anything else
   createSplashWindow();
 
@@ -1791,11 +2091,9 @@ app.whenReady().then(async () => {
   mcpServer = startMcpServer(mainWindow);
 
   // ─── System Tray ──────────────────────────────────────────────────────────────
-  const iconPath = path.join(__dirname, "build/icon.png");
   // Use a scaled-down version of the icon for the tray (ideally 16x16 or 22x22)
-  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
-  tray = new Tray(trayIcon);
-  tray.setToolTip("Fikr Studio Background Sync");
+  tray = new Tray(createTrayIcon());
+  tray.setToolTip("Fikr Studio");
   
   const trayMenu = Menu.buildFromTemplate([
     {
@@ -1939,7 +2237,7 @@ app.whenReady().then(async () => {
     });
   });
 
-  // Run the startup sequence: model load → cloud sync → embed queue → show main window
+  // Run the startup sequence: search setup → cloud sync → index queue → show window.
   runStartupSequence().catch(err => {
     console.error('[Startup] Startup sequence failed:', err.message);
     // Ensure main window shows even if startup fails
@@ -1954,13 +2252,7 @@ app.whenReady().then(async () => {
 
 app.on("open-url", (event, url) => {
   event.preventDefault();
-  const parsed = new URL(url);
-  if (parsed.hostname === "auth" && parsed.pathname === "/callback") {
-    const token = parsed.searchParams.get("token");
-    if (token && mainWindow) {
-      pushToRenderer(mainWindow, "auth-token", { token });
-    }
-  }
+  handleAuthCallback(url);
 });
 
 app.on("window-all-closed", () => {
@@ -1969,7 +2261,10 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   isQuiting = true;
+  closePendingAuthServer();
   if (mcpServer) mcpServer.close();
+  if (relayPollTimer) clearTimeout(relayPollTimer);
+  if (externalRelayPollTimer) clearTimeout(externalRelayPollTimer);
   try {
     const lockfilePath = path.join(app.getPath("userData"), "mcp-port.json");
     if (fs.existsSync(lockfilePath)) {

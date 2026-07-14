@@ -268,7 +268,7 @@ export function SearchPanel(props: SearchPanelProps) {
       <div className="border-t border-border/40 px-4 py-3">
         <div className="flex items-center gap-2 text-muted-foreground/60">
           <SearchSpinner />
-          <span className="text-[11px] font-mono">Loading AI search…</span>
+          <span className="text-[11px] font-mono">Building search index…</span>
         </div>
       </div>
     );

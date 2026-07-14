@@ -2,11 +2,24 @@ tasks:
   next:
         status: todo
         priority: 1
+        summary: "Complete production-readiness audit: verify Studio features, integrations, and exact release gates"
+        status: todo
+        priority: 2
+        summary: "Fix Electron renderer CSP delivery and Next development refresh compatibility"
+        status: todo
+        priority: 1
         summary: "Release version 0.1.11"
         status: todo
         priority: 1
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   in_progress:
+    - complete_production_readiness_audit_verify_studio_:
+        status: in_progress
+        priority: high
+        summary: "Complete production-readiness audit: verify Studio features, integrations, and exact release gates"
+        status: in_progress
+        priority: high
+        summary: "Fix Electron renderer CSP delivery and Next development refresh compatibility"
         status: in_progress
         priority: high
         summary: "Release version 0.1.11"
@@ -14,6 +27,8 @@ tasks:
         priority: high
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   completed:
+    - fix_electron_renderer_csp_delivery_and_next_develo:
+        summary: "Moved renderer CSP to Electron response headers and enabled only dev React Refresh requirements."
     - release_version_0_1_11:
         summary: "Built, signed, notarized, and published Fikr Studio v0.1.11 to GitHub OTA"
     - browse_all_pages_of_fikr_studio_find_usability_iss:

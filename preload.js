@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld("fikrStudio", {
   /** Persist intro-seen flag */
   setIntroSeen: () => ipcRenderer.invoke("fikr-studio:set-intro-seen"),
 
+  /** Store BYOK credentials using Electron safeStorage (macOS Keychain-backed). */
+  hasSecureAiKey: (provider) => ipcRenderer.invoke("fikr-studio:secure-has-ai-key", provider),
+  setSecureAiKey: (provider, apiKey) => ipcRenderer.invoke("fikr-studio:secure-set-ai-key", provider, apiKey),
+  requestAi: (provider, body) => ipcRenderer.invoke("fikr-studio:request-ai", { provider, body }),
+
   /**
    * Register a callback for events pushed from the MCP server.
    * The callback receives { type, payload } objects.
@@ -45,6 +50,9 @@ contextBridge.exposeInMainWorld("fikrStudio", {
 
   /** Get the MCP server port (for displaying in Settings) */
   getMcpPort: () => ipcRenderer.invoke("fikr-studio:get-mcp-port"),
+  getMcpConnection: () => ipcRenderer.invoke("fikr-studio:get-mcp-connection"),
+  /** Return the server-verified account profile and plan. */
+  getAccount: () => ipcRenderer.invoke("fikr-studio:get-account"),
 
   /** Execute a tool directly from the React renderer (e.g. from Cloud Relay) */
   executeTool: (name, args) => ipcRenderer.invoke("fikr-studio:execute-tool", { name, args }),
@@ -74,7 +82,7 @@ contextBridge.exposeInMainWorld("fikrStudio", {
   setUser: (uid, idToken) => ipcRenderer.invoke("fikr-studio:set-user", { uid, idToken }),
 
   /** Proxy fetch for usage API to bypass renderer CORS */
-  getUsage: (token) => ipcRenderer.invoke("fikr-studio:get-usage", token),
+  getUsage: () => ipcRenderer.invoke("fikr-studio:get-usage"),
 
   /**
    * Full logout flow — syncs data to cloud, shows a native keep/clear dialog,

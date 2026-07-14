@@ -16,7 +16,7 @@ export function MobileWall() {
         Spatial thinking needs space.
       </p>
       <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-        Fikr Studio is built for large screens. Open it on a desktop or laptop browser to get the full experience.
+        Fikr Studio is built for larger displays. Open the desktop app on a Mac with more screen space.
       </p>
     </div>
   )

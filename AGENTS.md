@@ -15,11 +15,11 @@ authority: CANONICAL
 | | |
 |---|---|
 | **Stack** | Electron + React + TypeScript |
-| **Bundler** | Vite |
-| **Styling** | Tailwind CSS v3 + Shadcn/UI |
-| **State** | Zustand |
-| **DB** | SQLite (better-sqlite3) |
-| **Local LLM** | @mlc-ai/web-llm (WebGPU) |
+| **Framework** | Next.js static export |
+| **Styling** | Tailwind CSS v4 + Shadcn/UI |
+| **State** | React state |
+| **Local data** | Versioned JSON workspace |
+| **Local search** | Deterministic lexical relevance vectors |
 | **Auth** | Shared fikr.one SSO |
 
 ---
@@ -27,7 +27,7 @@ authority: CANONICAL
 ## Session Lifecycle
 
 ```
-START → .agents/workflows/_shared/bootstrap.md → [WORK] → .agents/workflows/_shared/maintain-context.md → END
+START → .agents/workflows/bootstrap.md → [WORK] → .agents/workflows/process.md → END
 ```
 
 **Quick commands:**
@@ -76,19 +76,17 @@ START → .agents/workflows/_shared/bootstrap.md → [WORK] → .agents/workflow
 ## Architecture
 
 ```
-src/
-  lib/fikr.ts            ← Unified API bridge (window.fikr / HTTP REST)
-  tools/engine/
-    remote_bridge.ts     ← IPC proxy for LLM requests
-  app/                   ← React pages
-electron/
-  ipc/handlers.ts        ← All IPC handlers
+app/                     ← Next.js renderer
+components/              ← React UI
+lib/                     ← Renderer logic and authenticated cloud client
+main.js                  ← Electron main process and local MCP server
+preload.js               ← Narrow renderer IPC bridge
 ```
 
 **Key rules:**
 - CSS vars use oklch CHANNELS ONLY (L C H) — not full `oklch()` values
 - Widget JSX uses 100% inline CSS — no Tailwind classes inside widget scope
-- All IPC requests go through `net:fetchStream` to avoid CORS
+- Cloud sync goes through authenticated fikr.one APIs; never ship Firebase Admin credentials
 
 ## Knowledge
 

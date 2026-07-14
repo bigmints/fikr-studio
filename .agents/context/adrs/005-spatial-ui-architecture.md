@@ -1,7 +1,7 @@
 # ADR 005 — Spatial UI Architecture (Tiling Canvas + Workspace Views)
 
 **Date:** 2026-01-01
-**Status:** Accepted
+**Status:** Superseded by ADR 008
 **Scope:** `fikr-studio/` Electron app
 
 ---

@@ -66,6 +66,10 @@
     --sidebar-border: #E5E7EB;
     --sidebar-ring: #3CA6A6;
 
+    --font-geist-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-geist-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    --font-vazirmatn: Tahoma, Arial, sans-serif;
+    --font-display: Georgia, "Times New Roman", serif;
     --font-sans: var(--font-geist-sans);
     --font-serif: var(--font-display);
     --font-mono: var(--font-geist-mono);
@@ -199,9 +203,9 @@
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
 
-    --font-sans: var(--font-sans);
-    --font-mono: var(--font-mono);
-    --font-serif: var(--font-serif);
+    --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    --font-serif: Georgia, "Times New Roman", serif;
 
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
