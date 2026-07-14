@@ -48,11 +48,19 @@ node scripts/refresh-mac-update-metadata.mjs
 node scripts/verify-macos-release.mjs "$APP" "$DMG" "$ZIP"
 
 echo "Publishing a draft GitHub release for ${VERSION}..."
-GH_TOKEN="$GH_TOKEN" gh release create "v${VERSION}" \
-  --draft \
-  --title "Fikr Studio ${VERSION}" \
-  "$DMG" \
-  "${DMG}.blockmap" \
-  "$ZIP" \
-  "${ZIP}.blockmap" \
+ASSETS=(
+  "$DMG"
+  "${DMG}.blockmap"
+  "$ZIP"
+  "${ZIP}.blockmap"
   dist/latest-mac.yml
+)
+
+if GH_TOKEN="$GH_TOKEN" gh release view "v${VERSION}" >/dev/null 2>&1; then
+  GH_TOKEN="$GH_TOKEN" gh release upload "v${VERSION}" --clobber "${ASSETS[@]}"
+else
+  GH_TOKEN="$GH_TOKEN" gh release create "v${VERSION}" \
+    --draft \
+    --title "Fikr Studio ${VERSION}" \
+    "${ASSETS[@]}"
+fi
