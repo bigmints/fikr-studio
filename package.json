@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "NEXT_STATIC_EXPORT=1 next build",
+    "build": "NEXT_STATIC_EXPORT=1 next build --webpack",
     "start": "next start",
     "lint": "eslint app/ components/ lib/ tests/ main.js preload.js scripts/*.js scripts/*.mjs --ext .js,.mjs,.ts,.tsx",
     "typecheck": "tsc --noEmit",
@@ -93,7 +93,7 @@
     "input-otp": "1.4.2",
     "lucide-react": "^0.564.0",
     "marked": "^18.0.6",
-    "next": "16.2.2",
+    "next": "^16.2.2",
     "next-themes": "^0.4.6",
     "postcss": "^8.5",
     "radix-ui": "^1.4.3",
