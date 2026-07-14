@@ -24,7 +24,7 @@ if ! xcrun notarytool history --keychain-profile notarytool-profile >/dev/null 2
   exit 1
 fi
 
-VERSION="$(node -p \"require('./package.json').version\")"
+VERSION="$(node -p "require('./package.json').version")"
 APP="dist/mac-arm64/Fikr Studio.app"
 DMG="dist/Fikr Studio-${VERSION}-arm64.dmg"
 ZIP="dist/Fikr Studio-${VERSION}-arm64-mac.zip"
