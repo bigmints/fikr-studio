@@ -17,7 +17,6 @@ const nextConfig = {
   outputFileTracingRoot: __dirname,
   ...(isStaticExport && {
     output: "export",
-    distDir: "out",
     assetPrefix: "./",
   }),
   images: {

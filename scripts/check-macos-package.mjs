@@ -17,6 +17,7 @@ const bytes = directoryBytes(appPath);
 if (bytes > 300 * 1024 * 1024) throw new Error(`App bundle exceeds 300 MB: ${bytes} bytes`);
 
 const plist = path.join(appPath, 'Contents', 'Info.plist');
+const asar = path.join(appPath, 'Contents', 'Resources', 'app.asar');
 const readPlist = key => execFileSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, plist], {
   encoding: 'utf8',
   stdio: ['ignore', 'pipe', 'ignore'],
@@ -25,6 +26,12 @@ if (readPlist('CFBundleIdentifier') !== 'com.fikr.studio') throw new Error('Unex
 if (readPlist('CFBundleShortVersionString') !== pkg.version) throw new Error('Bundle version does not match package.json');
 if (readPlist('CFBundleURLTypes:0:CFBundleURLSchemes:0') !== 'fikr-studio') {
   throw new Error('Missing fikr-studio authentication URL scheme');
+}
+
+const asarCli = path.join(process.cwd(), 'node_modules', '.bin', 'asar');
+const asarFiles = execFileSync(asarCli, ['list', asar], { encoding: 'utf8' });
+if (!asarFiles.split('\n').includes('/out/index.html')) {
+  throw new Error('Packaged renderer is missing out/index.html');
 }
 
 for (const key of FORBIDDEN_INFO_KEYS) {
