@@ -1,0 +1,40 @@
+queue:
+  - name: "Rewrite connections-page.tsx"
+    prompt: |
+      Rewrite /Users/pretheesh/Projects/fikr-workspace/fikr-studio/components/connections-page.tsx completely.
+
+      REQUIREMENTS:
+      - Full-screen page (used as activeApp === "Connections" in the main layout)
+      - All 17 integrations from /Users/pretheesh/Projects/fikr-workspace/.agents/knowledge/fikr-studio/integration_user_guides.md
+      - Use Shadcn Sheet (from @/components/ui/sheet) for per-integration detail sidebar (opens from right)
+      - Use Shadcn Button (from @/components/ui/button)
+      - Grouped by category: MCP Clients (Claude Desktop, Windsurf, Cursor, GitHub Copilot, Gemini CLI, GitHub MCP), Webhooks (Linear, Vercel, Slack, Discord, Telegram, Sentry, n8n), Automation & REST (Zapier, Make, Notion, Todoist)
+      - Each row in the list: brand icon + name + short description + connection type badge + status dot + primary action button
+      - Connection types: "1-click" (claude, windsurf have IPC install via window.fikrStudio.installMcp(id)), "copy-config" (cursor, copilot, geminicli, github), "copy-endpoint" (linear, vercel, sentry, todoist), "paste-url" (slack, discord, telegram), "rest-api" (notion, zapier, make, n8n)
+      - For 1-click: call window.fikrStudio.installMcp(id) then window.fikrStudio.checkMcp(id) for status
+      - Status: "not_configured" | "installed" | "checking" | "error"  — shown as colored dot next to name
+      - Sheet detail per integration:
+        * Header: large icon + name + description
+        * Steps from the user guide (hardcode from the knowledge doc)
+        * Code snippet with copy button (pre/code block, dark bg)
+        * For 1-click integrations: big Install button that calls IPC
+        * External docs link
+      - Brand icons from ./brand-icons/ — claude-color.svg, windsurf.svg, cursor.svg, copilot-color.svg, geminicli-color.svg, github.svg, linear.svg, vercel.svg, discord.svg, telegram.svg, sentry.svg, n8n-color.svg, zapier-color.svg, make.svg, notion.svg, todoist.svg — slack has no icon so use emoji 💬
+      - Props interface: { mcpPort: number | null; plan: string; relayApiKey: string }
+      - Design: matches existing dark design system, no hardcoded colors, use CSS vars, consistent with other pages
+
+  - name: "Update project-sidebar.tsx — move Connections to profile popover"
+    prompt: |
+      In /Users/pretheesh/Projects/fikr-workspace/fikr-studio/components/project-sidebar.tsx:
+
+      1. REMOVE the Connections DropdownMenuItem from the APP SWITCHER dropdown (the one at the top with Fikr Intel / Fikr Studio).
+         The app switcher should only have Fikr Intel and Fikr Studio.
+
+      2. ADD a Connections DropdownMenuItem to the PROFILE dropdown at the bottom of the sidebar.
+         The profile dropdown already has items like "Upgrade to Pro", "LLM Setup", "Manage Account", "Billing", etc.
+         Add "Connections" with a Plug icon, above "Manage Account".
+         When clicked: call setActiveApp("Connections")
+         The setActiveApp prop is already available in the component.
+
+      After editing, run: cd /Users/pretheesh/Projects/fikr-workspace/fikr-studio && npx tsc --noEmit
+      Fix any TypeScript errors found.
