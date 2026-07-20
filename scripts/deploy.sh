@@ -31,9 +31,16 @@ ZIP="dist/Fikr Studio-${VERSION}-arm64-mac.zip"
 
 echo "Building signed and notarized Fikr Studio ${VERSION} release candidate..."
 npm run verify
+npm run build
 APPLE_KEYCHAIN_PROFILE="notarytool-profile" \
 APPLE_TEAM_ID="FBG8NKYPUJ" \
 npx electron-builder build --mac -p never
+
+# A signed app can still open to a blank screen if the static renderer was not
+# packaged. Fail before notarizing or publishing unless the exact app bundle
+# contains the exported renderer and required runtime files.
+node scripts/check-macos-package.mjs "$APP"
+npm run check:asar
 
 echo "Signing and notarizing the final DMG..."
 codesign --force \
@@ -47,19 +54,33 @@ node scripts/refresh-mac-update-metadata.mjs
 
 node scripts/verify-macos-release.mjs "$APP" "$DMG" "$ZIP"
 
-echo "Publishing a draft GitHub release for ${VERSION}..."
+echo "Publishing GitHub release for ${VERSION}..."
+REPO="bigmints/fikr-studio"
+PUBLISH_DMG="dist/Fikr.Studio-${VERSION}-arm64.dmg"
+PUBLISH_DMG_BLOCKMAP="${PUBLISH_DMG}.blockmap"
+PUBLISH_ZIP="dist/Fikr.Studio-${VERSION}-arm64-mac.zip"
+PUBLISH_ZIP_BLOCKMAP="${PUBLISH_ZIP}.blockmap"
+
+# latest-mac.yml uses GitHub's dot-normalized asset names. Upload files with
+# those exact names so automatic updates resolve the published URLs.
+ln -f "$DMG" "$PUBLISH_DMG"
+ln -f "${DMG}.blockmap" "$PUBLISH_DMG_BLOCKMAP"
+ln -f "$ZIP" "$PUBLISH_ZIP"
+ln -f "${ZIP}.blockmap" "$PUBLISH_ZIP_BLOCKMAP"
+
 ASSETS=(
-  "$DMG"
-  "${DMG}.blockmap"
-  "$ZIP"
-  "${ZIP}.blockmap"
+  "$PUBLISH_DMG"
+  "$PUBLISH_DMG_BLOCKMAP"
+  "$PUBLISH_ZIP"
+  "$PUBLISH_ZIP_BLOCKMAP"
   dist/latest-mac.yml
 )
 
-if GH_TOKEN="$GH_TOKEN" gh release view "v${VERSION}" >/dev/null 2>&1; then
-  GH_TOKEN="$GH_TOKEN" gh release upload "v${VERSION}" --clobber "${ASSETS[@]}"
+if GH_TOKEN="$GH_TOKEN" gh release view "v${VERSION}" --repo "$REPO" >/dev/null 2>&1; then
+  GH_TOKEN="$GH_TOKEN" gh release upload "v${VERSION}" --repo "$REPO" --clobber "${ASSETS[@]}"
 else
   GH_TOKEN="$GH_TOKEN" gh release create "v${VERSION}" \
+    --repo "$REPO" \
     --title "Fikr Studio ${VERSION}" \
     "${ASSETS[@]}"
 fi

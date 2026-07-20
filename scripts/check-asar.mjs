@@ -8,6 +8,7 @@ const asarBytes = statSync(asar).size;
 if (asarBytes > 10 * 1024 * 1024) throw new Error(`app.asar exceeds 10 MB: ${asarBytes} bytes`);
 const files = await listPackage(asar);
 const required = [
+  '/out/index.html',
   '/main.js',
   '/preload.js',
   '/lib/auth-callback.js',

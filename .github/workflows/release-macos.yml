@@ -82,6 +82,7 @@ jobs:
       - name: Verify exact release artifacts
         run: |
           VERSION="$(node -p \"require('./package.json').version\")"
+          node scripts/check-macos-package.mjs "dist/mac-arm64/Fikr Studio.app"
           node scripts/verify-macos-release.mjs \
             "dist/mac-arm64/Fikr Studio.app" \
             "dist/Fikr Studio-${VERSION}-arm64.dmg" \
