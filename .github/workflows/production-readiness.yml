@@ -3,7 +3,7 @@ name: Production readiness
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, master]
     tags: ['v*']
 
 permissions:
