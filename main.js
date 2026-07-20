@@ -17,6 +17,7 @@ const { validateMcpRpc, validateToolCall } = require('./lib/mcp-validation');
 const { externalRelayMessageToRpc } = require('./lib/external-relay-message');
 const { configureSafeStorageProfile } = require('./lib/secure-storage-profile');
 const { loadOrCreateLocalMcpAuthToken } = require('./lib/local-mcp-auth');
+const { installDownloadedUpdate } = require('./lib/update-install');
 
 // ─── Authenticated cloud-sync client ─────────────────────────────────────────
 // Firebase Admin credentials remain on fikr.one; the desktop sends only an ID token.
@@ -2308,9 +2309,21 @@ app.whenReady().then(async () => {
     }).then(result => {
       if (result.response === 0) {
         isQuiting = true;
-        setTimeout(() => {
-          autoUpdater.quitAndInstall();
-        }, 100);
+        installDownloadedUpdate({
+          session: session.defaultSession,
+          quitAndInstall: () => autoUpdater.quitAndInstall(),
+          onFlushError: error => {
+            console.warn('[Fikr Studio] Could not flush session storage before update:', error?.message || error);
+          },
+        }).catch(error => {
+          isQuiting = false;
+          console.error('[Fikr Studio] Could not install downloaded update:', error?.message || error);
+          showUpdateDialog({
+            type: 'error',
+            title: 'Update Install Failed',
+            message: 'Fikr Studio could not install the downloaded update. Quit the app and try again.',
+          });
+        });
       }
     });
   });
