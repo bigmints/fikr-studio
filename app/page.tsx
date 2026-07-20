@@ -19,6 +19,7 @@ import { TileCard, type TextBlock } from "@/components/tile-card";
 import { NoteDetailPanel } from "@/components/note-detail-panel";
 import { BulkActionPanel } from "@/components/bulk-action-panel";
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
+import { UpdateCheckIndicator } from "@/components/update-check-indicator";
 
 function GlobalSearchEngine({ projects }: { projects: any[] }) {
   useSearchEffect({ projects });
@@ -1847,6 +1848,7 @@ export default function Page() {
   return (
     <SearchProvider>
       <GlobalSearchEngine projects={projects} />
+      <UpdateCheckIndicator />
       <div className="flex h-dvh overflow-hidden bg-background">
         {/* Hidden file input for .fikrdata import */}
         <input

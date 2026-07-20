@@ -18,6 +18,7 @@ const { externalRelayMessageToRpc } = require('./lib/external-relay-message');
 const { configureSafeStorageProfile } = require('./lib/secure-storage-profile');
 const { loadOrCreateLocalMcpAuthToken } = require('./lib/local-mcp-auth');
 const { installDownloadedUpdate } = require('./lib/update-install');
+const { sendUpdateStatus } = require('./lib/update-status');
 
 // ─── Authenticated cloud-sync client ─────────────────────────────────────────
 // Firebase Admin credentials remain on fikr.one; the desktop sends only an ID token.
@@ -1895,11 +1896,8 @@ function getSafeUpdateErrorMessage(err) {
 function checkForUpdates({ manual = false } = {}) {
   if (isUpdateCheckInFlight) {
     if (manual) {
-      showUpdateDialog({
-        type: "info",
-        title: "Update Check Running",
-        message: "Fikr Studio is already checking for updates."
-      });
+      isManualUpdateCheck = true;
+      sendUpdateStatus(mainWindow, true);
     }
     return Promise.resolve(null);
   }
@@ -1907,19 +1905,14 @@ function checkForUpdates({ manual = false } = {}) {
   isManualUpdateCheck = manual;
   isUpdateCheckInFlight = true;
 
-  if (manual) {
-    showUpdateDialog({
-      type: "info",
-      title: "Checking for Updates",
-      message: "Fikr Studio is checking GitHub for a newer published release."
-    });
-  }
+  if (manual) sendUpdateStatus(mainWindow, true);
 
   return autoUpdater.checkForUpdates()
     .catch(err => {
       console.error("[Fikr Studio] Auto-updater error:", err?.message || err);
       const shouldShowManualError = manual && isManualUpdateCheck;
       if (shouldShowManualError) {
+        sendUpdateStatus(mainWindow, false);
         showUpdateDialog({
           type: "error",
           title: "Update Check Failed",
@@ -2262,6 +2255,7 @@ app.whenReady().then(async () => {
   autoUpdater.on("error", (err) => {
     console.error("[Fikr Studio] Auto-updater error:", err.message || err);
     if (isManualUpdateCheck) {
+      sendUpdateStatus(mainWindow, false);
       showUpdateDialog({
         type: "error",
         title: "Update Check Failed",
@@ -2274,6 +2268,7 @@ app.whenReady().then(async () => {
 
   autoUpdater.on("update-available", () => {
     if (isManualUpdateCheck) {
+      sendUpdateStatus(mainWindow, false);
       showUpdateDialog({
         type: "info",
         title: "Update Available",
@@ -2288,6 +2283,7 @@ app.whenReady().then(async () => {
   autoUpdater.on("update-not-available", () => {
     if (isManualUpdateCheck) {
       isManualUpdateCheck = false;
+      sendUpdateStatus(mainWindow, false);
       showUpdateDialog({
         type: "info",
         title: "Up to Date",
@@ -2298,6 +2294,7 @@ app.whenReady().then(async () => {
   });
 
   autoUpdater.on("update-downloaded", () => {
+    sendUpdateStatus(mainWindow, false);
     isManualUpdateCheck = false;
     isUpdateCheckInFlight = false;
     console.log("[Fikr Studio] Update downloaded. Ready to install.");

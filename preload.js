@@ -47,6 +47,13 @@ contextBridge.exposeInMainWorld("fikrStudio", {
     return () => ipcRenderer.removeListener("fikr-studio:splash-progress", handler);
   },
 
+  /** Receive the short-lived manual update-check loading state. */
+  onUpdateStatus: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("fikr-studio:update-status", handler);
+    return () => ipcRenderer.removeListener("fikr-studio:update-status", handler);
+  },
+
 
   /** Get the MCP server port (for displaying in Settings) */
   getMcpPort: () => ipcRenderer.invoke("fikr-studio:get-mcp-port"),
