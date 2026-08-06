@@ -162,5 +162,5 @@ node scripts/verify-release-assets.mjs \
 
 echo "Downloaded draft passed every gate; publishing $TAG..."
 gh release edit "$TAG" --draft=false --latest
-gh release view "$TAG" --json isDraft,isLatest,tagName,url
+gh release view "$TAG" --json isDraft,isPrerelease,tagName,publishedAt,url
 echo "Fikr Studio ${VERSION} is published and independently verified."
