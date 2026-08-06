@@ -1,21 +1,16 @@
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { appBuilderPath } = require('app-builder-bin');
+const { buildBlockMap } = require('app-builder-lib/out/targets/blockmap/blockmap');
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const dist = path.resolve('dist');
 const dmg = path.join(dist, `Fikr Studio-${pkg.version}-arm64.dmg`);
 const zip = path.join(dist, `Fikr Studio-${pkg.version}-arm64-mac.zip`);
 
-execFileSync(appBuilderPath, [
-  'blockmap',
-  `--input=${dmg}`,
-  `--output=${dmg}.blockmap`,
-], { stdio: 'inherit' });
+await buildBlockMap(dmg, 'gzip', `${dmg}.blockmap`);
 
 function artifact(file) {
   return {
