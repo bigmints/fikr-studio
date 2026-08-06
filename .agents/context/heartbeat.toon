@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-07-14T09:12:38Z"
-  host: "Mac"
-  task: "release 0.1.20: verifying mandatory gate"
+  last_seen: "2026-08-06T06:42:39Z"
+  host: "BigMac-2"
+  task: "release_v0_1_23_and_harden_delivery: hardening canonical release"
   status: alive

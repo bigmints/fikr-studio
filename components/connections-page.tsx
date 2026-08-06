@@ -51,7 +51,7 @@ const getIntegrations = (mcpPort: number | null, mcpToken: string | null): Integ
     id: "claude",
     name: "Claude Desktop",
     tagline: "Ask Claude questions about your notes directly.",
-    description: "Ask Claude questions about your notes. 'What did I capture last week about the Fikr redesign?' Claude pulls context directly from your canvas.",
+    description: "Ask Claude questions about your notes. 'What did I capture last week about the Fikr redesign?' Claude pulls context directly from your workspace.",
     iconSrc: "/brand-icons/claude-color.svg",
     iconBg: "#D97757", iconLetter: "C",
     category: "MCP Clients",
@@ -69,8 +69,8 @@ const getIntegrations = (mcpPort: number | null, mcpToken: string | null): Integ
   {
     id: "windsurf",
     name: "Windsurf",
-    tagline: "Cascade AI reads your canvas context while you code.",
-    description: "While coding in Windsurf (Cascade), your AI has access to your Fikr notes as context. Capture code decisions directly to your canvas from the chat.",
+    tagline: "Cascade AI reads your notes while you code.",
+    description: "While coding in Windsurf (Cascade), your AI has access to your Fikr notes as context. Capture code decisions directly to your workspace from the chat.",
     iconSrc: "/brand-icons/windsurf.svg",
     iconBg: "#3CA6A6", iconLetter: "W",
     category: "MCP Clients",
@@ -128,8 +128,8 @@ const getIntegrations = (mcpPort: number | null, mcpToken: string | null): Integ
   {
     id: "geminicli",
     name: "Gemini CLI",
-    tagline: "Run Gemini from terminal with your canvas as context.",
-    description: "Use Google's Gemini CLI with access to your Fikr notes as context. Run `gemini` from terminal and it can query your canvas.",
+    tagline: "Run Gemini from terminal with your notes as context.",
+    description: "Use Google's Gemini CLI with access to your Fikr notes as context. Run `gemini` from terminal and it can query your workspace.",
     iconSrc: "/brand-icons/geminicli-color.svg",
     iconBg: "#4285F4", iconLetter: "G",
     category: "MCP Clients",
@@ -344,7 +344,7 @@ function SnippetBox({ label, code, mono = true, children }: { label: string; cod
     <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-zinc-950">
       {/* Label row */}
       <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
-        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{label}</span>
+        <span className="text-[11px] font-semibold text-zinc-400">{label}</span>
         <button
           onClick={copy}
           className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all ${
@@ -454,11 +454,11 @@ function IntegrationSheet({
 
           {/* Setup steps */}
           <div className="pt-1">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">How to set up</p>
+            <p className="text-[12px] font-semibold text-foreground mb-3">How to connect</p>
             <ol className="space-y-3">
               {integration.steps.map((step, i) => (
                 <li key={i} className="flex gap-3">
-                  <span className="shrink-0 h-5 w-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">
+                  <span className="shrink-0 h-5 w-5 rounded-full bg-muted text-foreground text-[11px] font-semibold flex items-center justify-center mt-0.5">
                     {i + 1}
                   </span>
                   <div>
@@ -550,30 +550,41 @@ function IntegrationRow({
 
   return (
     <div
-      className="flex items-center justify-between p-4 rounded-2xl border border-border/40 bg-card/50 hover:bg-muted/50 transition-colors cursor-pointer group"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${integration.name} connection details`}
+      className="group -mx-3 flex min-h-[72px] cursor-pointer items-center justify-between rounded-lg border-b border-transparent px-4 py-3 transition-[background-color,box-shadow] duration-150 hover:bg-secondary/55 hover:shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--border)_45%,transparent)] focus-visible:bg-secondary/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
     >
       <div className="flex items-center gap-3.5 min-w-0">
-        <BrandIcon integration={integration} size={36} />
+        <div className="shrink-0 transition-transform duration-150 group-hover:scale-[1.03] group-focus-visible:scale-[1.03]">
+          <BrandIcon integration={integration} size={32} />
+        </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="font-semibold text-sm text-foreground">{integration.name}</span>
             {isInstalled && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+              <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                 <Check className="h-3 w-3" /> Connected
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground truncate max-w-[200px] sm:max-w-[400px]">
+          <p className="text-xs text-muted-foreground truncate max-w-[200px] transition-colors group-hover:text-foreground/70 group-focus-visible:text-foreground/70 sm:max-w-[400px]">
             {integration.tagline}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
         {isOneClick && !isInstalled && (
           <button
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground shadow-sm hover:opacity-90 transition-opacity"
+            className="flex min-h-8 items-center gap-1 rounded-md bg-foreground px-3 text-xs font-semibold text-background transition-opacity hover:opacity-80"
             onClick={() => onInstall(integration.id)}
             disabled={installing === integration.id}
           >
@@ -586,10 +597,10 @@ function IntegrationRow({
         )}
         {!isOneClick && (
           <button
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex min-h-8 items-center gap-1 px-3 rounded-md text-xs font-semibold transition-colors ${
               copied
                 ? "bg-emerald-500/20 text-emerald-400"
-                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                : "bg-secondary/80 text-secondary-foreground transition-colors group-hover:bg-foreground group-hover:text-background group-focus-visible:bg-foreground group-focus-visible:text-background hover:opacity-80"
             }`}
             onClick={handleCopy}
           >
@@ -606,12 +617,6 @@ function IntegrationRow({
             )}
           </button>
         )}
-        <button
-          className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5"
-          onClick={onOpen}
-        >
-          Setup
-        </button>
       </div>
     </div>
   );
@@ -675,24 +680,24 @@ export function ConnectionsPage({ mcpPort, mcpToken, plan, relayApiKey }: Connec
     <>
       {/* Cloud Relay Card */}
       {isPlusPro ? (
-        <div className="p-4 mb-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.04] to-violet-500/[0.03] space-y-4">
+        <section className="mb-6 border-b border-border/60 pb-6 space-y-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="font-bold text-[14px] text-foreground flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+                <Sparkles className="h-4 w-4 text-muted-foreground" />
                 Fikr Cloud Relay
               </h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5 max-w-sm leading-relaxed">
+              <p className="text-[12px] text-muted-foreground mt-1 max-w-md leading-relaxed">
                 Connect to Fikr Studio from remote environments. Copy the prompt or the connection details below.
               </p>
             </div>
-            <span className="text-[10px] font-black uppercase bg-primary/10 text-primary px-2.5 py-0.5 rounded border border-primary/20">
-              Plus / Pro Active
+            <span className="text-[11px] font-medium text-muted-foreground">
+              Plus / Pro
             </span>
           </div>
 
           <Tabs defaultValue="agent-prompt" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 bg-zinc-950 p-1 rounded-lg border border-white/[0.06] mb-3 h-auto">
+            <TabsList className="grid w-full grid-cols-2 bg-muted p-1 rounded-md mb-3 h-auto">
               <TabsTrigger value="agent-prompt" className="text-xs font-semibold py-1.5 rounded-md">
                 For AI Agents
               </TabsTrigger>
@@ -704,7 +709,7 @@ export function ConnectionsPage({ mcpPort, mcpToken, plan, relayApiKey }: Connec
             <TabsContent value="agent-prompt">
               <SnippetBox
                 label="Agent Connection Prompt"
-                code={`Connect to my Fikr workspace via the Fikr Cloud Relay. The MCP server runs locally inside my Fikr Studio desktop app, and the cloud relay tunnels requests securely.\n\n### Connection Information:\n- Relay Endpoint URL: https://fikr.one/api/mcp/relay\n- Relay API Key: ${relayApiKey || "<your-relay-key>"}\n\n### How to connect:\n1. Fetch the official agent skill at https://fikr.one/skills/fikr-studio.md to understand the available note-taking, search, and canvas tools.\n2. Connect and call the tools using either the SSE protocol or by sending Stateless JSON-RPC HTTP POST requests directly to the Relay Endpoint URL with the Bearer authorization header.`}
+                code={`Connect to my Fikr workspace via the Fikr Cloud Relay. The MCP server runs locally inside my Fikr Studio desktop app, and the cloud relay tunnels requests securely.\n\n### Connection Information:\n- Relay Endpoint URL: https://fikr.one/api/mcp/relay\n- Relay API Key: ${relayApiKey || "<your-relay-key>"}\n\n### How to connect:\n1. Fetch the official agent skill at https://fikr.one/skills/fikr-studio.md to understand the available note-taking, search, and workspace tools.\n2. Connect and call the tools using either the SSE protocol or by sending Stateless JSON-RPC HTTP POST requests directly to the Relay Endpoint URL with the Bearer authorization header.`}
                 mono={false}
               />
             </TabsContent>
@@ -717,16 +722,16 @@ export function ConnectionsPage({ mcpPort, mcpToken, plan, relayApiKey }: Connec
               />
             </TabsContent>
           </Tabs>
-        </div>
+        </section>
       ) : (
-        <div className="p-4 mb-5 rounded-2xl border border-dashed border-border bg-muted/10 space-y-3 relative overflow-hidden">
+        <section className="mb-6 border-b border-border/60 pb-6 space-y-3">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="font-bold text-[14px] text-foreground flex items-center gap-1.5">
                 <Lock className="h-4 w-4 text-muted-foreground" />
                 Fikr Cloud Relay (Remote)
               </h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5 max-w-sm leading-relaxed">
+              <p className="text-[12px] text-muted-foreground mt-1 max-w-md leading-relaxed">
                 Connect from remote environments while Fikr Studio is running. Upgrade for the authenticated cloud tunnel.
               </p>
             </div>
@@ -737,10 +742,10 @@ export function ConnectionsPage({ mcpPort, mcpToken, plan, relayApiKey }: Connec
               Upgrade to Plus <ExternalLink className="h-3 w-3" />
             </button>
           </div>
-        </div>
+        </section>
       )}
 
-      <div className="space-y-2">
+      <div>
         {INTEGRATIONS.map((integration) => (
           <IntegrationRow
             key={integration.id}

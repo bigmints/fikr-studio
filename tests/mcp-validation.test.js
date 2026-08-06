@@ -10,6 +10,12 @@ test('accepts supported MCP requests and bounded tool arguments', () => {
     validateToolCall('create_note', { text: 'hello', idempotency_key: 'msg_1' }),
     { text: 'hello', idempotency_key: 'msg_1' },
   );
+  assert.deepEqual(
+    validateToolCall('create_note_synthesized', {
+      text: 'hello', contentType: 'idea', category: 'Reliability', annotation: 'Stored once.', idempotency_key: 'bridge_1',
+    }),
+    { text: 'hello', contentType: 'idea', category: 'Reliability', annotation: 'Stored once.', idempotency_key: 'bridge_1' },
+  );
 });
 
 for (const [name, rpc] of [

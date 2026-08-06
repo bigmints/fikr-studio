@@ -18,7 +18,6 @@ import {
   LogIn,
   Shield,
   CreditCard,
-  FileText,
   Moon,
   Sun,
   Keyboard,
@@ -33,12 +32,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { type AISettings } from "@/lib/ai-settings";
 import { signInWithCustomToken, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
-import { limitWords } from "@/lib/utils";
 
 interface Project {
   id: string;
@@ -90,12 +89,7 @@ export function ProjectSidebar({
   mcpPort,
   activeApp,
   setActiveApp,
-  studioProjects = [],
-  activeStudioProjectId = "",
-  onSelectStudioProject = () => {},
-  onCreateStudioProject = () => {},
-  onOpenKeyboardShortcuts = () => {},
-  activeStudioWordCount,
+  onOpenKeyboardShortcuts,
 }: ProjectSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -232,16 +226,16 @@ export function ProjectSidebar({
       <div className="studio-sidebar__drag-region" />
 
         {/* App Switcher */}
-        <div className="px-4 pb-3 shrink-0 border-b border-border/10 mb-3">
+        <div className="mb-3 shrink-0 px-4 pb-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center w-full hover:bg-sidebar-foreground/10 p-1.5 -ml-1.5 rounded-md transition-colors text-left group gap-2 focus:outline-none text-sidebar-foreground">
+              <button className="flex items-center w-full hover:bg-sidebar-foreground/10 p-1.5 -ml-1.5 rounded-md transition-colors text-left group gap-2 focus:outline-none text-sidebar-foreground" aria-label="Switch Fikr app">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg shadow-sm overflow-hidden bg-primary/20">
                   <img src="./logo-icon.png" alt="Fikr Logo" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none flex-1">
                   <span className="font-semibold text-sm">{activeApp}</span>
-                  <span className="text-[10px] text-sidebar-foreground/60 uppercase tracking-widest font-mono">Workspace</span>
+                  <span className="text-xs font-medium uppercase tracking-[0.12em] text-sidebar-foreground/60">Workspace</span>
                 </div>
                 <ChevronDown className="h-4 w-4 text-sidebar-foreground/50 group-hover:text-sidebar-foreground transition-colors" />
               </button>
@@ -253,7 +247,7 @@ export function ProjectSidebar({
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-medium text-sm">Fikr Intel</span>
-                  <span className="text-[10px] text-muted-foreground">Spatial Canvas</span>
+                  <span className="text-[11px] text-muted-foreground">Knowledge workspace</span>
                 </div>
                 {activeApp === "Fikr Intel" && <Check className="ml-auto h-4 w-4" />}
               </DropdownMenuItem>
@@ -263,7 +257,7 @@ export function ProjectSidebar({
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-medium text-sm">Fikr Studio</span>
-                  <span className="text-[10px] text-muted-foreground">Creative Workspace</span>
+                  <span className="text-[11px] text-muted-foreground">Writing workspace</span>
                 </div>
                 {activeApp === "Fikr Studio" && <Check className="ml-auto h-4 w-4" />}
               </DropdownMenuItem>
@@ -278,16 +272,17 @@ export function ProjectSidebar({
           <>
             {/* Title & Search */}
             <div className="px-4 pb-3 shrink-0 flex flex-col gap-3">
-              <h2 className="font-mono text-[10px] font-bold uppercase tracking-widest text-sidebar-foreground/60 select-none">
-                Spaces
+              <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/60 select-none">
+                Workspaces
               </h2>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-sidebar-foreground/50" />
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Find a space..."
-                  className="w-full bg-sidebar-foreground/5 border border-sidebar-border rounded-md py-1.5 pl-8 pr-3 text-[12px] text-sidebar-foreground focus:outline-none focus:border-primary/50 transition-colors placeholder:text-sidebar-foreground/40"
+                  placeholder="Find a workspace..."
+                  aria-label="Find a workspace"
+                  className="w-full rounded-md bg-sidebar-foreground/[0.06] py-2 pl-8 pr-3 text-sm text-sidebar-foreground transition-colors placeholder:text-sidebar-foreground/45 focus:bg-sidebar-foreground/[0.09] focus:outline-none focus:ring-1 focus:ring-sidebar-foreground/10"
                 />
               </div>
             </div>
@@ -299,7 +294,7 @@ export function ProjectSidebar({
                   key={project.id}
                   className={`group relative rounded-sm transition-all duration-150 ${
                     activeProjectId === project.id
-                      ? "bg-primary/10 shadow-sm"
+                      ? "bg-sidebar-foreground/[0.07]"
                       : "hover:bg-sidebar-foreground/10"
                   }`}
                 >
@@ -318,22 +313,22 @@ export function ProjectSidebar({
                             if (e.key === "Escape") setEditingId(null);
                           }}
                           onBlur={() => handleRename(project.id)}
-                          className="bg-transparent font-mono text-xs font-bold text-sidebar-foreground focus:outline-none w-full border-b border-primary/50 py-0"
+                          className="w-full border-b border-primary/50 bg-transparent py-0 text-sm font-semibold text-sidebar-foreground focus:outline-none"
                         />
                       ) : (
                         <span
-                          className={`font-mono text-[12px] font-bold truncate ${
+                          className={`truncate text-sm font-semibold leading-5 ${
                             activeProjectId === project.id
-                              ? "text-primary"
+                              ? "text-sidebar-foreground"
                               : "text-sidebar-foreground/80 group-hover:text-sidebar-foreground"
                           }`}
                         >
                           {project.name}
                         </span>
                       )}
-                      <span className="font-mono text-[8px] text-sidebar-foreground/60 uppercase tracking-tighter font-bold">
+                      <span className="text-xs font-medium leading-4 text-sidebar-foreground/60">
                         {project.blocks?.length || 0}{" "}
-                        {(project.blocks?.length || 0) === 1 ? "node" : "nodes"}
+                        {(project.blocks?.length || 0) === 1 ? "note" : "notes"}
                       </span>
                     </button>
 
@@ -346,7 +341,8 @@ export function ProjectSidebar({
                               setEditName(project.name);
                               setEditingId(project.id);
                             }}
-                            className="p-1 hover:bg-sidebar-foreground/10 rounded-sm text-sidebar-foreground/60 hover:text-primary transition-colors"
+                            className="p-1 hover:bg-sidebar-foreground/10 rounded-sm text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
+                            aria-label={`Rename ${project.name}`}
                           >
                             <Edit3 className="h-3 w-3" />
                           </button>
@@ -357,6 +353,7 @@ export function ProjectSidebar({
                                 setDeletingId(project.id);
                               }}
                               className="p-1 hover:bg-destructive/20 rounded-sm text-muted-foreground hover:text-destructive transition-colors"
+                              aria-label={`Delete ${project.name}`}
                             >
                               <Trash2 className="h-3 w-3" />
                             </button>
@@ -376,19 +373,21 @@ export function ProjectSidebar({
                         transition={{ duration: 0 }}
                         className="absolute inset-0 z-10 bg-destructive/95 backdrop-blur-md rounded-sm flex items-center justify-between px-3"
                       >
-                        <span className="font-mono text-[8px] font-bold text-white uppercase tracking-tighter">
-                          Delete Space?
+                        <span className="text-[11px] font-semibold text-white">
+                          Delete workspace?
                         </span>
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleDelete(project.id)}
                             className="p-1 bg-white/20 hover:bg-white/30 rounded-full text-white transition-colors"
+                            aria-label={`Confirm deleting ${project.name}`}
                           >
                             <Check className="h-3 w-3" />
                           </button>
                           <button
                             onClick={() => setDeletingId(null)}
                             className="p-1 bg-black/30 hover:bg-black/40 rounded-full text-white transition-colors"
+                            aria-label="Cancel deleting workspace"
                           >
                             <X className="h-3 w-3" />
                           </button>
@@ -401,89 +400,26 @@ export function ProjectSidebar({
             </div>
 
             {/* Footer */}
-            <div className="p-3 border-t border-sidebar-border shrink-0">
+            <div className="shrink-0 p-3">
               <div className="flex flex-col gap-1.5">
                 <button
                   onClick={onCreateProject}
-                  className="flex items-center justify-between w-full h-8 px-2.5 rounded-sm bg-primary hover:bg-primary/90 text-primary-foreground font-mono text-[9px] font-bold uppercase tracking-[0.1em] transition-all active:scale-[0.98] shadow-sm"
+                  className="flex h-9 w-full items-center justify-between rounded-sm bg-sidebar-foreground/[0.07] px-3 text-xs font-semibold uppercase tracking-[0.1em] text-sidebar-foreground transition-colors hover:bg-sidebar-foreground/[0.11]"
                 >
-                  <span>New Space</span>
+                  <span>New workspace</span>
                   <Plus className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
           </>
-        ) : (
-          <>
-            <div className="px-4 pb-3 shrink-0 flex flex-col gap-3">
-              <h2 className="font-mono text-[10px] font-bold uppercase tracking-widest text-sidebar-foreground/60 select-none">
-                Studio Projects
-              </h2>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5 custom-scrollbar">
-              {studioProjects.filter(p => !p.archived).map((project) => (
-                <div
-                  key={project.id}
-                  className={`group relative rounded-sm transition-all duration-150 ${
-                    activeStudioProjectId === project.id
-                      ? "bg-primary/10 shadow-sm"
-                      : "hover:bg-sidebar-foreground/10"
-                  }`}
-                >
-                  <div className="flex items-center p-2 px-2.5">
-                    <button
-                      onClick={() => onSelectStudioProject(project.id)}
-                      className="flex-1 text-left flex flex-col gap-0 overflow-hidden"
-                    >
-                      <span
-                        className={`font-mono text-[12px] font-bold truncate ${
-                          activeStudioProjectId === project.id
-                            ? "text-primary"
-                            : "text-sidebar-foreground/80 group-hover:text-sidebar-foreground"
-                        }`}
-                      >
-                        {limitWords(project.name || "Untitled", 3)}
-                      </span>
-                      <span className="font-mono text-[8px] text-sidebar-foreground/60 uppercase tracking-tighter font-bold">
-                        {activeStudioProjectId === project.id && activeStudioWordCount
-                          ? `${activeStudioWordCount.toLocaleString()} words • ${project.platform}`
-                          : `${project.mode} • ${project.platform}`}
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-              
-              {studioProjects.filter(p => !p.archived).length === 0 && (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center opacity-50 mt-10">
-                  <FileText className="size-6 mb-2" />
-                  <p className="text-xs">No projects yet</p>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-3 border-t border-sidebar-border shrink-0">
-              <div className="flex flex-col gap-1.5">
-                <button
-                  onClick={onCreateStudioProject}
-                  className="flex items-center justify-between w-full h-8 px-2.5 rounded-sm bg-primary hover:bg-primary/90 text-primary-foreground font-mono text-[9px] font-bold uppercase tracking-[0.1em] transition-all active:scale-[0.98] shadow-sm"
-                >
-                  <span>New Studio Project</span>
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+        ) : <div className="flex-1" />}
           </div>
 
         {/* User Profile */}
         <div className="p-3 shrink-0 border-t border-sidebar-border mt-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center w-full hover:bg-sidebar-foreground/10 p-1.5 -ml-1.5 rounded-md transition-colors text-left group gap-2 focus:outline-none text-sidebar-foreground">
+              <button className="flex items-center w-full hover:bg-sidebar-foreground/10 p-1.5 -ml-1.5 rounded-md transition-colors text-left group gap-2 focus:outline-none text-sidebar-foreground" aria-label="Open account menu">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-muted/20 overflow-hidden shrink-0">
                   {user?.photoURL ? (
                     <img src={user.photoURL} alt={user.displayName || "User"} className="h-full w-full object-cover" />
@@ -495,7 +431,7 @@ export function ProjectSidebar({
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none flex-1 overflow-hidden">
                   <span className="font-semibold text-sm truncate">{user?.displayName || "Fikr User"}</span>
-                  <span className="text-[10px] text-sidebar-foreground/60 truncate">{user?.email || "Not signed in"}</span>
+                  <span className="truncate text-xs text-sidebar-foreground/60">{user?.email || "Not signed in"}</span>
                 </div>
                 <ChevronDown className="h-4 w-4 text-sidebar-foreground/50 group-hover:text-sidebar-foreground transition-colors shrink-0" />
               </button>
@@ -515,13 +451,13 @@ export function ProjectSidebar({
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold text-sm truncate">{user?.displayName || "Fikr User"}</span>
                     {isPro && (
-                      <span className="bg-amber-400/20 text-amber-400 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold">Pro</span>
+                      <span className="bg-amber-400/20 text-amber-400 px-1.5 py-0.5 rounded text-[11px] font-semibold">Pro</span>
                     )}
                     {isPlus && (
-                      <span className="bg-teal-400/20 text-teal-400 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold">Plus</span>
+                      <span className="bg-teal-400/20 text-teal-400 px-1.5 py-0.5 rounded text-[11px] font-semibold">Plus</span>
                     )}
                   </div>
-                  <span className="text-[10px] text-muted-foreground truncate">{user?.email || "Not signed in"}</span>
+                  <span className="text-[11px] text-muted-foreground truncate">{user?.email || "Not signed in"}</span>
                 </div>
               </div>
               {!isManagedPlan && (
@@ -572,6 +508,13 @@ export function ProjectSidebar({
                 <HelpCircle className="size-4" />
                 <span>About / Help</span>
               </DropdownMenuItem>
+              {onOpenKeyboardShortcuts && (
+                <DropdownMenuItem className="gap-2 cursor-pointer focus:bg-foreground/5 rounded-md py-2" onClick={onOpenKeyboardShortcuts}>
+                  <Keyboard className="size-4" />
+                  <span>Keyboard shortcuts</span>
+                  <DropdownMenuShortcut>⌘/</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              )}
               <div className="my-1 mx-1 border-t border-border/40" />
               {user ? (
                 <DropdownMenuItem
@@ -601,4 +544,3 @@ export function ProjectSidebar({
     </div>
   );
 }
-

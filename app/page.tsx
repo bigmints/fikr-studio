@@ -3,7 +3,8 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { SearchProvider } from "@/lib/search-store";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutGrid, Sparkles, Mic, Video, FileText } from "lucide-react";
+import { toast } from "sonner";
+import { LayoutGrid, Sparkles, Mic, Video, FileText, X } from "lucide-react";
 import { TilingArea } from "@/components/tiling-area";
 import { ListArea } from "@/components/list-area";
 import { GraphArea } from "@/components/graph-area";
@@ -19,6 +20,8 @@ import { TileCard, type TextBlock } from "@/components/tile-card";
 import { NoteDetailPanel } from "@/components/note-detail-panel";
 import { BulkActionPanel } from "@/components/bulk-action-panel";
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
+import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
+import { isEditableShortcutTarget } from "@/lib/keyboard-shortcuts";
 import { UpdateCheckIndicator } from "@/components/update-check-indicator";
 
 function GlobalSearchEngine({ projects }: { projects: any[] }) {
@@ -85,12 +88,15 @@ export default function Page() {
   );
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
+  const [newEntryOpenRequest, setNewEntryOpenRequest] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [jumpToSettings, setJumpToSettings] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("account");
+  const [isApiBannerDismissed, setIsApiBannerDismissed] = useState(false);
 
   // ── Auth + usage polling ─────────────────────────────────────────────────
   const [cloudIdToken, setCloudIdToken] = useState<string | null>(null);
@@ -184,8 +190,6 @@ export default function Page() {
 
   // ── Undo history ring (max 20 block snapshots per project) ───────────────
   const blockHistoryRef = useRef<Record<string, TextBlock[][]>>({});
-  const [undoToast, setUndoToast] = useState<string | null>(null);
-  const undoToastTimer = useRef<NodeJS.Timeout | null>(null);
 
   const pushHistory = useCallback(
     (projectId: string, currentBlocks: TextBlock[]) => {
@@ -199,18 +203,8 @@ export default function Page() {
   );
 
   const showUndoToast = useCallback((msg: string) => {
-    if (undoToastTimer.current) clearTimeout(undoToastTimer.current);
-    setUndoToast(msg);
-    undoToastTimer.current = setTimeout(() => setUndoToast(null), 2200);
+    toast(msg);
   }, []);
-
-  // Clean up undo toast timer on unmount
-  useEffect(
-    () => () => {
-      if (undoToastTimer.current) clearTimeout(undoToastTimer.current);
-    },
-    [],
-  );
 
   // ── Intro modal ──────────────────────────────────────────────────────────
   const handleIntroClose = useCallback(() => {
@@ -261,6 +255,21 @@ export default function Page() {
 
   const blocks = useMemo(() => activeProject?.blocks || [], [activeProject?.blocks]);
   const ghostNotes = useMemo(() => activeProject?.ghostNotes || [], [activeProject?.ghostNotes]);
+
+  // The inbox always opens with a useful reading/editing surface. Preserve the
+  // current selection when possible and otherwise select the newest note.
+  useEffect(() => {
+    if (!isLoaded || viewMode !== "list") return;
+    if (blocks.length === 0) {
+      setSelectedNoteId(null);
+      setHighlightedBlockId(null);
+      return;
+    }
+    if (selectedNoteId && blocks.some((block) => block.id === selectedNoteId)) return;
+    const newestNote = [...blocks].sort((a, b) => b.timestamp - a.timestamp)[0];
+    setSelectedNoteId(newestNote.id);
+    setHighlightedBlockId(newestNote.id);
+  }, [blocks, isLoaded, selectedNoteId, viewMode]);
 
   const updateActiveProject = useCallback(
     (updater: (p: Project) => Project) => {
@@ -335,7 +344,7 @@ export default function Page() {
             initialProjects = [
               {
                 id: "default",
-                name: "Default Space",
+                name: "Default workspace",
                 blocks: blks,
                 collapsedIds: collapsed,
                 ghostNotes: [],
@@ -433,19 +442,37 @@ export default function Page() {
     if (isSyncingFromCloud.current) return; // cloud just pushed — don't echo back
     const ipc = typeof window !== "undefined" && (window as any).fikrStudio;
     if (ipc) {
-      ipc.saveProjects({
-        projects,
-        activeProjectId,
-        studioProjects: studioProjectsRef.current,
-        activeStudioProjectId,
-      });
+      void ipc
+        .saveProjects({
+          projects,
+          activeProjectId,
+          studioProjects: studioProjectsRef.current,
+          activeStudioProjectId,
+        })
+        .then((saved: boolean) => {
+          if (!saved) {
+            toast.error("Changes couldn’t be saved", {
+              id: "workspace-save-error",
+              description: "Your edits are still open. Try again before closing Fikr.",
+            });
+          }
+        })
+        .catch(() => {
+          toast.error("Changes couldn’t be saved", {
+            id: "workspace-save-error",
+            description: "Your edits are still open. Try again before closing Fikr.",
+          });
+        });
     } else {
-      localStorage.setItem("nodepad-projects", JSON.stringify(projects));
-      localStorage.setItem("nodepad-active-project", activeProjectId);
       try {
+        localStorage.setItem("nodepad-projects", JSON.stringify(projects));
+        localStorage.setItem("nodepad-active-project", activeProjectId);
         localStorage.setItem("nodepad-backup", JSON.stringify(projects));
       } catch {
-        /* quota exceeded — skip silently */
+        toast.error("Changes couldn’t be saved", {
+          id: "workspace-save-error",
+          description: "Browser storage is unavailable or full.",
+        });
       }
     }
   }, [projects, activeProjectId, activeStudioProjectId, isLoaded]);
@@ -564,15 +591,19 @@ export default function Page() {
           setProjects((prev) => [...prev, imported]);
           setActiveProjectId(imported.id);
           setIsSidebarOpen(false);
+          toast("Workspace imported", { description: imported.name });
         } catch (err) {
           if (err instanceof NodepadParseError) {
-            alert(err.message);
+            toast.error("Couldn’t import workspace", { description: err.message });
           } else {
-            alert(
-              "Could not import file — make sure it's a valid .fikrdata file.",
-            );
+            toast.error("Couldn’t import workspace", {
+              description: "Choose a valid .fikrdata file and try again.",
+            });
           }
         }
+      };
+      reader.onerror = () => {
+        toast.error("Couldn’t read that file");
       };
       reader.readAsText(file);
       // Reset input so the same file can be re-imported if needed
@@ -594,6 +625,7 @@ export default function Page() {
     };
     setStudioProjects((prev) => [newProj, ...prev]);
     setActiveStudioProjectId(id);
+    toast("Article created");
     
     // Save to IPC/localStorage
     if (typeof window !== "undefined" && (window as any).fikrStudio) {
@@ -776,9 +808,10 @@ export default function Page() {
         return updated;
       });
 
-      setUndoToast(`"${projectName}" is ready — open Studio to read it`);
-      if (undoToastTimer.current) clearTimeout(undoToastTimer.current);
-      undoToastTimer.current = setTimeout(() => setUndoToast(null), 6000);
+      toast("Article ready", {
+        description: `“${projectName}” is ready to read in Studio.`,
+        duration: 6_000,
+      });
 
     } catch (err: unknown) {
       const isAbort = (err as { name?: string })?.name === "AbortError";
@@ -793,9 +826,7 @@ export default function Page() {
         return updated;
       });
 
-      setUndoToast(`Generation failed: ${msg}`);
-      if (undoToastTimer.current) clearTimeout(undoToastTimer.current);
-      undoToastTimer.current = setTimeout(() => setUndoToast(null), 6000);
+      toast.error("Generation failed", { description: msg, duration: 6_000 });
     }
   }, [persistStudio]);
 
@@ -1282,81 +1313,92 @@ export default function Page() {
 
   useEffect(() => {
     const handleKeys = (e: KeyboardEvent) => {
-      if (e.key === "f" && (e.metaKey || e.ctrlKey)) {
+      if (e.repeat) return;
+      const key = e.key.toLowerCase();
+      const primary = e.metaKey || e.ctrlKey;
+      const typing = isEditableShortcutTarget(e.target);
+
+      if ((primary && key === "/") || (!primary && e.key === "?" && !typing)) {
         e.preventDefault();
-        setIsSearchOpen((prev) => !prev);
+        setIsKeyboardShortcutsOpen(true);
+        return;
       }
+
       if (e.key === "Escape") {
-        if (isMenuOpen) {
+        if (isKeyboardShortcutsOpen) {
+          setIsKeyboardShortcutsOpen(false);
+        } else if (isMenuOpen) {
           setIsMenuOpen(false);
         } else if (isSearchOpen) {
           setIsSearchOpen(false);
         } else if (isGhostPanelOpen) {
           setIsGhostPanelOpen(false);
         }
+        return;
+      }
+
+      if (typing || !primary) return;
+
+      if (!e.shiftKey && !e.altKey && (key === "k" || key === "f")) {
+        e.preventDefault();
+        setSettingsOpen(false);
+        setIsKeyboardShortcutsOpen(false);
+        setIsSearchOpen(true);
+      } else if (!e.shiftKey && !e.altKey && key === "n") {
+        e.preventDefault();
+        setActiveApp("Fikr Intel");
+        setSettingsOpen(false);
+        setIsSearchOpen(false);
+        setNewEntryOpenRequest((request) => request + 1);
+      } else if (!e.shiftKey && !e.altKey && key === "1") {
+        e.preventDefault();
+        setActiveApp("Fikr Intel");
+        setSettingsOpen(false);
+      } else if (!e.shiftKey && !e.altKey && key === "2") {
+        e.preventDefault();
+        setActiveApp("Fikr Studio");
+        setSettingsOpen(false);
+      } else if (!e.shiftKey && !e.altKey && key === "3") {
+        e.preventDefault();
+        setActiveApp("Connections");
+        setSettingsOpen(false);
+      } else if (!e.shiftKey && !e.altKey && key === ",") {
+        e.preventDefault();
+        setSettingsSection("account");
+        setSettingsOpen(true);
+      } else if (e.shiftKey && !e.altKey && key === "i") {
+        e.preventDefault();
+        setActiveApp("Fikr Intel");
+        setSettingsOpen(false);
+        setIsGhostPanelOpen((open) => !open);
+      } else if (!e.shiftKey && e.altKey && key === "l") {
+        e.preventDefault();
+        setActiveApp("Fikr Intel");
+        setSettingsOpen(false);
+        setViewMode("list");
+      } else if (!e.shiftKey && e.altKey && key === "g") {
+        e.preventDefault();
+        setActiveApp("Fikr Intel");
+        setSettingsOpen(false);
+        setSelectedNoteId(null);
+        setHighlightedBlockId(null);
+        setViewMode("graph");
+      } else if (!e.shiftKey && !e.altKey && key === "z" && activeApp === "Fikr Intel") {
+        e.preventDefault();
+        undo();
       }
     };
     window.addEventListener("keydown", handleKeys);
     return () => window.removeEventListener("keydown", handleKeys);
-  }, [isMenuOpen, isSearchOpen, isGhostPanelOpen, undo]);
-
-  // List view keyboard navigation
-  useEffect(() => {
-    if (viewMode !== "list" || !activeProject?.blocks?.length) return;
-
-    const handleListKeys = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      )
-        return;
-
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        e.preventDefault();
-        
-        const sorted = [...activeProject.blocks].sort(
-          (a, b) => b.timestamp - a.timestamp
-        );
-        const currentIndex = highlightedBlockId 
-          ? sorted.findIndex(b => b.id === highlightedBlockId) 
-          : -1;
-        
-        const nextIndex = e.key === "ArrowDown"
-          ? (currentIndex < sorted.length - 1 ? currentIndex + 1 : 0)
-          : (currentIndex > 0 ? currentIndex - 1 : sorted.length - 1);
-        
-        const nextId = sorted[nextIndex].id;
-        setHighlightedBlockId(nextId);
-        
-        // Keep sidebar in sync if it is open
-        if (selectedNoteId) {
-          setSelectedNoteId(nextId);
-        }
-
-        // Auto-scroll
-        const el = document.getElementById(`tile-${nextId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
-      }
-
-      if (e.key === "Enter" && highlightedBlockId && !selectedNoteId) {
-        e.preventDefault();
-        setSelectedNoteId(highlightedBlockId);
-      }
-    };
-
-    window.addEventListener("keydown", handleListKeys);
-    return () => window.removeEventListener("keydown", handleListKeys);
-  }, [viewMode, activeProject?.blocks, highlightedBlockId, selectedNoteId]);
+  }, [activeApp, isKeyboardShortcutsOpen, isMenuOpen, isSearchOpen, isGhostPanelOpen, undo]);
 
   const addBlock = useCallback(
-    (text: string, forcedType?: ContentType) => {
+    (text: string, forcedType?: ContentType, allowInlineType = true) => {
       // Parse inline #type tag  e.g. "#claim The earth is 4.5 billion years old"
       let resolvedText = text;
       let resolvedType = forcedType;
 
-      if (!resolvedType) {
+      if (!resolvedType && allowInlineType && !text.includes("\n")) {
         const tagMatch = text.match(/^#([a-z]+)\s+(.+)/i);
         if (tagMatch) {
           const tag = tagMatch[1].toLowerCase() as ContentType;
@@ -1774,14 +1816,34 @@ export default function Page() {
     analytics.track("project_create");
     const newProject: Project = {
       id: generateId(),
-      name: "New Space",
+      name: "New workspace",
       blocks: [],
       collapsedIds: [],
       ghostNotes: [],
     };
     setProjects((prev) => [...prev, newProject]);
     setActiveProjectId(newProject.id);
+    toast("Workspace created");
   }, []);
+
+  useEffect(() => {
+    const handleNewWorkspaceShortcut = (event: KeyboardEvent) => {
+      if (
+        event.repeat ||
+        isEditableShortcutTarget(event.target) ||
+        !(event.metaKey || event.ctrlKey) ||
+        !event.shiftKey ||
+        event.altKey ||
+        event.key.toLowerCase() !== "n"
+      ) return;
+      event.preventDefault();
+      setActiveApp("Fikr Intel");
+      setSettingsOpen(false);
+      createProject();
+    };
+    window.addEventListener("keydown", handleNewWorkspaceShortcut);
+    return () => window.removeEventListener("keydown", handleNewWorkspaceShortcut);
+  }, [createProject]);
 
   const renameProject = useCallback((id: string, newName: string) => {
     analytics.track("project_rename", { projectId: id });
@@ -1827,11 +1889,13 @@ export default function Page() {
       // .fikrdata export / import
       else if (cmd === "export-fikrdata") {
         analytics.track("export_nodepad", { project: activeProjectId });
-        setProjects((prev) => {
-          const proj = prev.find((p) => p.id === activeProjectId);
-          if (proj) downloadNodepadFile(proj);
-          return prev;
-        });
+        const project = projectsRef.current.find((item) => item.id === activeProjectId);
+        if (project) {
+          downloadNodepadFile(project);
+          toast("Workspace exported", { description: `${project.name}.fikrdata` });
+        } else {
+          toast.error("Couldn’t export workspace");
+        }
       } else if (cmd === "import-fikrdata") {
         analytics.track("import_file");
         importInputRef.current?.click();
@@ -1879,6 +1943,7 @@ export default function Page() {
            mcpPort={mcpPort}
            activeApp={activeApp}
            setActiveApp={setActiveApp}
+           onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
            studioProjects={studioProjects}
            activeStudioProjectId={activeStudioProjectId}
            onSelectStudioProject={setActiveStudioProjectId}
@@ -1890,7 +1955,7 @@ export default function Page() {
            })()}
          />
 
-        <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+        <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* ── Shared toolbar — always visible in Fikr Intel ── */}
           {activeApp === "Fikr Intel" && (
             <StatusBar
@@ -1909,6 +1974,10 @@ export default function Page() {
             onViewModeChange={(mode) => {
               analytics.track("view_switch", { mode });
               setViewMode(mode);
+              if (mode !== "list") {
+                setSelectedNoteId(null);
+                setHighlightedBlockId(null);
+              }
             }}
             onSearchClick={
               activeApp === "Fikr Intel"
@@ -1928,6 +1997,7 @@ export default function Page() {
               setIsSidebarOpen(true);
               setJumpToSettings(true);
             }}
+            onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
             isMenuOpen={isMenuOpen}
             setIsMenuOpen={setIsMenuOpen}
             enrichingCount={activeApp === "Fikr Intel" ? blocks.filter((b) => b.isEnriching).length : 0}
@@ -1952,16 +2022,11 @@ export default function Page() {
           ) : activeApp === "Fikr Intel" ? (
             <>
 
-          {isHydrated && !settings.apiKey && !["plus", "pro"].some(t => cloudPlan.toLowerCase().includes(t)) && (
-            <div className="px-3 py-2 border-b border-border shrink-0">
+          {isHydrated && !isApiBannerDismissed && !settings.apiKey && !["plus", "pro"].some(t => cloudPlan.toLowerCase().includes(t)) && (
+            <div className="shrink-0 px-3 py-1.5">
               <div
                 role="alert"
-                className="flex items-center justify-between gap-4 rounded-md border px-3.5 py-2.5 text-xs"
-                style={{
-                  borderColor: "color-mix(in oklch, #3CA6A6 35%, transparent)",
-                  background: "color-mix(in oklch, #3CA6A6 8%, transparent)",
-                  color: "var(--foreground)",
-                }}
+                className="flex min-h-9 items-center justify-between gap-4 rounded-md bg-secondary/70 px-3 text-xs text-foreground"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <svg
@@ -1970,11 +2035,11 @@ export default function Page() {
                     height="14"
                     viewBox="0 0 24 24"
                     fill="none"
-                    stroke="#3CA6A6"
+                    stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="shrink-0"
+                    className="shrink-0 text-foreground"
                   >
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                   </svg>
@@ -1982,22 +2047,12 @@ export default function Page() {
                     AI enrichment requires an API key to classify and annotate your notes.
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex shrink-0 items-center gap-1.5">
                   <a
                     href="https://fikr.one/pricing"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all border cursor-pointer"
-                    style={{
-                      borderColor: "color-mix(in oklch, #3CA6A6 40%, transparent)",
-                      color: "#3CA6A6",
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLAnchorElement).style.background = "color-mix(in oklch, #3CA6A6 12%, transparent)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
-                    }}
+                    className="inline-flex items-center gap-1 rounded-md bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
                   >
                     View plans
                     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
@@ -2007,19 +2062,18 @@ export default function Page() {
                       setIsSidebarOpen(true);
                       setJumpToSettings(true);
                     }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer"
-                    style={{
-                      background: "#3CA6A6",
-                      color: "#ffffff",
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.opacity = "0.88";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.opacity = "1";
-                    }}
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-foreground px-2.5 py-1 text-xs font-medium text-background transition-opacity hover:opacity-85"
                   >
                     Add your key →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsApiBannerDismissed(true)}
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-background hover:text-foreground"
+                    title="Dismiss"
+                    aria-label="Dismiss API key notice"
+                  >
+                    <X className="size-4" />
                   </button>
                 </div>
               </div>
@@ -2029,7 +2083,30 @@ export default function Page() {
           <div className="flex flex-1 overflow-hidden relative">
             <main className="relative flex-1 overflow-hidden">
               {isLoaded ? (
-                viewMode === "tiling" ? (
+                viewMode === "list" ? (
+                  <div className="grid h-full min-w-0 grid-cols-[minmax(280px,300px)_minmax(0,1fr)] overflow-hidden min-[1100px]:grid-cols-[minmax(300px,320px)_minmax(0,1fr)] min-[1440px]:grid-cols-[minmax(340px,380px)_minmax(0,1fr)]">
+                    <ListArea
+                      blocks={activeProject.blocks}
+                      highlightedBlockId={highlightedBlockId}
+                      onHighlight={setHighlightedBlockId}
+                      selectedBlockId={selectedNoteId}
+                      selectedBlockIds={selectedNoteIds}
+                      onOpenDetail={handleSelectNote}
+                    />
+                    <NoteDetailPanel
+                      mode="workspace"
+                      block={selectedNoteId ? (activeProject?.blocks.find((b) => b.id === selectedNoteId) ?? null) : null}
+                      isOpen
+                      onClose={() => { setSelectedNoteId(null); setHighlightedBlockId(null); }}
+                      onEdit={editBlock}
+                      onEditAnnotation={editAnnotation}
+                      onReEnrich={reEnrichBlock}
+                      onDelete={deleteBlock}
+                      onTogglePin={handleTogglePin}
+                      onChangeType={handleChangeType}
+                    />
+                  </div>
+                ) : viewMode === "tiling" ? (
                   <TilingArea
                     key={`tiling-${activeProjectId}`}
                     blocks={activeProject.blocks}
@@ -2066,16 +2143,7 @@ export default function Page() {
                     selectedBlockId={selectedNoteId}
                     onOpenDetail={setSelectedNoteId}
                   />
-                ) : (
-                  <ListArea
-                    blocks={activeProject.blocks}
-                    highlightedBlockId={highlightedBlockId}
-                    onHighlight={setHighlightedBlockId}
-                    selectedBlockId={selectedNoteId}
-                    selectedBlockIds={selectedNoteIds}
-                    onOpenDetail={handleSelectNote}
-                  />
-                )
+                ) : null
               ) : (
                 <div className="h-full w-full" />
               )}
@@ -2090,17 +2158,19 @@ export default function Page() {
               onRetry={(id) => generateGhostNote(activeProjectId, id)}
             />
             
-            <NoteDetailPanel
-              block={selectedNoteId ? (activeProject?.blocks.find((b) => b.id === selectedNoteId) ?? null) : null}
-              isOpen={!!selectedNoteId}
-              onClose={() => { setSelectedNoteId(null); setHighlightedBlockId(null); }}
-              onEdit={editBlock}
-              onEditAnnotation={editAnnotation}
-              onReEnrich={reEnrichBlock}
-              onDelete={deleteBlock}
-              onTogglePin={handleTogglePin}
-              onChangeType={handleChangeType}
-            />
+            {viewMode !== "list" && (
+              <NoteDetailPanel
+                block={selectedNoteId ? (activeProject?.blocks.find((b) => b.id === selectedNoteId) ?? null) : null}
+                isOpen={!!selectedNoteId}
+                onClose={() => { setSelectedNoteId(null); setHighlightedBlockId(null); }}
+                onEdit={editBlock}
+                onEditAnnotation={editAnnotation}
+                onReEnrich={reEnrichBlock}
+                onDelete={deleteBlock}
+                onTogglePin={handleTogglePin}
+                onChangeType={handleChangeType}
+              />
+            )}
 
             <BulkActionPanel
               isOpen={selectedNoteIds.size > 0}
@@ -2115,27 +2185,20 @@ export default function Page() {
             />
           </div>
 
-          {/* Undo toast */}
-          <AnimatePresence>
-            {undoToast && (
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 4 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
-                className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-[130] pointer-events-none"
-              >
-                <div className="px-3 py-1.5 rounded-sm bg-card/95 border border-border/40 backdrop-blur-md shadow-xl">
-                  <span className="font-mono text-[10px] text-foreground/70 tracking-tight whitespace-nowrap">
-                    {undoToast}
-                  </span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
             <VimInput
-              onSubmit={addBlock}
+              key={`entry-${activeProjectId}`}
+              projectId={activeProjectId}
+              onSubmit={(text) => addBlock(text, undefined, false)}
+              openRequest={newEntryOpenRequest}
+              onOpenRequestHandled={() => setNewEntryOpenRequest(0)}
+              hidden={
+                isSearchOpen ||
+                isIndexOpen ||
+                isIntroOpen ||
+                settingsOpen ||
+                isMenuOpen ||
+                selectedNoteIds.size > 0
+              }
             />
           </>
         ) : (
@@ -2170,11 +2233,17 @@ export default function Page() {
           onClose={() => setIsSearchOpen(false)}
           projects={projects}
           onSelectResult={(blockId, projectId) => {
+            setActiveApp("Fikr Intel");
             if (projectId !== activeProjectId) setActiveProjectId(projectId);
             setHighlightedBlockId(blockId);
             setSelectedNoteId(blockId);
             setIsSearchOpen(false);
           }}
+        />
+
+        <KeyboardShortcutsDialog
+          open={isKeyboardShortcutsOpen}
+          onOpenChange={setIsKeyboardShortcutsOpen}
         />
 
         {/* First-visit intro video modal */}

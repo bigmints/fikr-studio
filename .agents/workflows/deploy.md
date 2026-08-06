@@ -1,40 +1,40 @@
 ---
-description: Build, sign, notarize, and publish Fikr Studio (Electron) OTA to GitHub
+description: Publish a verified Fikr Studio macOS OTA release
 ---
 
-# Fikr Studio — Deploy Workflow
+# Fikr Studio — macOS deploy
 
-Builds, signs, notarizes, and uploads the Electron app as a draft OTA release.
+`scripts/deploy.sh` is the only release implementation. Both a developer Mac and
+`.github/workflows/release-macos.yml` call it; do not reproduce signing or
+publishing commands elsewhere.
 
-> **Before releasing:** complete every gate in `.agents/workflows/release.md`.
-> Publishing is the last step, not the first signed build.
+## Required source state
 
-## 1. Build, Sign, Notarize & Upload Draft
+- `package.json` and `package-lock.json` contain the release version.
+- The worktree is completely clean.
+- `v<version>` points to `HEAD` locally and on `origin`.
+- No GitHub release already exists for the tag.
 
-Run from this project root. `electron-builder` uses the certificates in your
-Keychain, invokes `notarytool`, and uploads a draft GitHub release. Publish only
-after verifying the downloaded draft artifacts.
+## Credentials
+
+Local releases use the Developer ID identity and `notarytool-profile` documented
+in `release.md`, plus an authenticated `gh` session or `GH_TOKEN`. CI imports the
+same Developer ID certificate and supplies App Store Connect API credentials
+from repository secrets.
+
+## Run
 
 ```bash
-APPLE_KEYCHAIN_PROFILE="notarytool-profile" \
-APPLE_TEAM_ID="FBG8NKYPUJ" \
-GH_TOKEN="<fresh-release-token>" \
-npx electron-builder build --mac -p always
+npm run deploy
 ```
 
-You will be prompted by macOS Keychain to authorize `codesign` — click **Always Allow**.
+The script builds once, signs and notarizes the final artifacts, uploads a draft,
+downloads all six assets, verifies the returned DMG and OTA ZIP applications,
+metadata, and checksum manifest, and only then publishes. Any failure after the
+upload leaves the release as a draft for inspection.
 
-## 2. Output
+For a signed/notarized candidate without GitHub publication:
 
-The signed app is under `dist/mac-arm64/`; DMG, ZIP, blockmaps, and update
-metadata are under `dist/`.
-
+```bash
+npm run release:verify
 ```
-dist/mac-arm64/Fikr Studio.app
-dist/Fikr Studio-<version>-arm64.dmg
-```
-
-## See Also
-
-- Full sign/notarize reference: `.agents/workflows/build-macos.md`
-- Manage AI model presets: `.agents/workflows/manage-ai-config.md`

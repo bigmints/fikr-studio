@@ -13,7 +13,7 @@ interface AboutPanelProps {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h2 className="border-b border-border pb-2 font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60">
+      <h2 className="text-[12px] font-semibold text-foreground">
         {title}
       </h2>
       {children}
@@ -23,11 +23,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Shortcut({ keys, label }: { keys: string[]; label: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-border/40 py-2 last:border-0">
+    <div className="flex items-center justify-between py-2">
       <span className="text-sm text-muted-foreground">{label}</span>
       <div className="flex gap-1">
         {keys.map((key) => (
-          <kbd key={key} className="rounded-sm border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px]">
+          <kbd key={key} className="rounded-sm border border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px]">
             {key}
           </kbd>
         ))}
@@ -55,26 +55,27 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[200] flex flex-col bg-background"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-6 backdrop-blur-sm"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
-          <div className="flex h-10 shrink-0 items-center justify-end border-b border-border/10 px-6" style={{ WebkitAppRegion: "drag" } as React.CSSProperties}>
-            <button
-              onClick={onClose}
-              aria-label="Close About"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <div className="flex max-h-[86vh] w-full max-w-[620px] flex-col overflow-hidden rounded-[10px] border border-border/70 bg-background shadow-2xl">
+            <div className="flex h-11 shrink-0 items-center justify-end px-4" style={{ WebkitAppRegion: "drag" } as React.CSSProperties}>
+              <button
+                onClick={onClose}
+                aria-label="Close About"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <div className="mx-auto max-w-2xl space-y-10 px-8 py-10">
+            <div className="overflow-y-auto custom-scrollbar">
+            <div className="space-y-9 px-10 pb-10">
               <header className="space-y-4">
                 <div className="flex items-center gap-3">
                   <img src="./logo-icon.png" alt="" className="h-6 w-6 object-contain" />
-                  <h1 className="font-mono text-2xl font-black tracking-tight">Fikr Studio</h1>
+                  <h1 className="font-serif text-[32px] font-medium leading-tight">Fikr Studio</h1>
                 </div>
                 <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
                   A macOS workspace for capturing notes, organizing ideas, and optionally enriching them with AI.
@@ -84,7 +85,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
               <Section title="What works">
                 <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
                   <li>Capture and organize notes without an account.</li>
-                  <li>Browse the same workspace in list, masonry, and graph views.</li>
+                  <li>Browse the same workspace in list and graph views.</li>
                   <li>Import and export projects using the versioned <code>.fikrdata</code> format.</li>
                   <li>Use OpenRouter, OpenAI, or Google Gemini for optional BYOK enrichment.</li>
                   <li>Use authenticated cloud sync with a Plus or Pro account.</li>
@@ -105,9 +106,10 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
               </Section>
 
               <Section title="Keyboard shortcuts">
-                <div className="rounded-sm border border-border px-3">
-                  <Shortcut keys={["Enter"]} label="Add note" />
-                  <Shortcut keys={[mod, "K"]} label="Open command menu" />
+                <div>
+                  <Shortcut keys={[mod, "Shift", "M"]} label="New entry" />
+                  <Shortcut keys={[mod, "F"]} label="Search workspace" />
+                  <Shortcut keys={[mod, "/"]} label="All keyboard shortcuts" />
                   <Shortcut keys={[mod, "Z"]} label="Undo" />
                   <Shortcut keys={["Esc"]} label="Close the active panel" />
                 </div>
@@ -118,6 +120,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
                   Fikr Studio is based on Nodepad by Saleh Kayyali and is distributed under the MIT License.
                 </p>
               </Section>
+            </div>
             </div>
           </div>
         </motion.div>

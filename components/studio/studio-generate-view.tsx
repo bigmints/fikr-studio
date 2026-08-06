@@ -1,18 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  ArrowLeft, RefreshCw, Eye, EyeOff, Sparkles, BookOpen,
-  MoreHorizontal, Wand2, Clock,
+  ArrowLeft, RefreshCw, Sparkles, BookOpen, Clock, ChevronDown,
 } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import type {
   StudioProject, GenerateParams, Citation,
 } from "@/lib/generate/types";
 import { StudioRichEditor } from "./studio-rich-editor";
 import { ArtifactDrawer } from "./artifact-drawer";
 import { VersionHistoryDrawer } from "./version-history-drawer";
-import { LOCAL_AI_CONFIG, LM_STUDIO_MODELS } from "@/local-ai.config";
 import PRESETS from "@/lib/generate/presets.json";
 
 // ── Generating messages ────────────────────────────────────────────────────────
@@ -35,26 +33,30 @@ function ParamSlider({
   label: string; leftLabel: string; rightLabel: string;
   value: number; onChange: (v: number) => void; disabled?: boolean;
 }) {
+  const semanticValue = value < 34 ? leftLabel : value > 66 ? rightLabel : "Balanced";
+
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2">
       <div className="flex justify-between items-baseline">
-        <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground">{label}</span>
-        <span className="text-[10px] font-mono text-muted-foreground font-semibold">{value}</span>
+        <span className="text-xs font-medium text-foreground">{label}</span>
+        <span className="text-xs font-medium text-muted-foreground">{semanticValue}</span>
       </div>
       <div className="flex flex-col gap-1.5">
         <input
           type="range" min={0} max={100} value={value}
           disabled={disabled}
           onChange={(e) => onChange(Number(e.target.value))}
+          aria-label={label}
+          aria-valuetext={semanticValue}
           className="studio-slider w-full"
           style={{
             opacity: disabled ? 0.5 : 1,
-            background: `linear-gradient(to right, #3CA6A6 0%, #3CA6A6 ${value}%, rgba(16,43,36,0.12) ${value}%, rgba(16,43,36,0.12) 100%)`,
+            background: `linear-gradient(to right, var(--foreground) 0%, var(--foreground) ${value}%, color-mix(in oklch, var(--foreground) 12%, transparent) ${value}%, color-mix(in oklch, var(--foreground) 12%, transparent) 100%)`,
           }}
         />
         <div className="flex justify-between items-center px-0.5">
-          <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-semibold opacity-70">{leftLabel}</span>
-          <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-semibold opacity-70">{rightLabel}</span>
+          <span className="text-xs text-muted-foreground/70">{leftLabel}</span>
+          <span className="text-xs text-muted-foreground/70">{rightLabel}</span>
         </div>
       </div>
     </div>
@@ -112,9 +114,8 @@ export function StudioGenerateView({
   const [citations] = useState<Citation[]>(project.citations ?? []);
   const [showSources, setShowSources] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [writingOpen, setWritingOpen] = useState(false);
 
   const [tone,     setTone]     = useState(params.tone     ?? 50);
   const [depth,    setDepth]    = useState(params.depth    ?? 50);
@@ -123,8 +124,6 @@ export function StudioGenerateView({
   const [presetId, setPresetId] = useState<string>(params.presetId ?? PRESETS[0].id);
   const [maxLength, setMaxLength] = useState<number>(params.maxLength ?? PRESETS[0].maxLength);
   const [enableHashtags, setEnableHashtags] = useState<boolean>(params.enableHashtags ?? PRESETS[0].enableHashtags);
-
-  const activePreset = PRESETS.find(p => p.id === presetId) || PRESETS[0];
 
   const handlePresetChange = (pid: string) => {
     const p = PRESETS.find(x => x.id === pid);
@@ -138,21 +137,6 @@ export function StudioGenerateView({
   const [msgIdx, setMsgIdx] = useState(0);
   const [msgVisible, setMsgVisible] = useState(true);
   const msgTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Dev Model Switcher state
-  const [devModel, setDevModel] = useState<string>(LOCAL_AI_CONFIG.model);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dev_local_model");
-      if (stored) setDevModel(stored);
-    }
-  }, []);
-
-  const handleModelChange = (newModel: string) => {
-    setDevModel(newModel);
-    localStorage.setItem("dev_local_model", newModel);
-  };
 
   useEffect(() => {
     if (project.status !== "generating") {
@@ -174,14 +158,6 @@ export function StudioGenerateView({
     setMaxLength(params.maxLength ?? PRESETS[0].maxLength);
     setEnableHashtags(params.enableHashtags ?? PRESETS[0].enableHashtags);
   }, [params.presetId, params.maxLength, params.enableHashtags]);
-
-  // Close menu on outside click
-  useEffect(() => {
-    if (!showMenu) return;
-    const h = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [showMenu]);
 
   const wordCount = markdown ? markdown.trim().split(/\s+/).filter(Boolean).length : 0;
   const isGenerating = project.status === "generating";
@@ -214,16 +190,36 @@ export function StudioGenerateView({
             <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2 }}>{project.name}</span>
           </div>
         </div>
-        <div className="studio-toolbar__right" style={{ display: "flex", gap: 8 }}>
+        <div className="studio-toolbar__right" style={{ display: "flex", gap: 6 }}>
           <button
             onClick={() => setShowHistory((v) => !v)}
-            className={`studio-pill-btn ${showHistory ? "active" : ""}`}
+            className={`studio-pill-btn !text-xs ${showHistory ? "active" : ""}`}
             title="Version History"
             style={{ display: "flex", alignItems: "center", gap: 6 }}
           >
             <Clock className="size-3.5" />
             <span>History</span>
           </button>
+          {isDone && (
+            <>
+              <button
+                onClick={() => onRegenerate(currentParams)}
+                className="flex h-8 items-center gap-1.5 rounded-md border border-border/50 bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                <RefreshCw className="size-3.5" />
+                Regenerate
+              </button>
+              <button
+                onClick={() => setShowDrawer(true)}
+                disabled={wordCount > maxLength}
+                className="flex h-8 items-center gap-1.5 rounded-md bg-foreground px-3 text-xs font-semibold text-background transition-opacity hover:opacity-85 disabled:pointer-events-none disabled:opacity-40"
+                title={wordCount > maxLength ? "Reduce the article length before publishing" : "Prepare article for publishing"}
+              >
+                <BookOpen className="size-3.5" />
+                Prepare to publish
+              </button>
+            </>
+          )}
         </div>
       </header>
 
@@ -237,7 +233,7 @@ export function StudioGenerateView({
           {isGenerating && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: 48 }}>
               <div className="flex items-center justify-center w-12 h-12 rounded-full border border-border/50 shadow-sm shimmer-body mb-2">
-                <Sparkles className="size-5 text-primary" />
+                <Sparkles className="size-5 text-foreground" />
               </div>
               <p className="text-sm font-semibold shimmer-text" style={{ transition: "opacity 0.4s", opacity: msgVisible ? 1 : 0, minHeight: 24, textAlign: "center" }}>
                 {MSGS[msgIdx]}
@@ -266,7 +262,7 @@ export function StudioGenerateView({
                 {project.error || "The AI model produced no output. Try adjusting your parameters."}
               </p>
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button onClick={() => onRegenerate(currentParams)} className="studio-btn-primary">Retry</button>
+                <button onClick={() => onRegenerate(currentParams)} className="studio-btn-primary !rounded-md !text-xs">Retry</button>
               </div>
             </div>
           )}
@@ -281,7 +277,7 @@ export function StudioGenerateView({
                 {/* Citations */}
                 {showSources && citations.length > 0 && (
                   <div style={{ marginTop: 48, paddingTop: 24, borderTop: "1px solid var(--border)" }}>
-                    <p className="studio-params-label" style={{ marginBottom: 12 }}>Sources from your notes</p>
+                    <p className="mb-3 text-xs font-semibold text-foreground">Sources from your notes</p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {citations.map((c) => (
                         <button
@@ -294,8 +290,8 @@ export function StudioGenerateView({
                             background: "var(--card)", cursor: "pointer", transition: "border-color 0.15s",
                           }}
                         >
-                          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--primary)", minWidth: 20 }}>[{c.index}]</span>
-                          <p style={{ fontSize: 11, color: "var(--muted-foreground)", lineHeight: 1.5, margin: 0 }}>{c.notePreview}</p>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--foreground)", minWidth: 20 }}>[{c.index}]</span>
+                          <p style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.5, margin: 0 }}>{c.notePreview}</p>
                         </button>
                       ))}
                     </div>
@@ -310,125 +306,113 @@ export function StudioGenerateView({
         {(isDone || isGenerating) && (
           <div className="studio-params-rail">
 
-            {/* Platform + Topic */}
             <div className="studio-params-section">
-              <span className="studio-params-label">Preset</span>
-              <select 
-                value={presetId}
-                onChange={(e) => handlePresetChange(e.target.value)}
-                disabled={isGenerating}
-                className="mt-2 w-full bg-background border border-border rounded-md px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                {PRESETS.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-
-              <span className="studio-params-label mt-5">Content Rules</span>
-              <div className="flex flex-col gap-3 mt-3">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Max Words</span>
-                  <div className="flex items-center gap-1">
-                    <input 
-                      type="number" 
-                      value={maxLength} 
-                      onChange={e => {
-                         const v = parseInt(e.target.value) || 0;
-                         setMaxLength(v);
-                         handleParamChange({ maxLength: v });
-                      }}
-                      className="w-16 bg-background border border-border rounded text-center text-foreground py-0.5"
-                      disabled={isGenerating}
-                    />
-                  </div>
-                </div>
-                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={enableHashtags}
-                    onChange={e => {
-                       setEnableHashtags(e.target.checked);
-                       handleParamChange({ enableHashtags: e.target.checked });
-                    }}
-                    disabled={isGenerating}
-                    className="accent-primary"
-                  />
-                  Enable Hashtags
-                </label>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-muted-foreground">Words</span>
+                <span className={wordCount > maxLength ? "font-semibold text-red-500" : "font-medium text-foreground"}>
+                  {wordCount.toLocaleString()} / {maxLength.toLocaleString()}
+                </span>
               </div>
-
-              {(params.topicTitle || params.customPrompt) && (
-                <>
-                  <span className="studio-params-label mt-5">Topic</span>
-                  <p className="text-[12px] leading-relaxed m-0 mt-1.5 text-muted-foreground/80">
-                    {params.topicTitle || params.customPrompt}
-                  </p>
-                </>
+              {wordCount > maxLength && (
+                <p className="mt-2 text-xs leading-5 text-red-500">Reduce the article length before publishing.</p>
               )}
             </div>
 
-            {/* Sliders */}
+            {/* Writing controls stay available without permanently dominating the editor. */}
             <div className="studio-params-section">
-              <span className="studio-params-label">Parameters</span>
-              <div className="flex flex-col gap-5 mt-3">
-                <ParamSlider label="Tone" leftLabel="Professional" rightLabel="Fun" value={tone} onChange={(v) => handleParamChange({ tone: v })} disabled={isGenerating} />
-                <ParamSlider label="Depth" leftLabel="Brief" rightLabel="Detailed" value={depth} onChange={(v) => handleParamChange({ depth: v })} disabled={isGenerating} />
-                <ParamSlider label="Audience" leftLabel="Expert" rightLabel="Beginner" value={audience} onChange={(v) => handleParamChange({ audience: v })} disabled={isGenerating} />
-              </div>
               <button
-                onClick={() => onRegenerate(currentParams)}
-                disabled={isGenerating}
-                className="flex items-center justify-center gap-2 w-full mt-6 h-10 rounded-full text-[11px] font-semibold tracking-wide transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
-                style={{ background: "#3CA6A6", color: "#fff", boxShadow: "0 2px 8px rgba(60,166,166,0.25)" }}
+                type="button"
+                onClick={() => setWritingOpen((open) => !open)}
+                className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-secondary/50"
+                aria-expanded={writingOpen}
               >
-                <RefreshCw className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
-                {isGenerating ? "Generating…" : "Regenerate"}
+                <span>Writing</span>
+                <ChevronDown className={`size-4 text-muted-foreground transition-transform ${writingOpen ? "rotate-180" : ""}`} />
               </button>
-              
-              {/* Publish Button */}
-              {isDone && (
-                <div className="flex flex-col mt-3">
-                  <button
-                    onClick={() => setShowDrawer(true)}
-                    disabled={wordCount > maxLength}
-                    className="flex items-center justify-center gap-2 w-full h-10 rounded-full text-[11px] font-semibold tracking-wide transition-all hover:bg-primary/10 active:scale-[0.98] border border-primary/20 disabled:opacity-50 disabled:pointer-events-none"
-                    style={{ color: "#3CA6A6" }}
-                  >
-                    <BookOpen className="size-3.5" />
-                    Publish Article
-                  </button>
-                  <div className="flex justify-between items-center mt-2 px-1">
-                    <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-bold">Word Count</span>
-                    <span className={`text-[10px] font-mono font-bold ${wordCount > maxLength ? "text-red-500" : "text-muted-foreground"}`}>
-                      {wordCount} / {maxLength}
-                    </span>
+              <p className="mt-1 px-1 text-xs text-muted-foreground">
+                {PRESETS.find((preset) => preset.id === presetId)?.name ?? "Custom"} · {tone < 34 ? "Professional" : tone > 66 ? "Conversational" : "Balanced"}
+              </p>
+
+              {writingOpen && (
+                <div className="mt-4 flex flex-col gap-5">
+                  <label className="flex flex-col gap-2 text-xs font-medium text-foreground">
+                    Preset
+                    <select
+                      value={presetId}
+                      onChange={(e) => handlePresetChange(e.target.value)}
+                      disabled={isGenerating}
+                      className="h-8 w-full rounded-md border border-border/50 bg-background px-2 text-xs font-normal text-foreground outline-none transition-colors focus:border-foreground/40"
+                    >
+                      {PRESETS.map((preset) => (
+                        <option key={preset.id} value={preset.id}>{preset.name}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <label htmlFor="studio-max-words" className="font-medium text-foreground">Maximum words</label>
+                      <input
+                        id="studio-max-words"
+                        type="number"
+                        value={maxLength}
+                        onChange={(event) => {
+                          const nextLength = parseInt(event.target.value) || 0;
+                          handleParamChange({ maxLength: nextLength });
+                        }}
+                        className="h-7 w-20 rounded-md border border-border/50 bg-background px-2 text-right text-xs text-foreground outline-none focus:border-foreground/40"
+                        disabled={isGenerating}
+                      />
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={enableHashtags}
+                        onChange={(event) => handleParamChange({ enableHashtags: event.target.checked })}
+                        disabled={isGenerating}
+                        className="accent-foreground"
+                      />
+                      Include hashtags
+                    </label>
                   </div>
-                  {wordCount > maxLength && (
-                    <p className="text-[10px] text-red-500 mt-1 text-center font-medium">Word limit exceeded! Reduce length to publish.</p>
+
+                  {(params.topicTitle || params.customPrompt) && (
+                    <div>
+                      <span className="text-xs font-medium text-foreground">Topic</span>
+                      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                        {params.topicTitle || params.customPrompt}
+                      </p>
+                    </div>
                   )}
+
+                  <div className="flex flex-col gap-5 border-t border-border/30 pt-4">
+                    <ParamSlider label="Tone" leftLabel="Professional" rightLabel="Conversational" value={tone} onChange={(v) => handleParamChange({ tone: v })} disabled={isGenerating} />
+                    <ParamSlider label="Depth" leftLabel="Brief" rightLabel="Detailed" value={depth} onChange={(v) => handleParamChange({ depth: v })} disabled={isGenerating} />
+                    <ParamSlider label="Audience" leftLabel="Expert" rightLabel="Accessible" value={audience} onChange={(v) => handleParamChange({ audience: v })} disabled={isGenerating} />
+                  </div>
                 </div>
               )}
+            </div>
 
-              {/* Sources Toggle */}
-              {isDone && citations.length > 0 && (
+            {isDone && citations.length > 0 && (
+              <div className="studio-params-section">
                 <button
-                  onClick={() => setShowSources((v) => !v)}
-                  className={`flex items-center justify-between w-full mt-4 px-4 h-9 rounded-lg text-[10px] font-semibold tracking-wide transition-all border ${showSources ? "bg-secondary border-border/50 text-foreground" : "bg-transparent border-border/30 text-muted-foreground hover:text-foreground hover:bg-secondary/30"}`}
+                  onClick={() => setShowSources((visible) => !visible)}
+                  className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
                 >
                   <span className="flex items-center gap-2">
-                    <BookOpen className="size-3" />
+                    <BookOpen className="size-3.5" />
                     Sources
                   </span>
-                  <span className="opacity-50">{showSources ? "Hide" : "Show"}</span>
+                  <span>{showSources ? "Hide" : citations.length}</span>
                 </button>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Annotation guide */}
             <div className="studio-params-section" style={{ flex: 1, border: "none" }}>
-              <span className="studio-params-label">Inline AI Edits</span>
-              <p className="text-[12px] leading-relaxed m-0 mt-2 text-muted-foreground/70">
-                Select any text to reveal the editing menu. The AI rewrites only your selection.
+              <span className="text-xs font-medium text-foreground">Inline edits</span>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Select text to reveal focused AI editing actions.
               </p>
             </div>
           </div>

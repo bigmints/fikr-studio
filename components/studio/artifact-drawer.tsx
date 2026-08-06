@@ -168,7 +168,7 @@ function ShareSheet({ onClose, onSelectPlatform, currentPlatform }: {
         style={{
           width: "100%", maxWidth: 480, margin: "0 auto",
           background: "var(--background)",
-          borderRadius: "24px 24px 0 0",
+          borderRadius: "10px 10px 0 0",
           padding: "12px 0 32px",
           border: "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
           borderBottom: "none",
@@ -186,7 +186,7 @@ function ShareSheet({ onClose, onSelectPlatform, currentPlatform }: {
           </div>
 
           {/* Platform grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {Object.entries(PLATFORMS).map(([key, cfg]) => {
               const isActive = key === currentPlatform;
               return (
@@ -195,9 +195,9 @@ function ShareSheet({ onClose, onSelectPlatform, currentPlatform }: {
                   onClick={() => { onSelectPlatform(key); onClose(); }}
                   style={{
                     display: "flex", alignItems: "center", gap: 12,
-                    padding: "14px 16px", borderRadius: 14, textAlign: "left", cursor: "pointer",
-                    border: `1.5px solid ${isActive ? "var(--primary)" : "color-mix(in oklch, var(--border) 60%, transparent)"}`,
-                    background: isActive ? "color-mix(in oklch, var(--primary) 10%, transparent)" : "color-mix(in oklch, var(--secondary) 40%, transparent)",
+                    padding: "12px 14px", borderRadius: 8, textAlign: "left", cursor: "pointer",
+                    border: `1px solid ${isActive ? "color-mix(in oklch, var(--foreground) 45%, transparent)" : "color-mix(in oklch, var(--border) 60%, transparent)"}`,
+                    background: isActive ? "color-mix(in oklch, var(--foreground) 8%, transparent)" : "color-mix(in oklch, var(--secondary) 40%, transparent)",
                     transition: "all 0.15s",
                   }}
                 >
@@ -211,14 +211,14 @@ function ShareSheet({ onClose, onSelectPlatform, currentPlatform }: {
                   </div>
                   <div>
                     <p style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>{cfg.label}</p>
-                    {isActive && <p style={{ fontSize: 10, color: "var(--primary)", margin: 0, fontWeight: 600 }}>Current</p>}
+                    {isActive && <p style={{ fontSize: 11, color: "var(--muted-foreground)", margin: 0, fontWeight: 600 }}>Current</p>}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          <p style={{ fontSize: 11, color: "var(--muted-foreground)", textAlign: "center", marginTop: 20, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: "var(--muted-foreground)", textAlign: "center", marginTop: 20, lineHeight: 1.5 }}>
             Changing platform updates the card design & opens the right destination.
           </p>
         </div>
@@ -320,7 +320,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
             <div style={{ width: 1, height: 16, background: "color-mix(in oklch, var(--border) 60%, transparent)" }} />
             <div>
               <p style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2, color: "var(--foreground)", margin: 0 }}>
-                Publish Article
+                Prepare Article
               </p>
             </div>
           </div>
@@ -337,9 +337,6 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
             <button onClick={() => setShowShareSheet(true)} className="studio-pill-btn flex items-center gap-1.5" style={{ padding: "5px 10px", borderRadius: 7 }}>
               <Share2 className="size-3" /> {cfg.label}
             </button>
-            <button onClick={handlePublish} className="studio-pill-btn primary flex items-center gap-1.5" style={{ padding: "5px 12px", borderRadius: 7 }}>
-              <ExternalLink className="size-3" /> Open {cfg.label}
-            </button>
           </div>
         </header>
 
@@ -353,14 +350,14 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
               {/* Page heading */}
               <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 36 }}>
                 <div style={{
-                  width: 40, height: 40, borderRadius: 14, flexShrink: 0,
-                  background: "var(--primary)", color: "var(--primary-foreground)",
+                  width: 40, height: 40, borderRadius: 8, flexShrink: 0,
+                  background: "var(--foreground)", color: "var(--background)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
                   <Sparkles className="size-4" />
                 </div>
                 <div>
-                  <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.025em", lineHeight: 1.2, color: "var(--foreground)", margin: "0 0 6px" }}>
+                  <h1 style={{ fontSize: 26, fontWeight: 500, fontFamily: "var(--font-display)", letterSpacing: "-0.02em", lineHeight: 1.2, color: "var(--foreground)", margin: "0 0 6px" }}>
                     Your article is ready
                   </h1>
                   <p style={{ fontSize: 13, color: "var(--muted-foreground)", margin: 0, lineHeight: 1.5 }}>
@@ -399,7 +396,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                   <SocialCard title={title} snippet={snippet} platform={platform} gradientIdx={gradientIdx} ratioOverride={ratioMode} />
                 </div>
 
-                <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 10, textAlign: "center" }}>
+                <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 10, textAlign: "center" }}>
                   Copy the image above and paste it as a cover when publishing to {cfg.label}
                 </p>
               </section>
@@ -425,7 +422,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                   </div>
                 </div>
                 <div style={{
-                  borderRadius: 14, padding: "20px 20px",
+                  borderRadius: 8, padding: "20px 20px",
                   background: "color-mix(in oklch, var(--secondary) 40%, var(--background))",
                   border: "1px solid color-mix(in oklch, var(--border) 55%, transparent)",
                   maxHeight: 300, overflowY: "auto",
@@ -445,7 +442,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
               <button onClick={() => setShowShareSheet(true)}
                 style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-                  borderRadius: 12, cursor: "pointer", width: "100%", textAlign: "left",
+                  borderRadius: 6, cursor: "pointer", width: "100%", textAlign: "left",
                   background: "color-mix(in oklch, var(--secondary) 60%, transparent)",
                   border: "1px solid color-mix(in oklch, var(--border) 50%, transparent)",
                   transition: "all 0.15s",
@@ -459,7 +456,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>{cfg.label}</p>
-                  <p style={{ fontSize: 10, color: "var(--muted-foreground)", margin: 0 }}>Tap to change</p>
+                  <p style={{ fontSize: 11, color: "var(--muted-foreground)", margin: 0 }}>Change platform</p>
                 </div>
                 <Share2 className="size-3.5" style={{ color: "var(--muted-foreground)", flexShrink: 0 }} />
               </button>
@@ -473,7 +470,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                 { label: "Characters", value: markdown.length.toLocaleString() },
               ].map(({ label, value }) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{label}</span>
+                  <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{label}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--foreground)" }}>{value}</span>
                 </div>
               ))}
@@ -484,9 +481,9 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
               {["Copy the card image", "Copy the article text", `Open ${cfg.label}`, "Paste & add hashtags"].map((s, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                   <div style={{
-                    width: 20, height: 20, borderRadius: "50%", flexShrink: 0, marginTop: 1,
-                    background: "var(--primary)", color: "var(--primary-foreground)",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 900,
+                    width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
+                    background: "var(--foreground)", color: "var(--background)",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
                   }}>{i + 1}</div>
                   <span style={{ fontSize: 12, lineHeight: 1.5, color: "var(--foreground)", opacity: 0.72 }}>{s}</span>
                 </div>
@@ -497,9 +494,8 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
               <button onClick={handlePublish}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  padding: "12px 0", borderRadius: 14, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none",
-                  background: "var(--primary)", color: "var(--primary-foreground)",
-                  boxShadow: "0 4px 20px color-mix(in oklch, var(--primary) 30%, transparent)",
+                  padding: "11px 0", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none",
+                  background: "var(--foreground)", color: "var(--background)",
                   transition: "all 0.15s",
                 }}>
                 <ExternalLink className="size-4" /> Open {cfg.label}

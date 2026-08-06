@@ -48,11 +48,17 @@ function assertApp(appPath, label) {
       if (error.message?.includes('forbidden Info.plist')) throw error;
     }
   }
+
+  run(process.execPath, ['scripts/check-macos-package.mjs', appPath], { stdio: 'inherit' });
+  run(process.execPath, ['scripts/check-asar.mjs', path.join(appPath, 'Contents', 'Resources', 'app.asar')], { stdio: 'inherit' });
 }
 
 assertApp(builtApp, 'build app');
+run('codesign', ['--verify', '--strict', '--verbose=4', dmgPath], { stdio: 'inherit' });
 run('xcrun', ['stapler', 'validate', dmgPath], { stdio: 'inherit' });
 run('spctl', ['--assess', '--type', 'open', '--context', 'context:primary-signature', '--verbose=4', dmgPath], { stdio: 'inherit' });
+const dmgSignature = capture('codesign', ['-dv', '--verbose=4', dmgPath]);
+if (!dmgSignature.includes('TeamIdentifier=FBG8NKYPUJ')) throw new Error('DMG: wrong signing team');
 
 const temp = mkdtempSync(path.join(os.tmpdir(), 'fikr-release-verify-'));
 const mountPoint = path.join(temp, 'dmg');

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -19,36 +20,66 @@ import {
   Trash2,
   Download,
   Clipboard,
+  MoreHorizontal,
 } from "lucide-react";
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
 import { analytics } from "@/lib/analytics";
 import type { TextBlock } from "@/components/tile-card";
+import { MarkdownEntryEditor } from "@/components/markdown-entry-editor";
 import {
   exportSingleBlockToMarkdown,
   downloadMarkdown,
   copyToClipboard,
 } from "@/lib/export";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+function normalizeLead(value: string) {
+  return value
+    .replace(/^\s{0,3}#{1,6}\s+/, "")
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase();
+}
+
+function withoutDuplicateLeadingTitle(markdown: string, title?: string) {
+  if (!title?.trim()) return markdown;
+  const lines = markdown.split("\n");
+  const firstContentIndex = lines.findIndex((line) => line.trim());
+  if (firstContentIndex < 0) return markdown;
+  if (normalizeLead(lines[firstContentIndex]) !== normalizeLead(title)) return markdown;
+
+  lines.splice(firstContentIndex, 1);
+  while (lines[firstContentIndex]?.trim() === "") lines.splice(firstContentIndex, 1);
+  return lines.join("\n");
+}
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
 const MD: Record<string, any> = {
   p: ({ children }: any) => (
-    <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>
+    <p className="mb-4 last:mb-0 leading-[1.75]">{children}</p>
   ),
   ul: ({ children }: any) => (
-    <ul className="mb-3 list-disc pl-4 last:mb-0 space-y-1">{children}</ul>
+    <ul className="mb-4 list-disc space-y-1.5 pl-5 last:mb-0">{children}</ul>
   ),
   ol: ({ children }: any) => (
-    <ol className="mb-3 list-decimal pl-4 last:mb-0 space-y-1">{children}</ol>
+    <ol className="mb-4 list-decimal space-y-1.5 pl-5 last:mb-0">{children}</ol>
   ),
-  li: ({ children }: any) => <li className="text-foreground/80">{children}</li>,
+  li: ({ children }: any) => <li className="text-foreground/90">{children}</li>,
   h1: ({ children }: any) => (
-    <h1 className="mb-2 text-sm font-bold text-foreground">{children}</h1>
+    <h1 className="font-display mb-4 mt-10 text-[26px] font-medium leading-8 tracking-[-0.02em] text-foreground first:mt-0 min-[1440px]:text-[30px] min-[1440px]:leading-9">{children}</h1>
   ),
   h2: ({ children }: any) => (
-    <h2 className="mb-2 text-sm font-bold text-foreground">{children}</h2>
+    <h2 className="font-display mb-3 mt-9 text-[22px] font-medium leading-[30px] tracking-[-0.015em] text-foreground first:mt-0">{children}</h2>
   ),
   h3: ({ children }: any) => (
-    <h3 className="mb-1 text-xs font-bold text-foreground">{children}</h3>
+    <h3 className="mb-2 mt-7 text-lg font-semibold leading-[26px] text-foreground first:mt-0">{children}</h3>
   ),
   strong: ({ children }: any) => (
     <strong className="font-semibold text-foreground">{children}</strong>
@@ -65,12 +96,12 @@ const MD: Record<string, any> = {
     </a>
   ),
   code: ({ children }: any) => (
-    <code className="font-mono text-[12px] bg-secondary/80 text-foreground px-1 py-0.5 rounded">
+    <code className="rounded bg-secondary/80 px-1.5 py-0.5 font-mono text-[13px] leading-[21px] text-foreground">
       {children}
     </code>
   ),
   pre: ({ children }: any) => (
-    <pre className="bg-secondary/50 p-3 rounded-md overflow-x-auto text-[12px] font-mono text-foreground mb-3">
+    <pre className="mb-4 overflow-x-auto rounded-lg bg-secondary/50 p-4 font-mono text-[13px] leading-[21px] text-foreground">
       {children}
     </pre>
   ),
@@ -80,6 +111,7 @@ const MD: Record<string, any> = {
 interface NoteDetailPanelProps {
   block: TextBlock | null;
   isOpen: boolean;
+  mode?: "overlay" | "workspace";
   onClose: () => void;
   onEdit: (id: string, newText: string) => void;
   onEditAnnotation: (id: string, newAnnotation: string) => void;
@@ -92,6 +124,7 @@ interface NoteDetailPanelProps {
 export function NoteDetailPanel({
   block,
   isOpen,
+  mode = "overlay",
   onClose,
   onEdit,
   onEditAnnotation,
@@ -101,7 +134,6 @@ export function NoteDetailPanel({
   onChangeType,
 }: NoteDetailPanelProps) {
   // ── Edit state ──────────────────────────────────────────────────────────────
-  const [editingText, setEditingText] = useState(false);
   const [draftText, setDraftText] = useState("");
   const [editingAnnotation, setEditingAnnotation] = useState(false);
   const [draftAnnotation, setDraftAnnotation] = useState("");
@@ -109,8 +141,8 @@ export function NoteDetailPanel({
   const [activeTab, setActiveTab] = useState<"synthesis" | "original">(
     "original",
   );
+  const [expandedEditorOpen, setExpandedEditorOpen] = useState(false);
 
-  const textRef = useRef<HTMLTextAreaElement>(null);
   const annotationRef = useRef<HTMLTextAreaElement>(null);
 
   // Reset edit state when the block changes
@@ -118,24 +150,13 @@ export function NoteDetailPanel({
     if (block) {
       setDraftText(block.text);
       setDraftAnnotation(block.annotation || "");
-      setEditingText(false);
       setEditingAnnotation(false);
+      setExpandedEditorOpen(false);
       setTypePickerOpen(false);
       // Auto-switch tab: default to original
       setActiveTab("original");
     }
   }, [block?.id, block]);
-
-  // Auto-grow textareas
-  useEffect(() => {
-    if (editingText && textRef.current) {
-      const el = textRef.current;
-      el.focus();
-      el.selectionStart = el.value.length;
-      el.style.height = "auto";
-      el.style.height = el.scrollHeight + "px";
-    }
-  }, [editingText]);
 
   useEffect(() => {
     if (editingAnnotation && annotationRef.current) {
@@ -155,23 +176,31 @@ export function NoteDetailPanel({
 
   // Escape to close panel
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || mode === "workspace") return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !editingText && !editingAnnotation) {
+      if (e.key === "Escape" && !editingAnnotation) {
         handleClose();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, editingText, editingAnnotation, handleClose]);
+  }, [isOpen, mode, editingAnnotation, handleClose]);
 
-  const saveText = useCallback(() => {
-    if (!block) return;
-    if (draftText.trim() && draftText !== block.text) {
-      onEdit(block.id, draftText.trim());
+  const saveExpandedText = useCallback(() => {
+    if (!block || !draftText.trim()) return;
+    if (draftText !== block.text) {
+      onEdit(block.id, draftText);
+      toast("Changes saved");
     }
-    setEditingText(false);
+    setExpandedEditorOpen(false);
   }, [block, draftText, onEdit]);
+
+  const openExpandedEditor = useCallback(() => {
+    if (!block) return;
+    setDraftText(block.text);
+    setExpandedEditorOpen(true);
+    analytics.track("markdown_editor_open", { source: "existing_note" });
+  }, [block]);
 
   const saveAnnotation = useCallback(() => {
     if (!block) return;
@@ -198,17 +227,32 @@ export function NoteDetailPanel({
       .replace(/[^a-z0-9-]/g, "")
       .slice(0, 30);
     downloadMarkdown(`${slug || "note"}.md`, md);
+    toast("Markdown exported");
   }, [block]);
 
-  const handleCopyMd = useCallback(() => {
+  const handleCopyMd = useCallback(async () => {
     if (!block) return;
     analytics.track("note_copy_md", { blockId: block.id });
     const md = exportSingleBlockToMarkdown(block);
-    copyToClipboard(md);
-    // Could add a toast here, but user gets visual feedback anyway
+    const copied = await copyToClipboard(md);
+    if (copied) toast("Markdown copied");
+    else toast.error("Couldn’t copy Markdown");
   }, [block]);
 
-  if (!block) return null;
+  if (!block) {
+    if (mode !== "workspace") return null;
+    return (
+      <aside className="flex h-full min-w-0 flex-col items-center justify-center border-l border-border/40 bg-background px-8 text-center">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-border/35 bg-secondary/30">
+          <FileText className="h-4 w-4 text-muted-foreground/60" />
+        </div>
+        <p className="text-base font-semibold text-foreground/75">Select a note</p>
+        <p className="mt-1 max-w-[280px] text-sm leading-6 text-muted-foreground/70">
+          Choose a note from the inbox to read, edit, synthesize, or export it here.
+        </p>
+      </aside>
+    );
+  }
 
   const config =
     CONTENT_TYPE_CONFIG[block.contentType] || CONTENT_TYPE_CONFIG.general;
@@ -221,6 +265,7 @@ export function NoteDetailPanel({
     hour: "2-digit",
     minute: "2-digit",
   });
+  const originalMarkdown = withoutDuplicateLeadingTitle(block.text, block.title);
 
   return (
     <AnimatePresence>
@@ -228,21 +273,23 @@ export function NoteDetailPanel({
         <>
           {/* Panel */}
           <motion.aside
-            initial={{ x: "100%", opacity: 0 }}
+            initial={mode === "workspace" ? false : { x: "100%", opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "100%", opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 36 }}
-            className="absolute top-0 right-0 h-full w-[550px] max-w-[90vw] shrink-0 z-40 flex flex-col bg-background/80 backdrop-blur-3xl border-l border-white/10 shadow-2xl overflow-hidden"
+            className={mode === "workspace"
+              ? "relative h-full min-w-0 flex flex-col bg-background border-l border-border/45 overflow-hidden"
+              : "absolute top-0 right-0 h-full w-[550px] max-w-[90vw] shrink-0 z-40 flex flex-col bg-background/80 backdrop-blur-3xl border-l border-white/10 shadow-2xl overflow-hidden"}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-[550px] h-full flex flex-col">
+            <div className={`${mode === "workspace" ? "w-full" : "w-[550px]"} h-full min-w-0 flex flex-col`}>
             {/* ── Header ───────────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border/40 shrink-0">
+            <div className="reader-column flex shrink-0 items-center justify-between pb-2 pt-4">
               <div className="flex items-center gap-2.5 min-w-0">
                 {/* Type chip */}
                 <button
                   onClick={() => setTypePickerOpen((v) => !v)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all hover:opacity-80 shrink-0"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all hover:opacity-80 shrink-0"
                   style={{
                     color: accent,
                     borderColor: `color-mix(in oklch, ${accent} 40%, transparent)`,
@@ -256,77 +303,122 @@ export function NoteDetailPanel({
                 </button>
 
                 {block.category && (
-                  <span className="text-[11px] text-muted-foreground/60 truncate">
+                  <span className="truncate text-xs text-muted-foreground/60">
                     {block.category}
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-1 shrink-0">
-                {/* Pin */}
+              <div className="flex shrink-0 items-center gap-1">
+                <div
+                  className="mr-1 flex h-8 items-center rounded-md bg-secondary/55 p-0.5"
+                  role="group"
+                  aria-label="Note version"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      analytics.track("detail_tab_switch", { tab: "original" });
+                      setActiveTab("original");
+                    }}
+                    aria-pressed={activeTab === "original"}
+                    className={`flex h-7 items-center rounded-[5px] px-2.5 text-[12px] font-medium transition-colors ${
+                      activeTab === "original"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Original
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      analytics.track("detail_tab_switch", { tab: "synthesis" });
+                      setActiveTab("synthesis");
+                    }}
+                    aria-pressed={activeTab === "synthesis"}
+                    className={`flex h-7 items-center rounded-[5px] px-2.5 text-[12px] font-medium transition-colors ${
+                      activeTab === "synthesis"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Synthesized
+                  </button>
+                </div>
+
+                <button
+                  onClick={openExpandedEditor}
+                  className="flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  title="Edit note"
+                  aria-label="Edit note"
+                >
+                  <Pencil className="size-4" />
+                </button>
+
                 {onTogglePin && (
                   <button
                     onClick={() => onTogglePin(block.id)}
-                    className={`p-1.5 rounded-md transition-all ${
+                    className={`flex size-8 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
                       block.isPinned
                         ? "text-foreground bg-secondary/80"
-                        : "text-muted-foreground/40 hover:text-foreground hover:bg-secondary/60"
+                        : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/60"
                     }`}
                     title={block.isPinned ? "Unpin" : "Pin"}
+                    aria-label={block.isPinned ? "Unpin note" : "Pin note"}
                   >
                     <Pin
-                      className={`h-3.5 w-3.5 ${block.isPinned ? "fill-current" : "-rotate-45"}`}
+                      className={`size-4 ${block.isPinned ? "fill-current" : "-rotate-45"}`}
                     />
                   </button>
                 )}
 
-                {/* Re-enrich */}
-                <button
-                  onClick={() => onReEnrich(block.id)}
-                  disabled={block.isEnriching}
-                  className="p-1.5 rounded-md text-muted-foreground/40 hover:text-foreground hover:bg-secondary/60 transition-all disabled:opacity-30"
-                  title="Re-synthesize"
-                >
-                  <RefreshCw
-                    className={`h-3.5 w-3.5 ${block.isEnriching ? "animate-spin" : ""}`}
-                  />
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      title="More note actions"
+                      aria-label="More note actions"
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48 border-border/60">
+                    <DropdownMenuItem
+                      onSelect={() => onReEnrich(block.id)}
+                      disabled={block.isEnriching}
+                      className="min-h-8 cursor-pointer"
+                    >
+                      <RefreshCw className={block.isEnriching ? "animate-spin" : ""} />
+                      Re-synthesize
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleCopyMd} className="min-h-8 cursor-pointer">
+                      <Clipboard /> Copy Markdown
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleExportMd} className="min-h-8 cursor-pointer">
+                      <Download /> Export Markdown
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={handleDelete}
+                      className="min-h-8 cursor-pointer text-destructive focus:text-destructive"
+                    >
+                      <Trash2 /> Delete note
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
-                {/* Copy as Markdown */}
-                <button
-                  onClick={handleCopyMd}
-                  className="p-1.5 rounded-md text-muted-foreground/40 hover:text-foreground hover:bg-secondary/60 transition-all"
-                  title="Copy as Markdown"
-                >
-                  <Clipboard className="h-3.5 w-3.5" />
-                </button>
-
-                {/* Export as Markdown */}
-                <button
-                  onClick={handleExportMd}
-                  className="p-1.5 rounded-md text-muted-foreground/40 hover:text-foreground hover:bg-secondary/60 transition-all"
-                  title="Export as Markdown"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </button>
-
-                {/* Delete */}
-                <button
-                  onClick={handleDelete}
-                  className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                  title="Delete note"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-
-                {/* Close */}
-                <button
-                  onClick={handleClose}
-                  className="p-1.5 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-secondary/60 transition-all"
-                  title="Close (Esc)"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                {/* The inbox editor is persistent; drawers retain their close action. */}
+                {mode === "overlay" && (
+                  <button
+                    onClick={handleClose}
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    title="Close (Esc)"
+                    aria-label="Close note details"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -340,7 +432,7 @@ export function NoteDetailPanel({
                   transition={{ duration: 0.12 }}
                   className="mx-4 mt-2 rounded-xl border border-border/60 bg-background/98 shadow-xl overflow-hidden z-10"
                 >
-                  <p className="px-4 pt-3 pb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+                  <p className="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/65">
                     Change type
                   </p>
                   <div className="grid grid-cols-2 gap-1 p-2 pt-0">
@@ -361,7 +453,7 @@ export function NoteDetailPanel({
                               onChangeType(block.id, type);
                               setTypePickerOpen(false);
                             }}
-                            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] transition-all ${
+                            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-all ${
                               isActive
                                 ? "bg-primary/10"
                                 : "hover:bg-secondary/60"
@@ -390,58 +482,14 @@ export function NoteDetailPanel({
               )}
             </AnimatePresence>
 
-            {/* ── Tab switcher ─────────────────────────────────────────────── */}
-            <div className="flex items-center gap-0 px-5 pt-3 shrink-0 relative z-10">
-              <button
-                onClick={() => {
-                  analytics.track("detail_tab_switch", { tab: "original" });
-                  setActiveTab("original");
-                }}
-                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-t-md text-[11px] font-semibold transition-all ${
-                  activeTab === "original"
-                    ? "text-primary"
-                    : "text-muted-foreground/50 hover:text-foreground hover:bg-secondary/40"
-                }`}
-              >
-                <FileText className="h-3 w-3" />
-                Original
-                {activeTab === "original" && (
-                  <motion.div
-                    layoutId="activeTabUnderline"
-                    className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-primary"
-                  />
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  analytics.track("detail_tab_switch", { tab: "synthesis" });
-                  setActiveTab("synthesis");
-                }}
-                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-t-md text-[11px] font-semibold transition-all ${
-                  activeTab === "synthesis"
-                    ? "text-primary"
-                    : "text-muted-foreground/50 hover:text-foreground hover:bg-secondary/40"
-                }`}
-              >
-                <Sparkles className="h-3 w-3" />
-                Synthesized
-                {activeTab === "synthesis" && (
-                  <motion.div
-                    layoutId="activeTabUnderline"
-                    className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-primary"
-                  />
-                )}
-              </button>
-            </div>
-            <div className="h-px bg-border/40 mx-0 shrink-0 relative z-0" />
-
             {/* ── Body ─────────────────────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">
+            <div className="custom-scrollbar min-h-0 flex-1 scroll-pt-6 overflow-y-auto">
+              <div className="reader-column space-y-5 pb-16 pt-8">
               {/* ── Synthesis tab ─────────────────────────────────────────── */}
               {activeTab === "synthesis" && (
                 <div className="space-y-4">
                   {block.title && !block.isEnriching && (
-                    <h2 className="text-[18px] font-bold leading-tight tracking-tight text-foreground mb-4">
+                    <h2 className="font-display mb-7 text-[32px] font-medium leading-[38px] tracking-[-0.025em] text-foreground min-[1440px]:text-[34px] min-[1440px]:leading-[40px]">
                       {block.title}
                     </h2>
                   )}
@@ -459,16 +507,16 @@ export function NoteDetailPanel({
                         <X className="h-5 w-5 text-red-400" />
                       </div>
                       <div>
-                        <p className="text-[13px] text-red-400 font-semibold">
+                        <p className="text-sm font-semibold text-red-400">
                           Synthesis failed
                         </p>
-                        <p className="text-[11px] text-muted-foreground/60 mt-0.5 max-w-[240px] mx-auto">
+                        <p className="mx-auto mt-1 max-w-[280px] text-xs leading-5 text-muted-foreground/60">
                           {block.statusText || "An unexpected error occurred during AI analysis."}
                         </p>
                       </div>
                       <button
                         onClick={() => onReEnrich(block.id)}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold bg-secondary hover:bg-secondary/80 transition-all"
+                        className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-xs font-semibold transition-all hover:bg-secondary/80"
                       >
                         <RefreshCw className="h-3 w-3" />
                         Retry
@@ -499,17 +547,17 @@ export function NoteDetailPanel({
                                   saveAnnotation();
                                 }
                               }}
-                              className="w-full resize-none rounded-xl bg-secondary/20 border border-border/60 px-3 py-2.5 text-[13px] leading-relaxed text-foreground focus:bg-background focus:border-primary/50 focus:ring-4 focus:ring-primary/10 shadow-inner outline-none transition-all"
+                              className="w-full resize-none rounded-xl border border-border/60 bg-secondary/20 px-3 py-2.5 text-sm leading-6 text-foreground shadow-inner outline-none transition-all focus:border-primary/50 focus:bg-background focus:ring-4 focus:ring-primary/10"
                               style={{ minHeight: "6rem" }}
                             />
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] text-muted-foreground/40">
+                              <span className="text-xs leading-5 text-muted-foreground/65">
                                 Enter to save · Shift+Enter for newline · Esc to
                                 cancel
                               </span>
                               <button
                                 onClick={saveAnnotation}
-                                className="flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold transition-all"
+                                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all"
                                 style={{
                                   backgroundColor: accent,
                                   color: "var(--background)",
@@ -521,7 +569,7 @@ export function NoteDetailPanel({
                           </div>
                         ) : (
                           <div className="relative">
-                            <div className="max-w-none text-[13px] leading-relaxed text-foreground/90 markdown-body">
+                            <div className="markdown-body text-[17px] leading-[30px] text-foreground/90">
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={MD}
@@ -534,7 +582,8 @@ export function NoteDetailPanel({
                                 setDraftAnnotation(block.annotation || "");
                                 setEditingAnnotation(true);
                               }}
-                              className="absolute top-0 right-0 p-1.5 rounded-md opacity-0 group-hover/annot:opacity-100 text-muted-foreground/50 hover:text-foreground hover:bg-secondary/60 transition-all"
+                              className="absolute top-0 right-0 p-1.5 rounded-md opacity-0 group-hover/annot:opacity-100 focus-visible:opacity-100 text-muted-foreground/70 hover:text-foreground hover:bg-secondary/60 transition-all"
+                              aria-label="Edit synthesized note"
                               title="Edit synthesis"
                             >
                               <Pencil className="h-3 w-3" />
@@ -546,7 +595,7 @@ export function NoteDetailPanel({
                       {/* Confidence */}
                       {block.confidence != null && (
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-muted-foreground/40 font-mono uppercase tracking-widest">
+                          <span className="font-mono text-xs text-muted-foreground/65">
                             Confidence
                           </span>
                           <div className="flex-1 h-1 rounded-full bg-secondary/60 overflow-hidden">
@@ -558,7 +607,7 @@ export function NoteDetailPanel({
                               }}
                             />
                           </div>
-                          <span className="text-[10px] font-mono text-muted-foreground/50">
+                          <span className="font-mono text-xs text-muted-foreground/70">
                             {Math.round(block.confidence)}%
                           </span>
                         </div>
@@ -567,7 +616,7 @@ export function NoteDetailPanel({
                       {/* Sources */}
                       {block.sources && block.sources.length > 0 && (
                         <div className="space-y-1.5">
-                          <span className="text-[10px] text-muted-foreground/40 font-mono uppercase tracking-widest">
+                          <span className="font-mono text-xs text-muted-foreground/65">
                             Sources
                           </span>
                           <div className="space-y-1">
@@ -579,8 +628,8 @@ export function NoteDetailPanel({
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-2 rounded-md px-3 py-2 bg-secondary/30 hover:bg-secondary/60 transition-colors group/src"
                               >
-                                <ExternalLink className="h-3 w-3 text-muted-foreground/40 group-hover/src:text-primary shrink-0 transition-colors" />
-                                <span className="text-[12px] text-foreground/70 truncate">
+                                <ExternalLink className="h-3 w-3 text-muted-foreground/65 group-hover/src:text-primary shrink-0 transition-colors" />
+                                <span className="truncate text-[13px] text-foreground/70">
                                   {src.title || src.siteName || src.url}
                                 </span>
                               </a>
@@ -592,20 +641,20 @@ export function NoteDetailPanel({
                   ) : (
                     <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
                       <div className="w-10 h-10 rounded-full bg-secondary/40 flex items-center justify-center">
-                        <Sparkles className="h-5 w-5 text-muted-foreground/30" />
+                        <Sparkles className="h-5 w-5 text-muted-foreground/60" />
                       </div>
                       <div>
-                        <p className="text-[13px] text-muted-foreground/60">
+                        <p className="text-sm font-medium text-muted-foreground/60">
                           No synthesis yet
                         </p>
-                        <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground/65">
                           Hit Re-synthesize to generate AI insights
                         </p>
                       </div>
                       <button
                         onClick={() => onReEnrich(block.id)}
                         disabled={block.isEnriching}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all disabled:opacity-40"
+                        className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all disabled:opacity-40"
                         style={{
                           backgroundColor: accent,
                           color: "var(--background)",
@@ -621,94 +670,47 @@ export function NoteDetailPanel({
 
               {/* ── Original tab ──────────────────────────────────────────── */}
               {activeTab === "original" && (
-                <div className="flex flex-col h-full space-y-4">
+                <div
+                  className="flex h-full flex-col space-y-4"
+                  onDoubleClick={(event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("a, button, input, textarea, select, [contenteditable='true']")) return;
+                    openExpandedEditor();
+                  }}
+                >
                   {block.title && !block.isEnriching && (
-                    <h2 className="text-[18px] font-bold leading-tight tracking-tight text-foreground mb-4">
+                    <h2 className="font-display mb-7 text-[32px] font-medium leading-[38px] tracking-[-0.025em] text-foreground min-[1440px]:text-[34px] min-[1440px]:leading-[40px]">
                       {block.title}
                     </h2>
                   )}
                   <div className="flex items-center justify-between">
-                    {editingText ? (
-                      <div className="space-y-2.5">
-                        <textarea
-                          ref={textRef}
-                          value={draftText}
-                          onChange={(e) => {
-                            setDraftText(e.target.value);
-                            e.target.style.height = "auto";
-                            e.target.style.height =
-                              e.target.scrollHeight + "px";
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") {
-                              setDraftText(block.text);
-                              setEditingText(false);
-                            }
-                            if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault();
-                              saveText();
-                            }
-                          }}
-                          className="w-full resize-none rounded-xl bg-secondary/20 border border-border/60 px-3 py-2.5 text-[13px] leading-relaxed text-foreground focus:bg-background focus:border-primary/50 focus:ring-4 focus:ring-primary/10 shadow-inner outline-none transition-all"
-                          style={{ minHeight: "6rem" }}
-                        />
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-muted-foreground/40">
-                            Enter to save · Shift+Enter for newline · Esc to
-                            cancel
-                          </span>
-                          <button
-                            onClick={saveText}
-                            className="flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold transition-all"
-                            style={{
-                              backgroundColor: accent,
-                              color: "var(--background)",
-                            }}
-                          >
-                            <Check className="h-3 w-3" /> Save
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <div className="max-w-none text-[13px] leading-relaxed text-foreground/90 markdown-body">
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={MD}
-                          >
-                            {block.text}
-                          </ReactMarkdown>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setDraftText(block.text);
-                            setEditingText(true);
-                          }}
-                          className="absolute top-0 right-0 p-1.5 rounded-md opacity-0 group-hover/text:opacity-100 text-muted-foreground/50 hover:text-foreground hover:bg-secondary/60 transition-all"
-                          title="Edit original text"
+                    <div className="w-full">
+                      <div className="markdown-body text-[17px] leading-[30px] text-foreground/90">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={MD}
                         >
-                          <Pencil className="h-3 w-3" />
-                        </button>
+                          {originalMarkdown}
+                        </ReactMarkdown>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* ── Footer metadata ───────────────────────────────────────────── */}
-            <div className="shrink-0 border-t border-border/40 px-5 py-3 flex items-center gap-3 text-[10px] text-muted-foreground/40 font-mono">
+            {/* ── Document metadata ─────────────────────────────────────────── */}
+            <div className="mt-12 flex flex-wrap items-center gap-2 font-mono text-xs leading-[18px] text-muted-foreground/65">
               <span>{formattedDate}</span>
               {block.isPinned && (
                 <>
                   <span className="opacity-30">·</span>
-                  <span className="text-primary/60">Pinned</span>
+                  <span className="text-foreground/65">Pinned</span>
                 </>
               )}
               {block.fromSkill && (
                 <>
                   <span className="opacity-30">·</span>
-                  <span className="text-primary/60">✦ Pre-synthesized</span>
+                  <span className="text-foreground/65">✦ Pre-synthesized</span>
                 </>
               )}
               {block.fromMcp && (
@@ -727,8 +729,24 @@ export function NoteDetailPanel({
                 </>
               )}
             </div>
+              </div>
+            </div>
             </div>
           </motion.aside>
+
+          <MarkdownEntryEditor
+            open={expandedEditorOpen}
+            value={draftText}
+            initialValue={block.text}
+            contextLabel={block.title || "Edit original entry"}
+            saveLabel="Save changes"
+            onChange={setDraftText}
+            onSave={saveExpandedText}
+            onClose={() => {
+              setDraftText(block.text);
+              setExpandedEditorOpen(false);
+            }}
+          />
         </>
       )}
     </AnimatePresence>

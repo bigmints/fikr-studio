@@ -100,11 +100,11 @@ export function BulkActionPanel({
                 </button>
               )}
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                <p className="text-[11px] font-semibold text-muted-foreground/70">
                   {subView === "root"
                     ? "Bulk Actions"
                     : subView === "move"
-                    ? "Move to Space"
+                    ? "Move to workspace"
                     : "Set Category"}
                 </p>
                 <p className="text-[13px] font-semibold text-foreground leading-tight">
@@ -154,15 +154,15 @@ export function BulkActionPanel({
                     chevron
                   />
 
-                  {/* Move to Space */}
+                  {/* Move to workspace */}
                   <ActionRow
                     icon={<FolderUp className="w-4 h-4" />}
                     iconColor="text-sky-400"
                     iconBg="bg-sky-400/10"
-                    label="Move to Space"
+                    label="Move to workspace"
                     description={
                       otherProjects.length === 0
-                        ? "No other spaces"
+                        ? "No other workspaces"
                         : "Transfer notes"
                     }
                     onClick={() => {
@@ -188,7 +188,7 @@ export function BulkActionPanel({
                 </motion.div>
               )}
 
-              {/* ────── Move to Space ────── */}
+              {/* ────── Move to workspace ────── */}
               {subView === "move" && (
                 <motion.div
                   key="move"
@@ -200,7 +200,7 @@ export function BulkActionPanel({
                 >
                   {otherProjects.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-8">
-                      No other spaces to move to
+                      No other workspaces to move to
                     </p>
                   ) : (
                     otherProjects.map((project) => (

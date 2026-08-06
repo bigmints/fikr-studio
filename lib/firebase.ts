@@ -2,7 +2,7 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBSv_Z_PaXOk0HpTrM_PxoqFkK0SPQXIFw", // gitleaks:allow public Firebase web API key
+  apiKey: "AIzaSyBSv_Z_PaXOk0HpTrM_PxoqFkK0SPQXIFw",
   authDomain: "fikr-apps.firebaseapp.com",
   projectId: "fikr-apps",
   storageBucket: "fikr-apps.firebasestorage.app",

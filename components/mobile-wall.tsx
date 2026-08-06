@@ -2,21 +2,21 @@
 
 export function MobileWall() {
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background px-8 text-center md:hidden" style={{ paddingBottom: "15vh" }}>
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background px-8 text-center min-[900px]:hidden" style={{ paddingBottom: "15vh" }}>
       {/* Logo */}
       <div className="mb-8 flex items-center gap-2.5">
         <img src="./logo-icon.png" alt="Fikr Studio" className="h-6 w-6 object-contain" />
-        <span className="font-mono text-sm font-semibold tracking-tight text-foreground">
+        <span className="text-sm font-semibold tracking-tight text-foreground">
           Fikr Studio
         </span>
       </div>
 
       {/* Message */}
       <p className="mb-3 max-w-xs text-base font-medium text-foreground">
-        Spatial thinking needs space.
+        Fikr Studio works best on a larger screen.
       </p>
       <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-        Fikr Studio is built for larger displays. Open the desktop app on a Mac with more screen space.
+        Widen this window or open the desktop app on a larger display.
       </p>
     </div>
   )

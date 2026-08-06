@@ -23,7 +23,10 @@ function fingerprint(value) {
 let history;
 try {
   history = execFileSync('git', [
-    'log', '-p', '--all', '--full-history', '--no-ext-diff',
+    // A release is authorized by the ancestry of its checked-out commit. Other
+    // local branches may retain quarantined legacy history and must not make a
+    // clean release branch impossible to validate.
+    'log', '-p', 'HEAD', '--full-history', '--no-ext-diff',
     '--format=__FIKR_COMMIT__%H',
   ], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
 } catch (error) {

@@ -1080,6 +1080,7 @@ const MCP_TOOLS = [
         category: { type: "string", description: "Short domain label from pre-synthesis (e.g. 'Product Strategy')" },
         annotation: { type: "string", description: "2-4 sentence AI-generated annotation from pre-synthesis" },
         confidence: { type: "number", description: "Classification confidence 0-100 from pre-synthesis" },
+        idempotency_key: { type: "string", description: "Optional stable delivery ID used to prevent duplicate notes." },
       },
       required: ["text", "contentType", "category", "annotation"],
     },
@@ -1289,6 +1290,14 @@ async function executeTool(name, args, mainWindow) {
     }
 
     case "create_note_synthesized": {
+      if (args.idempotency_key) {
+        const existing = projects
+          .flatMap((project) => project.blocks || [])
+          .find((note) => note.externalRelayMessageId === args.idempotency_key);
+        if (existing) {
+          return { content: [{ type: "text", text: `Pre-synthesized note already stored with id: ${existing.id}` }] };
+        }
+      }
       const proj = getProject(args.project_id);
       if (!proj) return { content: [{ type: "text", text: "Project not found" }], isError: true };
 
@@ -1309,6 +1318,7 @@ async function executeTool(name, args, mainWindow) {
         isError: false,
         fromMcp: true,
         fromSkill: true,      // tracing flag for the canvas
+        ...(args.idempotency_key ? { externalRelayMessageId: args.idempotency_key } : {}),
       };
 
       // Embed the combined text+annotation for richer semantic search
@@ -1448,13 +1458,13 @@ async function pollCloudRelay() {
   let foundMessage = false;
   try {
     const message = await dc.consumeRelay(currentIdToken);
-    if (message?.id && message.payload) {
+    if (message?.id && message?.leaseToken && message.payload) {
       foundMessage = true;
       try {
         const result = await executeMcpRpc(message.payload);
-        await dc.acknowledgeRelay(currentIdToken, message.id, { status: 'completed', result });
+        await dc.acknowledgeRelay(currentIdToken, message.id, message.leaseToken, { status: 'completed', result });
       } catch (error) {
-        await dc.acknowledgeRelay(currentIdToken, message.id, {
+        await dc.acknowledgeRelay(currentIdToken, message.id, message.leaseToken, {
           status: 'error',
           error: error instanceof Error ? error.message : 'Unknown error',
         });
@@ -1467,7 +1477,9 @@ async function pollCloudRelay() {
   } finally {
     relayPollRunning = false;
     relayIdlePolls = foundMessage ? 0 : Math.min(relayIdlePolls + 1, 5);
-    scheduleRelayPoll(foundMessage ? 2_000 : Math.min(60_000, 2_000 * (2 ** relayIdlePolls)));
+    // The remote MCP request waits at most 45 seconds. Keep the consumer well
+    // below that deadline even after a long idle period.
+    scheduleRelayPoll(foundMessage ? 1_000 : Math.min(10_000, 1_000 * (2 ** relayIdlePolls)));
   }
 }
 
@@ -1515,7 +1527,7 @@ async function pollExternalRelay() {
     externalRelayIdlePolls = processed > 0 ? 0 : Math.min(externalRelayIdlePolls + 1, 5);
     scheduleExternalRelayPoll(processed > 0
       ? 2_000
-      : Math.min(120_000, 5_000 * (2 ** externalRelayIdlePolls)));
+      : Math.min(15_000, 3_000 * (2 ** externalRelayIdlePolls)));
   }
 }
 
@@ -1561,8 +1573,21 @@ function startMcpServer(mainWindow) {
       const send = (event, data) => res.write(`event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`);
 
       send("endpoint", `/message?sessionId=${sessionId}&token=${encodeURIComponent(mcpAuthToken)}`);
-      
-      req.on("close", () => sseSessions.delete(sessionId));
+
+      // Keep long-lived MCP transports active. Node's EventSource/undici stack
+      // otherwise closes an idle response after roughly five minutes with a
+      // Body Timeout Error, leaving the next Codex tool call without a reply.
+      const heartbeat = setInterval(() => {
+        if (!res.destroyed && !res.writableEnded) res.write(": heartbeat\n\n");
+      }, 15_000);
+      heartbeat.unref?.();
+
+      const closeSession = () => {
+        clearInterval(heartbeat);
+        sseSessions.delete(sessionId);
+      };
+      req.on("close", closeSession);
+      res.on("close", closeSession);
       return;
     }
 
@@ -1877,6 +1902,9 @@ let tray         = null;
 let isQuiting    = false;
 let isManualUpdateCheck = false;
 let isUpdateCheckInFlight = false;
+let isUpdateInstallInProgress = false;
+let downloadedUpdateReady = false;
+let downloadedUpdateError = null;
 
 function showUpdateDialog(options) {
   return dialog.showMessageBox(mainWindow || undefined, options);
@@ -1891,6 +1919,14 @@ function getSafeUpdateErrorMessage(err) {
     return "Fikr Studio could not reach GitHub to check for updates. Check your connection and try again.";
   }
   return "Fikr Studio could not check for updates. Try again later.";
+}
+
+function getSafeUpdateInstallErrorMessage(err) {
+  const message = String(err?.message || err || "Unknown update install error");
+  if (/code signature|SQRLCodeSignature|ShipIt/i.test(message)) {
+    return "This copy of Fikr Studio cannot install the downloaded update because its app signature does not match. Replace it with the latest official signed release.";
+  }
+  return "Fikr Studio could not install the downloaded update. Quit the app and try again.";
 }
 
 function checkForUpdates({ manual = false } = {}) {
@@ -2181,7 +2217,7 @@ app.whenReady().then(async () => {
         { 
           label: 'Check for Updates...', 
           click: () => { 
-            checkForUpdates({ manual: true }); 
+            checkForUpdates({ manual: true });
           } 
         },
         { type: 'separator' },
@@ -2254,6 +2290,20 @@ app.whenReady().then(async () => {
 
   autoUpdater.on("error", (err) => {
     console.error("[Fikr Studio] Auto-updater error:", err.message || err);
+    if (isUpdateInstallInProgress || downloadedUpdateReady) {
+      const wasInstalling = isUpdateInstallInProgress;
+      downloadedUpdateReady = false;
+      downloadedUpdateError = getSafeUpdateInstallErrorMessage(err);
+      isUpdateInstallInProgress = false;
+      isQuiting = false;
+      if (wasInstalling) {
+        showUpdateDialog({
+          type: "error",
+          title: "Update Install Failed",
+          message: downloadedUpdateError
+        });
+      }
+    }
     if (isManualUpdateCheck) {
       sendUpdateStatus(mainWindow, false);
       showUpdateDialog({
@@ -2297,6 +2347,8 @@ app.whenReady().then(async () => {
     sendUpdateStatus(mainWindow, false);
     isManualUpdateCheck = false;
     isUpdateCheckInFlight = false;
+    downloadedUpdateReady = true;
+    downloadedUpdateError = null;
     console.log("[Fikr Studio] Update downloaded. Ready to install.");
     showUpdateDialog({
       type: "info",
@@ -2305,7 +2357,17 @@ app.whenReady().then(async () => {
       buttons: ["Quit and Install", "Later"]
     }).then(result => {
       if (result.response === 0) {
+        if (!downloadedUpdateReady) {
+          showUpdateDialog({
+            type: "error",
+            title: "Update Install Failed",
+            message: downloadedUpdateError || "The downloaded update is no longer available. Check for updates again."
+          });
+          return;
+        }
         isQuiting = true;
+        isUpdateInstallInProgress = true;
+        downloadedUpdateReady = false;
         installDownloadedUpdate({
           session: session.defaultSession,
           quitAndInstall: () => autoUpdater.quitAndInstall(),
@@ -2313,12 +2375,14 @@ app.whenReady().then(async () => {
             console.warn('[Fikr Studio] Could not flush session storage before update:', error?.message || error);
           },
         }).catch(error => {
+          isUpdateInstallInProgress = false;
           isQuiting = false;
+          downloadedUpdateError = getSafeUpdateInstallErrorMessage(error);
           console.error('[Fikr Studio] Could not install downloaded update:', error?.message || error);
           showUpdateDialog({
             type: 'error',
             title: 'Update Install Failed',
-            message: 'Fikr Studio could not install the downloaded update. Quit the app and try again.',
+            message: downloadedUpdateError,
           });
         });
       }

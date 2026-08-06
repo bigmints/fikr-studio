@@ -2,6 +2,66 @@ tasks:
   next:
         status: todo
         priority: 1
+        summary: "Release v0.1.23 and harden delivery"
+        status: todo
+        priority: 1
+        summary: "Fix update quit and install lifecycle"
+        status: todo
+        priority: 1
+        summary: "Fix local QA packaged app launch"
+        status: todo
+        priority: 1
+        summary: "Harden Studio MCP and relay runtime reliability"
+        status: todo
+        priority: 1
+        summary: "Build current production desktop artifact"
+        status: todo
+        priority: 2
+        summary: "Add editor save shortcut and app-wide Sonner status feedback"
+        status: todo
+        priority: 1
+        summary: "Build app wide keyboard shortcut system and guide"
+        status: todo
+        priority: 1
+        summary: "Refine connection row hover and focus states"
+        status: todo
+        priority: 1
+        summary: "Move original synthesized switch into note toolbar"
+        status: todo
+        priority: 1
+        summary: "Implement creative director product-wide visual system audit"
+        status: todo
+        priority: 2
+        summary: "Replace the persistent Entry composer with an editor FAB"
+        status: todo
+        priority: 2
+        summary: "Simplify the notes header and note editing controls"
+        status: todo
+        priority: 2
+        summary: "Float the Entry composer above the Intel workspace"
+        status: todo
+        priority: 1
+        summary: "Fix synthesis null AI configuration crash"
+        status: todo
+        priority: 1
+        summary: "Prevent invalid bold and code mark combinations in the Markdown editor"
+        status: todo
+        priority: 2
+        summary: "Quiet the inbox visual hierarchy and remove excessive borders"
+        status: todo
+        priority: 2
+        summary: "Increase light mode contrast with a restrained monochrome palette"
+        status: todo
+        priority: 2
+        summary: "Align typography with SaveADay AI and enlarge note inbox"
+        status: todo
+        priority: 2
+        summary: "Hide grid view from content toolbar"
+        status: todo
+        priority: 2
+        summary: "Build three-column inbox and editor content layout"
+        status: todo
+        priority: 1
         summary: "Complete production-readiness audit: verify Studio features, integrations, and exact release gates"
         status: todo
         priority: 2
@@ -13,6 +73,67 @@ tasks:
         priority: 1
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   in_progress:
+    - release_v0_1_23_and_harden_delivery:
+        status: in_progress
+        priority: high
+        summary: "Release v0.1.23 and harden delivery"
+        status: in_progress
+        priority: high
+        summary: "Fix update quit and install lifecycle"
+        status: in_progress
+        priority: high
+        summary: "Fix local QA packaged app launch"
+        status: in_progress
+        priority: high
+        summary: "Harden Studio MCP and relay runtime reliability"
+        status: in_progress
+        priority: high
+        summary: "Build current production desktop artifact"
+        status: in_progress
+        priority: high
+        summary: "Add editor save shortcut and app-wide Sonner status feedback"
+        status: in_progress
+        priority: high
+        summary: "Build app wide keyboard shortcut system and guide"
+        status: in_progress
+        priority: high
+        summary: "Refine connection row hover and focus states"
+        status: in_progress
+        priority: high
+        summary: "Move original synthesized switch into note toolbar"
+        status: in_progress
+        priority: high
+        summary: "Implement creative director product-wide visual system audit"
+        status: in_progress
+        priority: high
+        summary: "Replace the persistent Entry composer with an editor FAB"
+        status: in_progress
+        priority: high
+        summary: "Simplify the notes header and note editing controls"
+        status: in_progress
+        priority: high
+        summary: "Float the Entry composer above the Intel workspace"
+        status: in_progress
+        priority: high
+        summary: "Fix synthesis null AI configuration crash"
+        status: in_progress
+        priority: high
+        summary: "Prevent invalid bold and code mark combinations in the Markdown editor"
+        status: in_progress
+        priority: high
+        summary: "Quiet the inbox visual hierarchy and remove excessive borders"
+        status: in_progress
+        priority: high
+        summary: "Increase light mode contrast with a restrained monochrome palette"
+        status: in_progress
+        priority: high
+        summary: "Align typography with SaveADay AI and enlarge note inbox"
+        status: in_progress
+        priority: high
+        summary: "Hide grid view from content toolbar"
+        status: in_progress
+        priority: high
+        summary: "Build three-column inbox and editor content layout"
     - complete_production_readiness_audit_verify_studio_:
         status: in_progress
         priority: high
@@ -27,6 +148,50 @@ tasks:
         priority: high
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   completed:
+    - fix_update_quit_and_install_lifecycle:
+        summary: "Restored the storage-safe updater install helper, flushes renderer storage and cookies before quitAndInstall, recovers quit state on asynchronous install failures, and surfaces signature mismatch guidance. Verified the installed ad-hoc 0.1.20 app is running at the update prompt; validation, 56 tests, and production build passed."
+    - fix_local_qa_packaged_app_launch:
+        summary: "Diagnosed macOS dyld Team-ID mismatch in the ad-hoc fallback package, applied temporary local-only library-validation entitlements to the app and Electron helpers, rebuilt DMG/ZIP, and verified a rendered startup smoke test. Production notarized entitlements were unchanged."
+    - harden_studio_mcp_and_relay_runtime_reliability:
+        summary: "Added token-refresh propagation, faster relay polling, lease acknowledgements, synthesized-note deduplication, and validated 54 tests plus build."
+    - build_current_production_desktop_artifact:
+        summary: "Built isolated Fikr Studio 0.1.20 ARM64 production QA artifacts with an ad-hoc local signature; renderer build, 53 tests, lint, typecheck, secret scan, package metadata, app.asar, deep signature, and DMG integrity passed. Release remains blocked by Git-history secret finding, missing Developer ID signing access, and dependency advisories."
+    - add_editor_save_shortcut_and_app_wide_sonner_statu:
+        summary: "Added Cmd/Ctrl+S editor saving with Cmd/Ctrl+Enter compatibility, a monochrome Shadcn Sonner toaster, status feedback for saves, workspace/article creation, import/export, copy, settings, generation and undo, plus deduplicated persistence failure reporting. Verified live and with lint, typecheck, 53 tests, diff-check, and production build."
+    - build_app_wide_keyboard_shortcut_system_and_guide:
+        summary: "Added app-wide shortcuts, editable-target safety, global navigation/search/new-entry actions, and a polished discoverable shortcut guide; verified in browser and through lint, typecheck, 53 tests, and production build."
+    - refine_connection_row_hover_and_focus_states:
+        summary: "Added restrained monochrome hover, coordinated actions, and keyboard focus states to connection rows"
+    - move_original_synthesized_switch_into_note_toolbar:
+        summary: "Moved note version switching into the detail toolbar and removed the misaligned secondary tab row"
+    - implement_creative_director_product_wide_visual_sy:
+        summary: "Unified product-wide visual system, simplified Settings and Connections, refined Studio and publish flow, and raised secondary-surface accessibility"
+    - replace_the_persistent_entry_composer_with_an_edit:
+        summary: "Removed the persistent Entry bar and replaced it with a theme-aware bottom-right plus FAB that opens the full Markdown editor, preserves local drafts, shows draft presence, and retains the global keyboard shortcut."
+    - simplify_the_notes_header_and_note_editing_control:
+        summary: "Collapsed Notes and count into one compact row, reduced search and filter heights, removed redundant tab icons and inline edit controls, added one toolbar Edit action, and wired double-click on original note content to the same full editor."
+    - float_the_entry_composer_above_the_intel_workspace:
+        summary: "Moved Entry out of flex flow into a centered bottom overlay, limited pointer events to the composer, retained full-height columns underneath, and raised undo feedback above it."
+    - fix_synthesis_null_ai_configuration_crash:
+        summary: "Prevented local development synthesis from dereferencing absent BYOK task model settings; local, managed, and BYOK model routing now resolves only its active configuration path."
+    - prevent_invalid_bold_and_code_mark_combinations_in:
+        summary: "Normalized incompatible emphasis around inline code before rich rendering, preserved fenced code, and prevented toolbar actions from creating invalid mark combinations; added regression coverage."
+    - quiet_the_inbox_visual_hierarchy_and_remove_excess:
+        summary: "Removed repetitive row and control borders, softened selected surfaces, quieted the new-space action, simplified tab underlines and metadata footer, and preserved semantic tag colors."
+    - increase_light_mode_contrast_with_a_restrained_mon:
+        summary: "High contrast monochrome interface with original semantic note tag colors preserved"
+    - align_typography_with_saveaday_ai_and_enlarge_note:
+        summary: "Adopted SaveADay AI typography roles with bundled DM Sans and Newsreader, enlarged the note inbox, and normalized visible workspace typography."
+    - hide_grid_view_from_content_toolbar:
+        summary: "Removed the grid/masonry toggle from the content toolbar; list and graph remain."
+    - build_three_column_inbox_and_editor_content_layout:
+        summary: "Built the persistent three-column content workspace with compact searchable and sortable note inbox plus the existing full-featured editor pane."
+    - add_ai_markdown_formatter_to_entry_editor:
+        summary: "Removed redundant Preview and the AI overlay; added icon-only wording-preserving Format and Clean up actions to the toolbar with inline progress/errors, cancellation, undo, browser QA, validation, tests, and production build."
+    - redesign_markdown_editor_as_a_modern_document_fir:
+        summary: "Replaced the IDE-like split editor with a Tiptap Markdown-native document canvas, retained exact Source and rendered Preview modes, added calm responsive controls and list-safe tables, and verified rich/source/preview roundtrips, browser behavior, tests, validation, and production build."
+    - build_full_markdown_entry_editor_and_existing_note:
+        summary: "Implemented source-first Markdown capture and editing with automatic paste expansion, full editor and preview modes, draft recovery, existing-note editing, focused tests, production build, and browser QA."
     - fix_electron_renderer_csp_delivery_and_next_develo:
         summary: "Moved renderer CSP to Electron response headers and enabled only dev React Refresh requirements."
     - release_version_0_1_11:

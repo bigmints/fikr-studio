@@ -444,8 +444,9 @@ export async function enrichBlockClient(
   const shouldGround =
     !isDevOverride && !isManaged && config && config.supportsGrounding && TRUTH_DEPENDENT_TYPES.has(effectiveType);
 
-  // Resolve the model for the synthesis/analysis task (if not managed)
-  let model = isManaged ? "managed" : resolveModel(config!, "analysis");
+  // Resolve only the active route. Local development deliberately works
+  // without saved BYOK settings, so it must not dereference a null config.
+  let model: string;
   let actualBaseUrl = "";
   let actualHeaders: Record<string, string> = {};
 
@@ -457,6 +458,11 @@ export async function enrichBlockClient(
       if (stored) model = stored;
     }
     actualHeaders = { "Content-Type": "application/json" };
+  } else if (isManaged) {
+    model = "managed";
+  } else {
+    // The configuration guard above guarantees this branch has BYOK config.
+    model = resolveModel(config!, "analysis");
   }
 
   // Grounding — openrouter :online suffix
@@ -612,8 +618,9 @@ You have live web access. For this note type, include 1–2 real source citation
       try {
         responseData = await response.json();
       } catch {
+        const providerName = isDevOverride ? "Local AI" : config!.provider;
         throw new Error(
-          `AI enrich error (${config!.provider}): response was not valid JSON. The provider may have timed out or returned a truncated response.`,
+          `AI enrich error (${providerName}): response was not valid JSON. The provider may have timed out or returned a truncated response.`,
         );
       }
 

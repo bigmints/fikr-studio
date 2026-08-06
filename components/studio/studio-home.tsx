@@ -25,10 +25,10 @@ const PLATFORM_LABEL: Record<string, string> = {
 type StatusMeta = { label: string; dot: string; badge: string };
 
 const STATUS_META: Record<string, StatusMeta> = {
-  ideating:   { label: "Ideating",   dot: "bg-zinc-400",          badge: "bg-zinc-400/15 text-zinc-400" },
-  generating: { label: "Generating", dot: "shimmer-body", badge: "bg-primary/15 text-primary" },
-  done:       { label: "Done",       dot: "bg-[#22C55E]",        badge: "bg-[#22C55E]/15 text-[#22C55E]" },
-  published:  { label: "Published",  dot: "bg-blue-400",           badge: "bg-blue-400/15 text-blue-400" },
+  ideating:   { label: "Ideating",   dot: "bg-muted-foreground/60", badge: "bg-secondary text-muted-foreground" },
+  generating: { label: "Generating", dot: "shimmer-body",          badge: "bg-secondary text-foreground" },
+  done:       { label: "Done",       dot: "bg-foreground/60",       badge: "bg-secondary text-foreground" },
+  published:  { label: "Published",  dot: "bg-background",          badge: "bg-foreground text-background" },
   error:      { label: "Failed",     dot: "bg-red-400",            badge: "bg-red-400/15 text-red-400" },
 };
 
@@ -52,7 +52,7 @@ interface StatusBadgeProps { status: string; }
 function StatusBadge({ status }: StatusBadgeProps) {
   const meta = STATUS_META[status] ?? STATUS_META.ideating;
   return (
-    <span className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.badge}`}>
+    <span className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${meta.badge}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
       {meta.label}
     </span>
@@ -78,31 +78,40 @@ function ProjectCard({ proj, onOpen, onArchive, onDuplicate, view }: CardProps) 
         layout
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: archived ? 0.45 : 1, y: 0 }}
-        className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/30 bg-card hover:border-primary/30 transition-colors cursor-pointer group"
+        role="button"
+        tabIndex={0}
+        aria-label={`Open ${proj.name}`}
+        className="group flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border border-border/25 bg-background px-4 py-3 transition-colors hover:bg-secondary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         onClick={onOpen}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onOpen();
+          }
+        }}
       >
-        <Icon className="size-4 text-primary shrink-0" />
+        <Icon className="size-4 shrink-0 text-muted-foreground" />
         <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium truncate block">{proj.name}</span>
+          <span className="block truncate text-[13px] font-semibold">{proj.name}</span>
         </div>
         <StatusBadge status={proj.status} />
-        <span className="text-[11px] text-muted-foreground shrink-0 hidden sm:block">
+        <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
           {PLATFORM_LABEL[proj.platform] ?? proj.platform}
         </span>
-        {wc && <span className="text-[11px] text-muted-foreground shrink-0 hidden md:block">{wc}</span>}
-        <span className="text-[11px] text-muted-foreground shrink-0">{relativeTime(proj.updatedAt)}</span>
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+        {wc && <span className="hidden shrink-0 text-xs text-muted-foreground md:block">{wc}</span>}
+        <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(proj.updatedAt)}</span>
+        <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           <button
             onClick={onDuplicate}
             title="Duplicate"
-            className="p-1.5 rounded-lg hover:bg-secondary/60 transition-colors"
+            className="rounded-md p-1.5 transition-colors hover:bg-secondary"
           >
             <Copy className="size-3.5 text-muted-foreground" />
           </button>
           <button
             onClick={onArchive}
             title={archived ? "Unarchive" : "Archive"}
-            className="p-1.5 rounded-lg hover:bg-secondary/60 transition-colors"
+            className="rounded-md p-1.5 transition-colors hover:bg-secondary"
           >
             <Archive className="size-3.5 text-muted-foreground" />
           </button>
@@ -116,18 +125,27 @@ function ProjectCard({ proj, onOpen, onArchive, onDuplicate, view }: CardProps) 
       layout
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: archived ? 0.45 : 1, scale: 1 }}
-      whileHover={{ scale: archived ? 1 : 1.015 }}
-      whileTap={{ scale: 0.98 }}
-      className="group relative flex flex-col p-4 rounded-2xl border border-border/30 bg-card hover:border-primary/40 transition-colors cursor-pointer"
+      whileHover={{ y: archived ? 0 : -1 }}
+      whileTap={{ scale: 0.99 }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${proj.name}`}
+      className="group relative flex cursor-pointer flex-col rounded-lg border border-border/25 bg-background p-4 transition-colors hover:bg-secondary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
     >
       {/* Top row */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-primary/10">
-            <Icon className="size-3.5 text-primary" />
+          <div className="rounded-md bg-secondary p-1.5">
+            <Icon className="size-3.5 text-muted-foreground" />
           </div>
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+          <span className="text-xs font-medium text-muted-foreground">
             {PLATFORM_LABEL[proj.platform] ?? proj.platform}
           </span>
         </div>
@@ -138,24 +156,25 @@ function ProjectCard({ proj, onOpen, onArchive, onDuplicate, view }: CardProps) 
       <h4 className="font-semibold text-sm leading-snug mb-1 line-clamp-2">{proj.name}</h4>
 
       {/* Meta */}
-      <p className="text-[11px] text-muted-foreground mb-4">
+      <p className="mb-4 text-xs text-muted-foreground">
         {wc ? `${wc} · ` : ""}{relativeTime(proj.updatedAt)}
       </p>
 
       {/* Actions */}
       <div
-        className="mt-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="mt-auto flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
         <button
           onClick={onDuplicate}
-          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-secondary/60 transition-colors"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
         >
           <Copy className="size-3" /> Duplicate
         </button>
         <button
           onClick={onArchive}
-          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-secondary/60 transition-colors"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
         >
           <Archive className="size-3" /> {archived ? "Unarchive" : "Archive"}
         </button>
@@ -164,7 +183,7 @@ function ProjectCard({ proj, onOpen, onArchive, onDuplicate, view }: CardProps) 
       {/* Generating pulse overlay */}
       {proj.status === "generating" && (
         <div className="absolute top-3 right-3 flex items-center gap-1">
-          <Loader2 className="size-3 text-primary animate-spin" />
+          <Loader2 className="size-3 animate-spin text-foreground" />
         </div>
       )}
     </motion.div>
@@ -183,7 +202,7 @@ interface Props {
 export function StudioHome({
   projects, onOpenProject, onNewProject, onArchive, onUnarchive, onDuplicate,
 }: Props) {
-  const [view, setView] = useState<"grid" | "list">("grid");
+  const [view, setView] = useState<"grid" | "list">("list");
   const [showModal, setShowModal] = useState(false);
   const [selectedMode, setSelectedMode] = useState<ContentMode>("article");
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>("linkedin");
@@ -197,7 +216,7 @@ export function StudioHome({
     if (!mode) return;
     const project: StudioProject = {
       id:        generateId(),
-      name:      `New ${mode.label}`,
+      name:      "New Article",
       mode:      selectedMode,
       platform:  selectedPlatform,
       createdAt: Date.now(),
@@ -233,7 +252,7 @@ export function StudioHome({
           <div className="studio-pill-group">
             <button
               onClick={() => setView("grid")}
-              className={`studio-pill-btn ${view === "grid" ? "active" : ""}`}
+              className={`studio-pill-btn !text-xs ${view === "grid" ? "active" : ""}`}
               title="Grid view"
             >
               <LayoutGrid className="size-3" />
@@ -241,7 +260,7 @@ export function StudioHome({
             </button>
             <button
               onClick={() => setView("list")}
-              className={`studio-pill-btn ${view === "list" ? "active" : ""}`}
+              className={`studio-pill-btn !text-xs ${view === "list" ? "active" : ""}`}
               title="List view"
             >
               <List className="size-3" />
@@ -251,64 +270,44 @@ export function StudioHome({
           <div className="studio-toolbar__divider" />
           <button
             onClick={() => setShowModal(true)}
-            className="studio-pill-btn primary"
+            className="flex h-7 items-center gap-1.5 rounded-md bg-foreground px-2.5 text-xs font-semibold text-background transition-opacity hover:opacity-85"
           >
             <Plus className="size-3" />
-            New Project
+            New Article
           </button>
         </div>
       </header>
 
       {/* ── Content ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto w-full px-8 py-8 flex flex-col gap-8">
-
-          {/* Quick-start content type */}
-          <div className="grid grid-cols-1 max-w-sm gap-3">
-          {GENERATION_MODES.map((mode) => {
-            const Icon = MODE_ICONS[mode.id] ?? FileText;
-            return (
-              <button
-                key={mode.id}
-                onClick={() => {
-                  setSelectedMode(mode.id);
-                  setShowModal(true);
-                }}
-                className="group relative flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card hover:border-primary/50 text-left transition-all overflow-hidden cursor-pointer"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                <div className="flex items-center justify-center size-9 rounded-lg bg-primary/10 text-primary shrink-0">
-                  <Icon className="size-4" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">{mode.label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Long-form for LinkedIn or Substack
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-          </div>
-
-          {/* Projects */}
+        <div className="mx-auto flex w-full max-w-6xl flex-col px-8 py-8">
+          {/* Articles */}
           <section>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3">
-              Projects
-            </h2>
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-[13px] font-semibold text-foreground">Articles</h2>
+                  <span className="text-xs text-muted-foreground">{displayed.length}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">Draft, refine, and publish articles from your notes.</p>
+              </div>
+            </div>
 
             {displayed.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-14 text-center border border-border/30 border-dashed rounded-2xl bg-card/20">
-                <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-3">
-                  <FileText className="size-6 text-primary/60" />
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/30 bg-secondary/15 p-14 text-center">
+                <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-secondary">
+                  <FileText className="size-5 text-muted-foreground" />
                 </div>
-                <h3 className="font-semibold mb-1">No projects yet</h3>
-                <p className="text-sm text-muted-foreground max-w-xs mb-4">
-                  Pick a content type above or click New Project to start turning your notes into content.
+                <h3 className="mb-1 text-[13px] font-semibold">No articles yet</h3>
+                <p className="mb-4 max-w-xs text-xs leading-5 text-muted-foreground">
+                  Create an article to start turning your notes into publishable content.
                 </p>
+                <button onClick={() => setShowModal(true)} className="rounded-md bg-foreground px-3 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-85">
+                  New Article
+                </button>
               </div>
             ) : view === "grid" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
               {displayed.map((proj) => (
                 <ProjectCard
                   key={proj.id}
@@ -321,7 +320,7 @@ export function StudioHome({
               ))}
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 {displayed.map((proj) => (
                   <ProjectCard
                     key={proj.id}
@@ -347,7 +346,7 @@ export function StudioHome({
         </div>
       </div>
 
-      {/* New Project Modal — kept as-is per plan */}
+      {/* New article modal */}
       <AnimatePresence>
         {showModal && (
           <motion.div
@@ -363,17 +362,17 @@ export function StudioHome({
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
               transition={{ type: "spring", stiffness: 400, damping: 28 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-background border border-border/50 rounded-2xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5"
+              className="flex w-full max-w-md flex-col gap-5 rounded-lg border border-border/50 bg-background p-5 shadow-2xl"
             >
               <div className="flex items-center justify-between">
-                <h2 className="font-bold text-lg">New Project</h2>
-                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-full hover:bg-secondary/50 transition-colors">
+                <h2 className="text-[13px] font-semibold">New Article</h2>
+                <button onClick={() => setShowModal(false)} className="rounded-md p-1.5 transition-colors hover:bg-secondary/50" aria-label="Close new article">
                   <X className="size-4" />
                 </button>
               </div>
 
               <div>
-                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">
+                <label className="mb-2 block text-xs font-medium text-muted-foreground">
                   Content Type
                 </label>
                 <div className="grid grid-cols-1 gap-2">
@@ -383,16 +382,16 @@ export function StudioHome({
                       <button
                         key={mode.id}
                         onClick={() => setSelectedMode(mode.id)}
-                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                        className={`flex items-center gap-3 rounded-lg border p-3 text-left text-[13px] transition-colors ${
                           selectedMode === mode.id
-                            ? "border-primary bg-primary/10"
-                            : "border-border/40 hover:border-primary/30"
+                            ? "border-foreground/30 bg-secondary"
+                            : "border-border/40 hover:bg-secondary/50"
                         } cursor-pointer`}
                       >
-                        <Icon className="size-5 text-primary shrink-0" />
-                        <span className="font-medium text-sm">{mode.label}</span>
+                        <Icon className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="font-medium">{mode.label}</span>
                         {selectedMode === mode.id && (
-                          <Check className="size-4 text-primary ml-auto" />
+                          <Check className="ml-auto size-4 text-foreground" />
                         )}
                       </button>
                     );
@@ -401,7 +400,7 @@ export function StudioHome({
               </div>
 
               <div>
-                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">
+                <label className="mb-2 block text-xs font-medium text-muted-foreground">
                   Target Platform
                 </label>
                 <div className="flex gap-2">
@@ -409,10 +408,10 @@ export function StudioHome({
                     <button
                       key={p}
                       onClick={() => setSelectedPlatform(p)}
-                      className={`flex-1 py-2.5 rounded-xl border text-sm font-medium capitalize transition-all ${
+                      className={`flex-1 rounded-lg border py-2.5 text-[13px] font-medium capitalize transition-colors ${
                         selectedPlatform === p
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border/40 hover:border-primary/30 text-muted-foreground"
+                          ? "border-foreground/30 bg-secondary text-foreground"
+                          : "border-border/40 text-muted-foreground hover:bg-secondary/50"
                       }`}
                     >
                       {p}
@@ -423,9 +422,9 @@ export function StudioHome({
 
               <button
                 onClick={handleCreate}
-                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all active:scale-95"
+                className="w-full rounded-lg bg-foreground py-2.5 text-[13px] font-semibold text-background transition-opacity hover:opacity-85 active:opacity-75"
               >
-                Create Project
+                Create Article
               </button>
             </motion.div>
           </motion.div>

@@ -1,6 +1,6 @@
 {
   "name": "fikr-studio",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "Local-first knowledge and writing workspace for macOS",
   "author": "Bigmints",
   "main": "main.js",
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "NEXT_STATIC_EXPORT=1 next build --webpack",
+    "build": "NEXT_STATIC_EXPORT=1 next build",
     "start": "next start",
     "lint": "eslint app/ components/ lib/ tests/ main.js preload.js scripts/*.js scripts/*.mjs --ext .js,.mjs,.ts,.tsx",
     "typecheck": "tsc --noEmit",
@@ -23,14 +23,18 @@
     "electron:dev": "NODE_PATH=./node_modules concurrently -k -n NEXT,ELECTRON -c cyan,yellow \"next dev -p 3741 --webpack\" \"wait-on http://localhost:3741 && cross-env ELECTRON_IS_DEV=1 electron .\"",
     "electron:prod": "npm run build && NODE_ENV=production electron .",
     "electron:build": "npm run verify && npm run build && electron-builder build --mac",
-    "deploy": "./scripts/deploy.sh"
+    "deploy": "./scripts/deploy.sh --publish",
+    "release:verify": "./scripts/deploy.sh --build-only"
   },
   "dependencies": {
     "electron-updater": "^6.8.3"
   },
   "devDependencies": {
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/search": "^6.7.1",
     "@eslint/eslintrc": "^3.3.5",
-    "@eslint/js": "^9.39.5",
+    "@eslint/js": "^10.0.1",
     "@hookform/resolvers": "^3.9.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-accordion": "1.2.12",
@@ -63,6 +67,11 @@
     "@tailwindcss/postcss": "^4.2.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tiptap/extension-highlight": "^3.27.3",
+    "@tiptap/extension-placeholder": "^3.27.3",
+    "@tiptap/extension-table": "^3.27.3",
+    "@tiptap/extension-task-item": "^3.27.3",
+    "@tiptap/extension-task-list": "^3.27.3",
+    "@tiptap/markdown": "^3.27.3",
     "@tiptap/pm": "^3.27.3",
     "@tiptap/react": "^3.27.3",
     "@tiptap/starter-kit": "^3.27.3",
@@ -70,6 +79,7 @@
     "@types/node": "^22",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@uiw/react-codemirror": "^4.25.11",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -81,9 +91,8 @@
     "date-fns": "4.1.0",
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
-    "electron-builder-squirrel-windows": "26.8.1",
     "embla-carousel-react": "8.6.0",
-    "eslint": "^9.39.5",
+    "eslint": "^10.4.0",
     "eslint-config-next": "^16.2.6",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -118,7 +127,6 @@
     "zod": "^3.24.1"
   },
   "overrides": {
-    "postcss": "$postcss",
-    "websocket-driver": "0.7.5"
+    "postcss": "$postcss"
   }
 }

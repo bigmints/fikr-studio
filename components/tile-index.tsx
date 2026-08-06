@@ -78,7 +78,7 @@ export function TileIndex({ blocks, onHighlight, highlightedId, onClose, isOpen,
         <div className="flex-1 overflow-y-auto custom-scrollbar py-2 px-2 space-y-4">
           {categories.map(([cat, catBlocks]) => (
             <div key={cat} className="space-y-1">
-              <h4 className="px-2.5 text-[8px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest mb-1">{cat}</h4>
+              <h4 className="px-2.5 text-[11px] font-semibold text-muted-foreground/65 mb-1">{cat}</h4>
               {catBlocks.map(block => (
                  <button
                   key={block.id}
@@ -94,7 +94,7 @@ export function TileIndex({ blocks, onHighlight, highlightedId, onClose, isOpen,
                   <div className="mt-0.5 shrink-0 transition-transform group-hover:scale-110">
                     {getIcon(block.contentType)}
                   </div>
-                  <span className="font-mono text-[10px] font-bold truncate leading-tight">
+                  <span className="text-[11px] font-semibold truncate leading-tight">
                     {(block.text || '').substring(0, 35) || "Empty note"}
                   </span>
                 </button>

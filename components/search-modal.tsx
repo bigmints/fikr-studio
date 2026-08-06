@@ -101,7 +101,7 @@ export function SearchModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="w-full max-w-xl bg-background/98 border border-border/60 rounded-xl shadow-2xl overflow-hidden backdrop-blur-2xl"
+            className="w-full max-w-xl overflow-hidden rounded-lg border border-border/60 bg-background shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header / Input */}
@@ -115,7 +115,7 @@ export function SearchModal({
                 className="flex-1 bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted-foreground/50 py-3.5"
               />
               <div className="flex items-center gap-2 shrink-0">
-                <Kbd className="text-[9px]">Esc</Kbd>
+                <Kbd className="text-[11px]">Esc</Kbd>
                 <button
                   onClick={onClose}
                   className="p-1 rounded hover:bg-secondary/60 text-muted-foreground/50 hover:text-foreground transition-colors"
@@ -134,7 +134,7 @@ export function SearchModal({
                   </span>
                   <button 
                     onClick={() => clearRecentSearches()}
-                    className="text-[10px] text-muted-foreground/50 hover:text-foreground transition-colors"
+                    className="text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
                   >
                     Clear
                   </button>
@@ -168,16 +168,16 @@ export function SearchModal({
             {state.results.length > 0 && (
               <div className="flex items-center gap-3 border-t border-border/30 px-4 py-2 bg-secondary/10">
                 <div className="flex items-center gap-1.5">
-                  <Kbd className="text-[9px]">↑↓</Kbd>
-                  <span className="text-[10px] text-muted-foreground/50">navigate</span>
+                  <Kbd className="text-[11px]">↑↓</Kbd>
+                  <span className="text-[11px] text-muted-foreground/60">navigate</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Kbd className="text-[9px]">↵</Kbd>
-                  <span className="text-[10px] text-muted-foreground/50">open</span>
+                  <Kbd className="text-[11px]">↵</Kbd>
+                  <span className="text-[11px] text-muted-foreground/60">open</span>
                 </div>
                 <div className="ml-auto flex items-center gap-1.5">
-                  <Kbd className="text-[9px]">esc</Kbd>
-                  <span className="text-[10px] text-muted-foreground/50">close</span>
+                  <Kbd className="text-[11px]">esc</Kbd>
+                  <span className="text-[11px] text-muted-foreground/60">close</span>
                 </div>
               </div>
             )}

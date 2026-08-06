@@ -261,7 +261,7 @@ export const TileCard = memo(function TileCard({
           />
 
           {block.isUnrelated && !effectiveCollapsed && (
-            <span className="rounded-md px-2 py-0.5 text-[10px] font-medium text-muted-foreground/50 bg-secondary/50 ">
+            <span className="rounded-md px-2 py-0.5 text-[11px] font-medium text-muted-foreground/60 bg-secondary/50 ">
               Not related to topic
             </span>
           )}
@@ -402,7 +402,7 @@ export const TileCard = memo(function TileCard({
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <p className="px-4 pt-3 pb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+            <p className="px-4 pt-3 pb-2 text-[11px] font-semibold text-muted-foreground/60">
               Change type
             </p>
             <div className="grid grid-cols-2 gap-1 p-2 pt-1">
@@ -563,12 +563,12 @@ export const TileCard = memo(function TileCard({
                   }`}
                 >
                   {/* Timestamp */}
-                  <span className="text-[10px] text-muted-foreground/30 self-center mr-1 tabular-nums">
+                  <span className="text-[11px] text-muted-foreground/50 self-center mr-1 tabular-nums">
                     {formattedTime}
                   </span>
 
                   {/* Category tag — plain muted text, no pill background */}
-                  <span className="text-[10px] text-muted-foreground/40 shrink-0 tracking-wide">
+                  <span className="text-[11px] text-muted-foreground/55 shrink-0">
                     #{block.category || "no-topic"}
                   </span>
 
@@ -589,7 +589,7 @@ export const TileCard = memo(function TileCard({
                         }
                       >
                         <Sparkles className="h-3 w-3 text-muted-foreground/50 shrink-0" />
-                        <span className="text-[10px] font-medium text-muted-foreground/60 whitespace-nowrap">
+                        <span className="text-[11px] font-medium text-muted-foreground/65 whitespace-nowrap">
                           {block.influencedBy.length}{" "}
                           {block.influencedBy.length === 1 ? "link" : "links"}
                         </span>
@@ -597,8 +597,8 @@ export const TileCard = memo(function TileCard({
 
                       {/* Hover Tooltip */}
                       <div className="absolute bottom-full left-0 mb-2 w-56 p-3 rounded-xl bg-card border border-border/80 shadow-xl opacity-0 translate-y-2 pointer-events-none group-hover/influences:opacity-100 group-hover/influences:translate-y-0 transition-all z-100">
-                        <h5 className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider mb-2 pb-1.5 border-b border-border/30">
-                          Connected nodes
+                        <h5 className="text-[11px] font-semibold text-muted-foreground/65 mb-2 pb-1.5 border-b border-border/30">
+                          Connected notes
                         </h5>
                         <div className="flex flex-col gap-1.5">
                           {block.influencedBy.slice(0, 5).map((edge, i) => {
@@ -629,14 +629,14 @@ export const TileCard = memo(function TileCard({
                                         : "")
                                     : `#${linkId.slice(0, 8)}`}
                                 </span>
-                                <span className="text-[9px] text-muted-foreground/40 ml-auto pt-0.5 shrink-0 uppercase tracking-wider">
+                                <span className="text-[11px] text-muted-foreground/55 ml-auto pt-0.5 shrink-0">
                                   {linkType}
                                 </span>
                               </div>
                             );
                           })}
                           {block.influencedBy.length > 5 && (
-                            <span className="text-[10px] text-muted-foreground/50 mt-1">
+                            <span className="text-[11px] text-muted-foreground/60 mt-1">
                               +{block.influencedBy.length - 5} more
                             </span>
                           )}

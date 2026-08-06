@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import {
-  X,
   Cpu,
   User,
   Plug,
@@ -25,7 +25,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AI_PROVIDER_PRESETS, getPreset, type AISettings } from "@/lib/ai-settings";
-import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { signOut, onIdTokenChanged, User as FirebaseUser } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { analytics } from "@/lib/analytics";
 import { ConnectionsPage } from "@/components/connections-page";
@@ -93,7 +93,9 @@ export function SettingsPage({
   // Firebase authentication; account authority comes from verified fikr.one APIs.
   useEffect(() => {
     const auth = getFirebaseAuth();
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    // onIdTokenChanged fires for sign-in, sign-out, and automatic Firebase ID
+    // token refreshes. Relay polling must not silently expire after one hour.
+    const unsub = onIdTokenChanged(auth, async (u) => {
       setUser(u);
       if (u) {
         const token = await u.getIdToken().catch(() => null);
@@ -125,6 +127,7 @@ export function SettingsPage({
     onUpdateAISettings({ ...draft, apiKey: draft.apiKey.trim() });
     analytics.track("settings_save");
     onClose();
+    toast("Settings saved");
   };
 
   const planBadgeClass = isPro
@@ -146,21 +149,21 @@ export function SettingsPage({
           style={{ WebkitAppRegion: "no-drag" } as any}
         >
           {/* ── Left sidebar ────────────────────────────────── */}
-          <div className="w-64 shrink-0 flex flex-col bg-sidebar border-r border-border/20 h-full">
+          <aside className="w-56 shrink-0 flex flex-col bg-sidebar border-r border-border/50 h-full">
             {/* Drag region + back */}
             <div className="h-10 shrink-0" style={{ WebkitAppRegion: "drag" } as any} />
             <div className="px-4 pb-5 shrink-0">
               <button
                 onClick={onClose}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+                className="flex min-h-8 items-center gap-2 text-[13px] text-muted-foreground hover:text-foreground transition-colors group"
               >
                 <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
-                Back to Canvas
+                Back to workspace
               </button>
             </div>
 
             <div className="px-4 pb-2">
-              <p className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-muted-foreground/50">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
                 Settings
               </p>
             </div>
@@ -170,16 +173,16 @@ export function SettingsPage({
                 <button
                   key={id}
                   onClick={() => { analytics.track("settings_nav", { section: id }); setSection(id); }}
-                  className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-left transition-all duration-100 group ${
+                  className={`flex min-h-11 items-center gap-3 w-full px-3 rounded-md text-left transition-colors duration-100 group ${
                     section === id
-                      ? "bg-primary/10 text-primary"
+                      ? "bg-foreground/[0.08] text-foreground"
                       : "text-foreground/70 hover:bg-muted/50 hover:text-foreground"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 shrink-0 ${section === id ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
                   <div className="flex flex-col leading-none gap-0.5">
-                    <span className="text-sm font-medium">{label}</span>
-                    <span className="text-[10px] text-muted-foreground/70">{description}</span>
+                    <span className="text-[13px] font-medium">{label}</span>
+                    <span className="text-[11px] text-muted-foreground/70">{description}</span>
                   </div>
                 </button>
               ))}
@@ -188,7 +191,7 @@ export function SettingsPage({
             {/* Plan badge */}
             {user && (
               <div className="p-4 mt-auto shrink-0">
-                <div className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-[13px] font-semibold tracking-tight transition-all ${planBadgeClass}`}>
+                <div className={`flex items-center gap-2 px-3 py-2.5 rounded-md border text-[13px] font-semibold tracking-tight transition-colors ${planBadgeClass}`}>
                   {isPro ? <Zap className="h-4 w-4 shrink-0" /> : isPlus ? <Cloud className="h-4 w-4 shrink-0" /> : <Shield className="h-4 w-4 shrink-0" />}
                   <span className="flex-1">{userPlan} Plan</span>
                   {!isManagedPlan && (
@@ -202,29 +205,21 @@ export function SettingsPage({
                 </div>
               </div>
             )}
-          </div>
+          </aside>
 
           {/* ── Main content ────────────────────────────────── */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Top bar */}
-            <div className="h-10 shrink-0 flex items-center justify-end px-6 border-b border-border/10" style={{ WebkitAppRegion: "drag" } as any}>
-              <button
-                onClick={onClose}
-                className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-                style={{ WebkitAppRegion: "no-drag" } as any}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            <div className="h-10 shrink-0" style={{ WebkitAppRegion: "drag" } as any} />
 
             {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
+              <div className="mx-auto w-full max-w-[720px] px-8 py-10 space-y-8">
 
                 {/* Page header */}
                 {!(section === "account" && !user) && (
                   <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                    <h1 className="font-serif text-[30px] font-medium leading-tight text-foreground">
                       {NAV.find(n => n.id === section)?.label}
                     </h1>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -247,11 +242,11 @@ export function SettingsPage({
                 {section === "llm" && (
                   <div className="flex flex-col gap-6">
                     <div className="flex flex-col gap-2">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Provider</label>
+                      <label className="text-[12px] font-semibold text-foreground">Provider</label>
                       <div className="relative">
                         <button
                           onClick={() => setProviderOpen(v => !v)}
-                          className="flex w-full items-center justify-between rounded-xl border border-border/40 bg-muted/20 px-4 py-3 hover:bg-muted/40 transition-colors"
+                          className="flex min-h-11 w-full items-center justify-between rounded-md border border-border/70 bg-background px-3.5 hover:bg-muted/40 transition-colors"
                         >
                           <div className="flex items-center gap-2.5">
                             <Cpu className="h-4 w-4 text-muted-foreground" />
@@ -266,12 +261,12 @@ export function SettingsPage({
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: -4 }}
                               transition={{ duration: 0.1 }}
-                              className="absolute top-full left-0 right-0 z-20 mt-1.5 rounded-xl border border-border/40 bg-popover shadow-xl overflow-hidden"
+                              className="absolute top-full left-0 right-0 z-20 mt-1.5 rounded-lg border border-border/60 bg-popover p-1.5 shadow-xl overflow-hidden"
                             >
                               {AI_PROVIDER_PRESETS.map(preset => (
                                 <button key={preset.id}
                                   onClick={() => { setDraft(d => ({ ...d, provider: preset.id, apiKey: "", taskModels: { analysis: null, tools: null, transcription: null, vision: null, embedding: null }, customBaseUrl: "" })); setProviderOpen(false); }}
-                                  className="flex w-full items-center gap-3 px-4 py-3 hover:bg-accent/50 transition-colors"
+                                  className="flex min-h-9 w-full items-center gap-3 rounded-md px-3 text-[13px] hover:bg-foreground/[0.07] transition-colors"
                                 >
                                   <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${draft.provider === preset.id ? "border-primary bg-primary" : "border-border/50"}`}>
                                     {draft.provider === preset.id && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
@@ -286,8 +281,8 @@ export function SettingsPage({
                     </div>
 
                     <div className="flex flex-col gap-2">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">API Key</label>
-                      <div className="flex items-center gap-3 rounded-xl border border-border/40 bg-muted/20 px-4 py-3 focus-within:border-primary/50 transition-colors">
+                      <label className="text-[12px] font-semibold text-foreground">API Key</label>
+                      <div className="flex min-h-11 items-center gap-3 rounded-md border border-border/70 bg-background px-3.5 focus-within:border-foreground/50 transition-colors">
                         <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
                         <input
                           type="text"
@@ -315,10 +310,10 @@ export function SettingsPage({
 
 
                     <div className="pt-2 flex justify-end gap-3">
-                      <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
+                      <button onClick={onClose} className="min-h-9 px-4 rounded-md text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
                         Cancel
                       </button>
-                      <button onClick={handleSave} className="px-5 py-2 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                      <button onClick={handleSave} className="min-h-9 px-5 rounded-md text-[13px] font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
                         Save Changes
                       </button>
                     </div>
@@ -336,7 +331,7 @@ export function SettingsPage({
                     {user ? (
                       <>
                         {/* Profile card */}
-                        <div className="flex items-center gap-5 p-6 rounded-3xl border border-border/40 bg-card/50 shadow-sm">
+                        <div className="flex items-center gap-5 border-b border-border/60 pb-6">
                           <div className="relative flex aspect-square size-16 shrink-0 items-center justify-center rounded-full bg-muted border-2 border-background shadow-sm text-primary font-bold text-xl overflow-hidden">
                             {user.photoURL
                               ? <img src={user.photoURL} alt="" className="h-full w-full object-cover" />
@@ -348,7 +343,7 @@ export function SettingsPage({
                             <p className="text-sm text-muted-foreground truncate mb-2">{user.email}</p>
                             
                             <div className="flex items-center gap-3">
-                              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${
                                 isPro ? "bg-amber-500/10 border-amber-500/20 text-amber-600" : isPlus ? "bg-teal-500/10 border-teal-500/20 text-teal-600" : "bg-muted border-border text-muted-foreground"
                               }`}>
                                 {isPro ? <Zap className="size-3" /> : isPlus ? <Cloud className="size-3" /> : null}
@@ -366,9 +361,9 @@ export function SettingsPage({
 
                         {/* Simplified Actions */}
                         <div className="flex flex-col gap-2 mt-2">
-                          <div className="flex items-center justify-between p-4 rounded-2xl border border-border/40 bg-card/50 hover:bg-muted/50 transition-colors">
+                          <div className="flex min-h-16 items-center justify-between border-b border-border/50 py-3 transition-colors">
                             <div className="flex items-center gap-3.5 min-w-0">
-                              <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                              <div className="p-2 rounded-md bg-muted text-foreground">
                                 <Key className="h-4 w-4" />
                               </div>
                               <div className="min-w-0">
@@ -378,7 +373,7 @@ export function SettingsPage({
                             </div>
                             <button
                               onClick={() => { navigator.clipboard.writeText(relayApiKey); setCopiedRelay(true); setTimeout(() => setCopiedRelay(false), 1500); }}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0 ${copiedRelay ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-muted text-foreground hover:bg-primary hover:text-primary-foreground"}`}
+                              className={`min-h-8 px-3 rounded-md text-xs font-semibold transition-colors shrink-0 ${copiedRelay ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-muted text-foreground hover:bg-foreground hover:text-background"}`}
                             >
                               {copiedRelay ? "Copied" : "Copy"}
                             </button>
@@ -386,9 +381,9 @@ export function SettingsPage({
 
                           <button
                             onClick={() => signOut(getFirebaseAuth())}
-                            className="group flex items-center gap-3.5 p-4 rounded-2xl border border-border/40 bg-card/50 hover:bg-destructive/10 hover:border-destructive/30 transition-colors w-full text-left"
+                            className="group flex min-h-16 items-center gap-3.5 border-b border-border/50 py-3 hover:text-destructive transition-colors w-full text-left"
                           >
-                            <div className="p-2 rounded-xl bg-muted text-muted-foreground group-hover:bg-destructive/20 group-hover:text-destructive transition-colors">
+                            <div className="p-2 rounded-md bg-muted text-muted-foreground group-hover:text-destructive transition-colors">
                               <LogOut className="h-4 w-4" />
                             </div>
                             <div className="flex-1">
@@ -398,25 +393,22 @@ export function SettingsPage({
                         </div>
                       </>
                     ) : (
-                      <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-b from-primary/10 to-transparent p-8 sm:p-10 shadow-sm mt-4">
-                        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-                        
-                        <div className="relative z-10 flex flex-col items-center text-center max-w-lg mx-auto">
-                          <div className="inline-flex items-center justify-center p-3 rounded-2xl mb-6 shadow-md"
-                               style={{ background: "linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 70%, #7c3aed) 100%)" }}>
-                            <Cloud className="h-8 w-8 text-white" />
+                      <div className="py-8 sm:py-10">
+                        <div className="flex flex-col items-start max-w-xl">
+                          <div className="mb-6 inline-flex size-12 items-center justify-center rounded-lg bg-foreground text-background">
+                            <Cloud className="h-6 w-6" />
                           </div>
                           
-                          <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mb-3">
-                            Unlock Fikr Cloud
+                          <h3 className="font-serif text-[32px] font-medium leading-tight text-foreground mb-3">
+                            Take your workspace with you
                           </h3>
-                          <p className="text-muted-foreground text-[15px] leading-relaxed mb-8">
+                          <p className="text-muted-foreground text-[15px] leading-relaxed mb-8 max-w-lg">
                             Add account-scoped cloud sync, managed AI access, and an authenticated relay while Studio is running.
                           </p>
 
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-4 w-full text-left mb-10">
+                          <div className="grid gap-4 w-full text-left mb-9 sm:grid-cols-2">
                             <div className="flex items-start gap-3">
-                              <div className="mt-0.5 rounded-md bg-blue-500/10 p-1.5 text-blue-500">
+                              <div className="mt-0.5 rounded-md bg-muted p-1.5 text-foreground">
                                 <RefreshCw className="h-4 w-4" />
                               </div>
                               <div>
@@ -425,7 +417,7 @@ export function SettingsPage({
                               </div>
                             </div>
                             <div className="flex items-start gap-3">
-                              <div className="mt-0.5 rounded-md bg-emerald-500/10 p-1.5 text-emerald-500">
+                              <div className="mt-0.5 rounded-md bg-muted p-1.5 text-foreground">
                                 <Sparkles className="h-4 w-4" />
                               </div>
                               <div>
@@ -434,7 +426,7 @@ export function SettingsPage({
                               </div>
                             </div>
                             <div className="flex items-start gap-3">
-                              <div className="mt-0.5 rounded-md bg-purple-500/10 p-1.5 text-purple-500">
+                              <div className="mt-0.5 rounded-md bg-muted p-1.5 text-foreground">
                                 <Zap className="h-4 w-4" />
                               </div>
                               <div>
@@ -443,7 +435,7 @@ export function SettingsPage({
                               </div>
                             </div>
                             <div className="flex items-start gap-3">
-                              <div className="mt-0.5 rounded-md bg-amber-500/10 p-1.5 text-amber-500">
+                              <div className="mt-0.5 rounded-md bg-muted p-1.5 text-foreground">
                                 <Shield className="h-4 w-4" />
                               </div>
                               <div>
@@ -457,14 +449,13 @@ export function SettingsPage({
                           
                           <button
                             onClick={() => { setLoginError(""); (window as any).fikrStudio?.openAuth(); }}
-                            className="relative overflow-hidden group w-full sm:w-auto px-8 py-3.5 rounded-xl bg-primary text-primary-foreground font-bold text-[15px] transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/25"
+                            className="min-h-11 px-6 rounded-md bg-primary text-primary-foreground font-semibold text-[14px] transition-opacity hover:opacity-85"
                           >
-                            <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
-                            <span className="relative z-10">Sign in with Fikr Cloud</span>
+                            Sign in with Fikr Cloud
                           </button>
                           
-                          <p className="text-[12px] font-medium text-muted-foreground mt-4 flex items-center gap-1.5">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Free plan available. No credit card required.
+                          <p className="text-[12px] font-medium text-muted-foreground mt-4">
+                            Free plan available. No credit card required.
                           </p>
                         </div>
                       </div>

@@ -39,14 +39,14 @@ export function HeatmapToolbar({ activeColor, onSetColor, isRefining }: Props) {
           />
           {label}
           {isRefining && activeColor === color && (
-            <span className="ml-auto text-[9px] animate-pulse">Refining…</span>
+            <span className="ml-auto text-[11px] animate-pulse">Refining…</span>
           )}
         </button>
       ))}
       {activeColor && (
         <button
           onClick={() => onSetColor(null)}
-          className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground text-center mt-0.5 transition-colors"
+          className="text-[11px] text-muted-foreground/60 hover:text-muted-foreground text-center mt-0.5 transition-colors"
         >
           Clear selection
         </button>

@@ -18,7 +18,7 @@ export function CitationPill({ index, citation, onHighlight }: Props) {
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
         onClick={() => onHighlight?.(citation.noteId)}
-        className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary hover:bg-primary/30 transition-colors cursor-pointer mx-0.5"
+        className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-foreground/[0.08] text-foreground hover:bg-foreground/[0.14] transition-colors cursor-pointer mx-0.5"
       >
         #{index}
       </button>

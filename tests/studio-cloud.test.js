@@ -48,6 +48,25 @@ test('serializes deletion baselines and surfaces API errors', async () => {
   });
 });
 
+test('acknowledges the legacy remote MCP queue with its lease token', async () => {
+  let captured;
+  const client = createStudioCloudClient({
+    baseUrl: 'https://example.test',
+    fetchImpl: async (url, options) => {
+      captured = { url, options };
+      return new Response(JSON.stringify({ acknowledged: true }), { status: 200 });
+    },
+  });
+  await client.acknowledgeRelay('token', 'request_1', 'lease_1', { status: 'completed', result: { ok: true } });
+  assert.equal(captured.url, 'https://example.test/api/studio/relay');
+  assert.deepEqual(JSON.parse(captured.options.body), {
+    id: 'request_1',
+    leaseToken: 'lease_1',
+    status: 'completed',
+    result: { ok: true },
+  });
+});
+
 test('leases and acknowledges external relay messages through short authenticated requests', async () => {
   const calls = [];
   const client = createStudioCloudClient({

@@ -16,7 +16,7 @@
       "provider": "github",
       "owner": "bigmints",
       "repo": "fikr-studio",
-      "releaseType": "release"
+      "releaseType": "draft"
     }
   ],
   "files": [
@@ -29,7 +29,6 @@
   ],
   "mac": {
     "category": "public.app-category.productivity",
-    "icon": "build/icon.png",
     "target": ["dmg", "zip"],
     "hardenedRuntime": true,
     "identity": "Pretheesh Thomas (FBG8NKYPUJ)",

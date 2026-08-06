@@ -243,14 +243,14 @@ export function SearchPanel(props: SearchPanelProps) {
                     <div className="text-[11px] font-mono truncate leading-snug">
                       {result.snippet || result.text}
                     </div>
-                    <div className="text-[10px] text-muted-foreground/60">
+                    <div className="text-[11px] text-muted-foreground/60">
                       {result.projectName}
                       {result.contentType !== "general"
                         ? ` · ${result.contentType}`
                         : ""}
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono text-muted-foreground/40">
+                  <span className="text-[11px] font-mono text-muted-foreground/50">
                     {scorePercent}%
                   </span>
                 </button>
@@ -316,7 +316,7 @@ export function SearchPanel(props: SearchPanelProps) {
             <p className="text-[12px] text-muted-foreground/50">
               No matching notes found
             </p>
-            <p className="mt-1 text-[10px] text-muted-foreground/30">
+            <p className="mt-1 text-[11px] text-muted-foreground/50">
               Try different keywords or check your spelling
             </p>
           </div>
@@ -370,7 +370,7 @@ export function SearchPanel(props: SearchPanelProps) {
                   >
                     {result.snippet}
                   </div>
-                  <div className="text-[10px] text-muted-foreground/50 truncate">
+                  <div className="text-[11px] text-muted-foreground/60 truncate">
                     {result.projectName}
                     {result.contentType !== "general" && (
                       <span className="ml-1.5 opacity-70">
@@ -383,7 +383,7 @@ export function SearchPanel(props: SearchPanelProps) {
                 {/* Score badge */}
                 <span
                   className={cn(
-                    "shrink-0 font-mono text-[10px] tabular-nums",
+                    "shrink-0 font-mono text-[11px] tabular-nums",
                     isSelected ? "text-primary/70" : "text-muted-foreground/40",
                   )}
                 >

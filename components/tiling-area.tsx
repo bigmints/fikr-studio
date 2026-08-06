@@ -11,6 +11,7 @@ import React, {
 import { analytics } from "@/lib/analytics";
 import { TileCard, type TextBlock } from "@/components/tile-card";
 import { getRelatedIds, useModKey } from "@/lib/utils";
+import { isEditableShortcutTarget } from "@/lib/keyboard-shortcuts";
 import { TilingMinimap } from "./tiling-minimap";
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
 import { ArrowUpDown, X } from "lucide-react";
@@ -148,11 +149,7 @@ export function TilingArea({
   // Keyboard navigation
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      )
-        return;
+      if (isEditableShortcutTarget(e.target)) return;
 
       if (
         e.key === "ArrowRight" ||
