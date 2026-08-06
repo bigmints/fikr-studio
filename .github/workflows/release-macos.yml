@@ -28,6 +28,9 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Use the lockfile npm version
+        run: npm install --global npm@11.12.1
+
       - name: Configure ephemeral signing keychain
         run: echo "KEYCHAIN_PATH=$RUNNER_TEMP/fikr-studio-release.keychain-db" >> "$GITHUB_ENV"
 

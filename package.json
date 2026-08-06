@@ -5,6 +5,7 @@
   "author": "Bigmints",
   "main": "main.js",
   "private": true,
+  "packageManager": "npm@11.12.1",
   "bin": {
     "fikr-studio-mcp": "./scripts/mcp-bridge.mjs"
   },
