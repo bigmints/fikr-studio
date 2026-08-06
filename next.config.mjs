@@ -23,34 +23,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "sharp$": false,
-      "onnxruntime-node$": false,
-    }
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      path: false,
-      crypto: false,
-    }
-    // Resolve modules starting from this project's own node_modules
-    config.resolve.modules = [
-      `${__dirname}/node_modules`,
-      'node_modules',
-    ]
-    return config
-  },
   turbopack: {
     root: __dirname,
-    resolveAlias: {
-      fs: "./empty.js",
-      path: "./empty.js",
-      crypto: "./empty.js",
-      sharp: "./empty.js",
-      "onnxruntime-node": "./empty.js",
-    },
   },
 }
 
