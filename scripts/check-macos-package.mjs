@@ -17,6 +17,8 @@ const bytes = directoryBytes(appPath);
 if (bytes > 300 * 1024 * 1024) throw new Error(`App bundle exceeds 300 MB: ${bytes} bytes`);
 
 const plist = path.join(appPath, 'Contents', 'Info.plist');
+const executable = path.join(appPath, 'Contents', 'MacOS', 'Fikr Studio');
+const asarRoot = path.join(appPath, 'Contents', 'Resources', 'app.asar');
 const readPlist = key => execFileSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, plist], {
   encoding: 'utf8',
   stdio: ['ignore', 'pipe', 'ignore'],
@@ -35,4 +37,19 @@ for (const key of FORBIDDEN_INFO_KEYS) {
     if (error.message?.startsWith('Forbidden')) throw error;
   }
 }
-console.log(`macOS package metadata passed (${bytes} bytes)`);
+
+const runtimeModules = [
+  'lib/agent-runtime.js',
+  'lib/agent-mcp-config.js',
+  'lib/external-workspace-ops.js',
+  'lib/file-export.js',
+].map((entry) => path.join(asarRoot, entry));
+const runtimeSmoke = `${runtimeModules.map((entry) => `require(${JSON.stringify(entry)});`).join('')}process.stdout.write('ok');`;
+const runtimeOutput = execFileSync(executable, ['-e', runtimeSmoke], {
+  encoding: 'utf8',
+  env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+  stdio: ['ignore', 'pipe', 'pipe'],
+}).trim();
+if (runtimeOutput !== 'ok') throw new Error('Packaged runtime smoke did not complete');
+
+console.log(`macOS package and runtime passed (${bytes} bytes)`);

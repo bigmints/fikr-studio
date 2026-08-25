@@ -2,6 +2,126 @@ tasks:
   next:
         status: todo
         priority: 1
+        summary: "Implement production UI audit fixes"
+        status: todo
+        priority: 1
+        summary: "Redesign outbound MCP connection flow"
+        status: todo
+        priority: 2
+        summary: "Redesign Knowledge workspace and notes typography"
+        status: todo
+        priority: 2
+        summary: "Add smart Space selection and inline Space creation to save note"
+        status: todo
+        priority: 2
+        summary: "Restore clear Shadcn styling for Connections tabs"
+        status: todo
+        priority: 2
+        summary: "Replace Connections plan status with Upgrade action"
+        status: todo
+        priority: 2
+        summary: "Replace Connections navigation icon"
+        status: todo
+        priority: 1
+        summary: "Make API key banner global and permanent"
+        status: todo
+        priority: 2
+        summary: "Simplify Select action to text only"
+        status: todo
+        priority: 1
+        summary: "Repair Knowledge filter and sort controls"
+        status: todo
+        priority: 2
+        summary: "Tighten Knowledge note list rows"
+        status: todo
+        priority: 2
+        summary: "Unify desktop sidebar widths"
+        status: todo
+        priority: 1
+        summary: "Open chat citations in a right-side note preview"
+        status: todo
+        priority: 1
+        summary: "Restore polished creation sharing and cover image export"
+        status: todo
+        priority: 2
+        summary: "Keep contextual sidebar width consistent across desktop screens"
+        status: todo
+        priority: 2
+        summary: "Render chat citations as a compact vertical list"
+        status: todo
+        priority: 2
+        summary: "Remove inline artifact editing from chat results"
+        status: todo
+        priority: 1
+        summary: "Set Inter Source Serif 4 and JetBrains Mono font roles"
+        status: todo
+        priority: 1
+        summary: "Reset typography to shadcn default font sizes"
+        status: todo
+        priority: 1
+        summary: "Polish local MCP connection card"
+        status: todo
+        priority: 1
+        summary: "Align Knowledge Write mode Markdown typography"
+        status: todo
+        priority: 1
+        summary: "Unify Knowledge and Chat Markdown typography"
+        status: todo
+        priority: 1
+        summary: "Show full local MCP connection prompt"
+        status: todo
+        priority: 1
+        summary: "Standardize page headers across Studio"
+        status: todo
+        priority: 2
+        summary: "Align contextual and main panel headers"
+        status: todo
+        priority: 2
+        summary: "Refine chat Markdown rendering"
+        status: todo
+        priority: 1
+        summary: "Refine product-wide typography spacing and layout system"
+        status: todo
+        priority: 2
+        summary: "Add native Electron window title"
+        status: todo
+        priority: 1
+        summary: "Repair dark mode across new Studio surfaces"
+        status: todo
+        priority: 1
+        summary: "Replace native browser controls with shadcn controls"
+        status: todo
+        priority: 1
+        summary: "Support PDF and image chat attachments"
+        status: todo
+        priority: 2
+        summary: "Refine contextual navigation visual hierarchy"
+        status: todo
+        priority: 1
+        summary: "Separate Chat recents from Knowledge workspaces"
+        status: todo
+        priority: 1
+        summary: "Make the application responsive and mobile ready"
+        status: todo
+        priority: 2
+        summary: "Rename Synthesized tab to AI Summary"
+        status: todo
+        priority: 1
+        summary: "Hide the macOS Dock icon while Fikr Studio runs in background and restore it when reopening"
+        status: todo
+        priority: 1
+        summary: "Restore note multi-select, bulk move/delete, and drag-to-space"
+        status: todo
+        priority: 2
+        summary: "Give workspace toolbar more breathing room and make title regions draggable"
+        status: todo
+        priority: 1
+        summary: "Refine splash and onboarding visual system"
+        status: todo
+        priority: 1
+        summary: "Expire completed asynchronous MCP queue messages"
+        status: todo
+        priority: 1
         summary: "Release v0.1.23 and harden delivery"
         status: todo
         priority: 1
@@ -73,7 +193,126 @@ tasks:
         priority: 1
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   in_progress:
-    - release_v0_1_23_and_harden_delivery:
+        status: in_progress
+        priority: high
+        summary: "Implement production UI audit fixes"
+        status: in_progress
+        priority: high
+        summary: "Redesign outbound MCP connection flow"
+        status: in_progress
+        priority: high
+        summary: "Redesign Knowledge workspace and notes typography"
+        status: in_progress
+        priority: high
+        summary: "Add smart Space selection and inline Space creation to save note"
+        status: in_progress
+        priority: high
+        summary: "Restore clear Shadcn styling for Connections tabs"
+        status: in_progress
+        priority: high
+        summary: "Replace Connections plan status with Upgrade action"
+        status: in_progress
+        priority: high
+        summary: "Replace Connections navigation icon"
+        status: in_progress
+        priority: high
+        summary: "Make API key banner global and permanent"
+        status: in_progress
+        priority: high
+        summary: "Simplify Select action to text only"
+        status: in_progress
+        priority: high
+        summary: "Repair Knowledge filter and sort controls"
+        status: in_progress
+        priority: high
+        summary: "Tighten Knowledge note list rows"
+        status: in_progress
+        priority: high
+        summary: "Unify desktop sidebar widths"
+        status: in_progress
+        priority: high
+        summary: "Open chat citations in a right-side note preview"
+        status: in_progress
+        priority: high
+        summary: "Restore polished creation sharing and cover image export"
+        status: in_progress
+        priority: high
+        summary: "Keep contextual sidebar width consistent across desktop screens"
+        status: in_progress
+        priority: high
+        summary: "Render chat citations as a compact vertical list"
+        status: in_progress
+        priority: high
+        summary: "Remove inline artifact editing from chat results"
+        status: in_progress
+        priority: high
+        summary: "Set Inter Source Serif 4 and JetBrains Mono font roles"
+        status: in_progress
+        priority: high
+        summary: "Reset typography to shadcn default font sizes"
+        status: in_progress
+        priority: high
+        summary: "Polish local MCP connection card"
+        status: in_progress
+        priority: high
+        summary: "Align Knowledge Write mode Markdown typography"
+        status: in_progress
+        priority: high
+        summary: "Unify Knowledge and Chat Markdown typography"
+        status: in_progress
+        priority: high
+        summary: "Show full local MCP connection prompt"
+        status: in_progress
+        priority: high
+        summary: "Standardize page headers across Studio"
+        status: in_progress
+        priority: high
+        summary: "Align contextual and main panel headers"
+        status: in_progress
+        priority: high
+        summary: "Refine chat Markdown rendering"
+        status: in_progress
+        priority: high
+        summary: "Refine product-wide typography spacing and layout system"
+        status: in_progress
+        priority: high
+        summary: "Add native Electron window title"
+        status: in_progress
+        priority: high
+        summary: "Repair dark mode across new Studio surfaces"
+        status: in_progress
+        priority: high
+        summary: "Replace native browser controls with shadcn controls"
+        status: in_progress
+        priority: high
+        summary: "Support PDF and image chat attachments"
+        status: in_progress
+        priority: high
+        summary: "Refine contextual navigation visual hierarchy"
+        status: in_progress
+        priority: high
+        summary: "Separate Chat recents from Knowledge workspaces"
+        status: in_progress
+        priority: high
+        summary: "Make the application responsive and mobile ready"
+        status: in_progress
+        priority: high
+        summary: "Rename Synthesized tab to AI Summary"
+        status: in_progress
+        priority: high
+        summary: "Hide the macOS Dock icon while Fikr Studio runs in background and restore it when reopening"
+        status: in_progress
+        priority: high
+        summary: "Restore note multi-select, bulk move/delete, and drag-to-space"
+        status: in_progress
+        priority: high
+        summary: "Give workspace toolbar more breathing room and make title regions draggable"
+        status: in_progress
+        priority: high
+        summary: "Refine splash and onboarding visual system"
+        status: in_progress
+        priority: high
+        summary: "Expire completed asynchronous MCP queue messages"
         status: in_progress
         priority: high
         summary: "Release v0.1.23 and harden delivery"
@@ -134,7 +373,6 @@ tasks:
         status: in_progress
         priority: high
         summary: "Build three-column inbox and editor content layout"
-    - complete_production_readiness_audit_verify_studio_:
         status: in_progress
         priority: high
         summary: "Complete production-readiness audit: verify Studio features, integrations, and exact release gates"
@@ -148,6 +386,90 @@ tasks:
         priority: high
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   completed:
+    - complete_production_readiness_audit_verify_studio_:
+        summary: "Completed production-readiness verification and the approved race recovery: authenticated cloud/local/UI readback shows 8 spaces, 43 notes, 12 chats, 7 non-empty creations, zero QA markers, and one completion log; the race-fixed 0.1.23 release remains verified and unpublished."
+    - implement_production_ui_audit_fixes:
+        summary: "Implemented the production UI audit across shared Markdown, Chat outcomes, responsive navigation, Knowledge continuity, Creations, Settings, accessibility, and consumer-product polish; lint, types, 146 tests, and production webpack build pass."
+    - redesign_outbound_mcp_connection_flow:
+        summary: "Replaced the URL-first Chat tools form with shadcn config import, hosted fallback, discovered-tool permission review, and validated local stdio MCP support."
+    - redesign_knowledge_workspace_and_notes_typography:
+        summary: "Rebuilt Workspaces and Notes typography, metadata, controls, density, and selected states; verified live interactions and 84 tests."
+    - add_smart_space_selection_and_inline_space_creatio:
+        summary: "Added deterministic Space recommendations, inline Shadcn Space creation, and explicit save confirmation with tests."
+    - restore_clear_shadcn_styling_for_connections_tabs:
+        summary: "Restored the standard compact Shadcn segmented tab styling and verified both tab panels switch correctly."
+    - replace_connections_plan_status_with_upgrade_actio:
+        summary: "Replaced the Local Free header status with a Shadcn Upgrade action linked to Fikr pricing for free accounts."
+    - replace_connections_navigation_icon:
+        summary: "Replaced the people-shaped Connections rail icon with a semantically correct cable icon at the shared navigation size and stroke weight."
+    - make_api_key_banner_global_and_permanent:
+        summary: "Moved the no-key notice into a shared permanent Shadcn banner above every main surface and Settings; removed all dismiss state and controls, and verified responsive behavior."
+    - simplify_select_action_to_text_only:
+        summary: "Removed the list-selection icon and kept the Knowledge header action as text-only Select."
+    - repair_knowledge_filter_and_sort_controls:
+        summary: "Repaired clipped Knowledge filter and sort selects as compact Shadcn icon controls with explicit accessible current-value labels; verified filter and sort behavior in the live app."
+    - tighten_knowledge_note_list_rows:
+        summary: "Reduced note-row vertical padding and title-to-metadata spacing for a denser Knowledge list while preserving two-line readability and touch size."
+    - unify_desktop_sidebar_widths:
+        summary: "Unified Chats, Workspaces, Settings, Creations, and legacy desktop sidebar widths behind one 296px design token while preserving full-width mobile layouts."
+    - open_chat_citations_in_a_right_side_note_preview:
+        summary: "Chat citations now open a read-only Shadcn right-side note preview with responsive Markdown and optional AI Summary tabs; navigation context is preserved."
+    - restore_polished_creation_sharing_and_cover_image_:
+        summary: "Restored Creation sharing through a polished Shadcn dialog with destination selection, three cover ratios and styles, local PNG generation, post copying, and explicit platform opening; verified desktop and mobile."
+    - keep_contextual_sidebar_width_consistent_across_de:
+        summary: "Removed the Chat-only 244px override so Recent Chats and Workspaces both stay at a fixed 296px on desktop; compact layouts remain drawers."
+    - render_chat_citations_as_a_compact_vertical_list:
+        summary: "Changed chat citations from inline chips to a compact vertical Shadcn list with 10px label text and 11px clickable source rows."
+    - remove_inline_artifact_editing_from_chat_results:
+        summary: "Removed inline social-artifact editing from chat; retained Shadcn Copy and Save to Creations actions and verified the live action row."
+    - set_inter_source_serif_4_and_jetbrains_mono_font_r:
+        summary: "Mapped Inter to sans UI, Source Serif 4 to editorial display, and JetBrains Mono to code; verified self-hosted build assets"
+    - reset_typography_to_shadcn_default_font_sizes:
+        summary: "Replaced arbitrary app font sizes with Tailwind shadcn scale tokens and removed custom prose sizing overrides"
+    - polish_local_mcp_connection_card:
+        summary: "Reduced local MCP setup to one masked prompt surface, one Shadcn Copy action, and a quiet helper line; verified desktop, 390px responsive layout, lint, types, and 77 tests."
+    - align_knowledge_write_mode_markdown_typography:
+        summary: "Aligned Knowledge Write mode with the shared 15px/25.8px Markdown scale, matching heading, list, quote, code, and table rhythm while preserving raw Source mode."
+    - unify_knowledge_and_chat_markdown_typography:
+        summary: "Unified Knowledge Original and AI Summary Markdown with Chat answers on the same responsive 15px reading scale, line-height, headings, spacing, lists, links, tables, quotes, and code while preserving the larger authoring editor."
+    - show_full_local_mcp_connection_prompt:
+        summary: "Displayed the complete local MCP setup prompt with both URLs and masked tokens, clarified browser-versus-Electron readiness, and verified Electron Copy prompt writes the full real-token prompt without placeholders."
+    - standardize_page_headers_across_studio:
+        summary: "Standardized Chat, Knowledge, Creations list/detail, Connections, and Settings on one 56px header and divider system; removed legacy title-bar spacers, preserved responsive actions, and verified desktop plus phone layouts."
+    - align_contextual_and_main_panel_headers:
+        summary: "Aligned the Chat contextual header to the 56px conversation header and the Knowledge contextual header to the 48px workspace toolbar while preserving compact sidebar widths and row density."
+    - refine_chat_markdown_rendering:
+        summary: "Added a scoped, responsive chat Markdown reading system with Fikr typography, semantic headings and lists, arrow callouts, code, tables, links, and quieter Shadcn citation controls; verified desktop and phone layouts."
+    - refine_product_wide_typography_spacing_and_layout_:
+        summary: "Unified Chat, Knowledge, Creations, Connections, and Settings around one sans-serif hierarchy, shared spacing scale, flat rows and separators, compact page framing, and responsive light/dark behavior; rendered creation Markdown cleanly."
+    - add_native_electron_window_title:
+        summary: "Enabled the native Electron title bar, pinned the main window title to Fikr Studio, aligned renderer metadata, removed obsolete hidden-inset spacers, and verified the relaunched window title through macOS accessibility readback."
+    - refine_contextual_navigation_visual_hierarchy:
+        summary: "Flattened Recent chats into a compact one-line list and moved chat knowledge scope into the composer for consistent new and existing chat controls."
+    - repair_dark_mode_across_new_studio_surfaces:
+        summary: "Repaired dark and light theme parity for contextual navigation, Chat home, Connections, and mobile navigation using semantic tokens and dark variants; verified every primary surface in the running UI."
+    - replace_native_browser_controls_with_shadcn_contro:
+        summary: "Replaced every native select in Studio with a shared shadcn Radix Select and verified chat plus Knowledge interactions in the running UI."
+    - support_pdf_and_image_chat_attachments:
+        summary: "Added bounded PDF and image uploads to Fikr Chat, routed attachment runs through the provider vision model, and verified real OpenRouter image plus PDF understanding in Electron."
+    - separate_chat_recents_from_knowledge_workspaces:
+        summary: "Separated contextual navigation ownership: Chat now exclusively shows Recent chats, Knowledge exclusively shows Workspaces, desktop columns remain permanent, and compact layouts use dedicated responsive drawers; verified with Shadcn primitives, browser QA, lint, typecheck, 73 tests, and diff check."
+    - make_the_application_responsive_and_mobile_ready:
+        summary: "Removed the compact-screen blocker and added responsive Shadcn navigation, drawers, list-detail flows, and mobile layouts across Chat, Knowledge, Creations, Connections, and Settings; verified phone, tablet, and desktop."
+    - rename_synthesized_tab_to_ai_summary:
+        summary: "Renamed the note detail tab from Synthesized to AI Summary; lint and type-check pass."
+    - hide_the_macos_dock_icon_while_fikr_studio_runs_in:
+        summary: "Closing the macOS window now keeps background services alive while hiding the Dock tile; tray, activation, second launch, and auth callbacks restore the Dock and window."
+    - restore_note_multi_select_bulk_move_delete_and_dra:
+        summary: "Restored visible note selection mode with Select all and keyboard support, retained bulk delete/recategorize/resynthesize/move actions, added draggable note rows and workspace drop targets, and kept moved notes synchronized with the search index."
+    - give_workspace_toolbar_more_breathing_room_and_mak:
+        summary: "Expanded the main workspace toolbar to 48px, increased spacing and control heights, and made title/open toolbar regions draggable while preserving no-drag behavior on search and actions."
+    - refine_splash_and_onboarding_visual_system:
+        summary: "Rebranded the splash and onboarding with the restrained monochrome Fikr visual system, verified light and dark flows and provider dropdowns, added replay from the More menu, and enforced a usable 900x600 desktop minimum."
+    - release_v0_1_23_and_harden_delivery:
+        summary: "Published verified v0.1.23, installed official Developer ID build, and established one fail-closed local/CI release pipeline with draft redownload verification."
+    - expire_completed_asynchronous_mcp_queue_messages:
+        summary: "Updated connection guidance, masked relay keys, added explicit key rotation, and removed secret-bearing agent prompts."
     - fix_update_quit_and_install_lifecycle:
         summary: "Restored the storage-safe updater install helper, flushes renderer storage and cookies before quitAndInstall, recovers quit state on asynchronous install failures, and surfaces signature mismatch guidance. Verified the installed ad-hoc 0.1.20 app is running at the update prompt; validation, 56 tests, and production build passed."
     - fix_local_qa_packaged_app_launch:

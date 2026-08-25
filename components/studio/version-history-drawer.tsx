@@ -92,12 +92,12 @@ export function VersionHistoryDrawer({
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Clock size={14} style={{ color: "var(--primary)" }} />
-          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em" }}>
+          <span style={{ fontSize: "var(--text-sm)", fontWeight: 600, letterSpacing: "-0.01em" }}>
             Version History
           </span>
           {versions.length > 0 && (
             <span style={{
-              fontSize: 10, fontWeight: 600, padding: "1px 6px",
+              fontSize: "var(--text-xs)", fontWeight: 600, padding: "1px 6px",
               borderRadius: 20, background: "color-mix(in oklch, var(--primary) 12%, transparent)",
               color: "var(--primary)", fontFamily: "var(--font-mono)",
             }}>
@@ -132,7 +132,7 @@ export function VersionHistoryDrawer({
           style={{
             display: "flex", alignItems: "center", gap: 8,
             width: "100%", padding: "8px 12px", borderRadius: 8,
-            fontSize: 12, fontWeight: 600, cursor: "pointer",
+            fontSize: "var(--text-xs)", fontWeight: 600, cursor: "pointer",
             border: "1px solid color-mix(in oklch, var(--primary) 30%, transparent)",
             background: savedFlash
               ? "color-mix(in oklch, var(--primary) 15%, transparent)"
@@ -145,7 +145,7 @@ export function VersionHistoryDrawer({
           <Save size={12} />
           {savedFlash ? "✓ Version saved!" : "Save current version"}
           <span style={{
-            marginLeft: "auto", fontSize: 9, fontFamily: "var(--font-mono)",
+            marginLeft: "auto", fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)",
             color: "color-mix(in oklch, var(--primary) 60%, transparent)",
             fontWeight: 500,
           }}>
@@ -170,7 +170,7 @@ export function VersionHistoryDrawer({
             }}>
               <Clock size={16} style={{ color: "var(--muted-foreground)", opacity: 0.4 }} />
             </div>
-            <p style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.5, margin: 0 }}>
+            <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", lineHeight: 1.5, margin: 0 }}>
               No versions yet. Versions are saved automatically on generation and when you click "Save current version".
             </p>
           </div>
@@ -197,7 +197,7 @@ export function VersionHistoryDrawer({
         borderTop: "1px solid color-mix(in oklch, var(--border) 30%, transparent)",
         flexShrink: 0,
       }}>
-        <p style={{ fontSize: 10, color: "var(--muted-foreground)", margin: 0, lineHeight: 1.5, opacity: 0.6 }}>
+        <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", margin: 0, lineHeight: 1.5, opacity: 0.6 }}>
           Reverting creates a "Before revert" snapshot so you can always undo the revert.
         </p>
       </div>
@@ -264,7 +264,7 @@ function VersionRow({ version, index, isConfirming, onConfirmRequest, onConfirmC
               : <Sparkles size={10} style={{ color: "var(--muted-foreground)", flexShrink: 0, opacity: 0.5 }} />
             }
             <span style={{
-              fontSize: 12, fontWeight: version.isManual ? 600 : 500,
+              fontSize: "var(--text-xs)", fontWeight: version.isManual ? 600 : 500,
               color: labelColor,
               whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
             }}>
@@ -274,13 +274,13 @@ function VersionRow({ version, index, isConfirming, onConfirmRequest, onConfirmC
 
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span
-              style={{ fontSize: 10, color: "var(--muted-foreground)", opacity: 0.6 }}
+              style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", opacity: 0.6 }}
               title={formatAbsoluteTime(version.savedAt)}
             >
               {formatRelativeTime(version.savedAt)}
             </span>
-            <span style={{ fontSize: 9, opacity: 0.3, color: "var(--foreground)" }}>·</span>
-            <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--muted-foreground)", opacity: 0.5 }}>
+            <span style={{ fontSize: "var(--text-xs)", opacity: 0.3, color: "var(--foreground)" }}>·</span>
+            <span style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)", color: "var(--muted-foreground)", opacity: 0.5 }}>
               {version.wordCount.toLocaleString()} words
             </span>
           </div>
@@ -297,13 +297,13 @@ function VersionRow({ version, index, isConfirming, onConfirmRequest, onConfirmC
               >
                 {isConfirming ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, color: "var(--muted-foreground)", flex: 1 }}>
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", flex: 1 }}>
                       Restore this version?
                     </span>
                     <button
                       onClick={onConfirmCancel}
                       style={{
-                        fontSize: 11, padding: "3px 8px", borderRadius: 5,
+                        fontSize: "var(--text-xs)", padding: "3px 8px", borderRadius: 5,
                         border: "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
                         background: "none", cursor: "pointer",
                         color: "var(--muted-foreground)",
@@ -314,7 +314,7 @@ function VersionRow({ version, index, isConfirming, onConfirmRequest, onConfirmC
                     <button
                       onClick={onConfirm}
                       style={{
-                        fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5,
+                        fontSize: "var(--text-xs)", fontWeight: 600, padding: "3px 10px", borderRadius: 5,
                         border: "none", background: "var(--primary)",
                         color: "var(--primary-foreground)", cursor: "pointer",
                       }}
@@ -327,7 +327,7 @@ function VersionRow({ version, index, isConfirming, onConfirmRequest, onConfirmC
                     onClick={onConfirmRequest}
                     style={{
                       display: "flex", alignItems: "center", gap: 5,
-                      fontSize: 11, fontWeight: 500, padding: "4px 8px", borderRadius: 5,
+                      fontSize: "var(--text-xs)", fontWeight: 500, padding: "4px 8px", borderRadius: 5,
                       border: "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
                       background: "none", cursor: "pointer",
                       color: "var(--foreground)", opacity: 0.7,

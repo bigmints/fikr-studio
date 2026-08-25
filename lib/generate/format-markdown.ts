@@ -6,6 +6,12 @@ import {
 } from "@/lib/ai-settings";
 import { requestByokAi } from "@/lib/ai-provider-request";
 import { LOCAL_AI_CONFIG } from "@/local-ai.config";
+import {
+  cleanFormattedMarkdown,
+  markdownFormatSystemPrompt as buildMarkdownFormatSystemPrompt,
+} from "@/lib/markdown-format-domain.mjs";
+
+export { cleanFormattedMarkdown } from "@/lib/markdown-format-domain.mjs";
 
 export type MarkdownFormatMode = "cleanup" | "structure";
 
@@ -19,24 +25,8 @@ const MODE_INSTRUCTIONS: Record<MarkdownFormatMode, string> = {
     "Organize the existing content into a clear Markdown document with useful headings, sections, lists, and emphasis. Keep every sentence verbatim. You may move existing blocks and add concise structural headings, but must not rewrite the content.",
 };
 
-export function cleanFormattedMarkdown(value: string): string {
-  return value
-    .trim()
-    .replace(/^```(?:markdown|md)?\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-}
-
 export function markdownFormatSystemPrompt(mode: MarkdownFormatMode, scope: "selection" | "document"): string {
-  return `You are a precise Markdown editor. ${MODE_INSTRUCTIONS[mode]}
-
-Rules:
-- Return only valid Markdown. Never add a preamble, explanation, or enclosing code fence.
-- Never paraphrase or rewrite the supplied sentences.
-- Preserve YAML frontmatter when present.
-- Preserve code content exactly; only repair the surrounding fence when needed.
-- Preserve URLs, citations, task completion states, and table data.
-- ${scope === "selection" ? "Format only the supplied selection so it can be inserted back into the surrounding document." : "Return the complete formatted document."}`;
+  return buildMarkdownFormatSystemPrompt(MODE_INSTRUCTIONS[mode], scope);
 }
 
 export async function formatMarkdownWithAi(

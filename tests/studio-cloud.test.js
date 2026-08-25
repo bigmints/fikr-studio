@@ -67,22 +67,39 @@ test('acknowledges the legacy remote MCP queue with its lease token', async () =
   });
 });
 
-test('leases and acknowledges external relay messages through short authenticated requests', async () => {
-  const calls = [];
+test('rotates the relay key through an authenticated POST', async () => {
+  let captured;
   const client = createStudioCloudClient({
     baseUrl: 'https://example.test',
     fetchImpl: async (url, options) => {
-      calls.push({ url, options });
-      return new Response(JSON.stringify({ messages: [] }), { status: 200 });
+      captured = { url, options };
+      return new Response(JSON.stringify({ relayApiKey: 'rotated' }), { status: 200 });
     },
   });
-  await client.leaseExternalMessages('token', 3);
-  await client.acknowledgeExternalMessage('token', 'msg_1', 'lease_1', { ok: true });
-  await client.rejectExternalMessage('token', 'msg_2', 'lease_2', 'failed');
+  assert.deepEqual(await client.rotateRelayKey('token'), { relayApiKey: 'rotated' });
+  assert.equal(captured.url, 'https://example.test/api/mcp/keys');
+  assert.equal(captured.options.method, 'POST');
+  assert.equal(captured.options.headers.Authorization, 'Bearer token');
+});
 
-  assert.equal(calls[0].url, 'https://example.test/api/relay/v1/messages/lease');
-  assert.deepEqual(JSON.parse(calls[0].options.body), { limit: 3 });
-  assert.match(calls[1].url, /\/messages\/msg_1\/ack$/);
-  assert.deepEqual(JSON.parse(calls[1].options.body), { leaseToken: 'lease_1', result: { ok: true } });
-  assert.match(calls[2].url, /\/messages\/msg_2\/nack$/);
+test('loads the read-only billing summary with the authenticated account token', async () => {
+  let captured;
+  const summary = {
+    plan: 'pro',
+    nextPayment: { amount: 1499, currency: 'usd', date: '2026-09-24T00:00:00.000Z' },
+    paymentMethod: { type: 'card', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030 },
+    invoices: [],
+    stripeAvailable: true,
+  };
+  const client = createStudioCloudClient({
+    baseUrl: 'https://example.test',
+    fetchImpl: async (url, options) => {
+      captured = { url, options };
+      return new Response(JSON.stringify(summary), { status: 200 });
+    },
+  });
+
+  assert.deepEqual(await client.getBillingSummary('id-token'), summary);
+  assert.equal(captured.url, 'https://example.test/api/billing/summary');
+  assert.equal(captured.options.headers.Authorization, 'Bearer id-token');
 });

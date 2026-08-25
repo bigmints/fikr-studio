@@ -24,9 +24,10 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
     label: "Navigate",
     shortcuts: [
       { label: "Search workspace", keys: ["mod", "K"], note: "⌘F also works" },
-      { label: "Fikr Intel", keys: ["mod", "1"] },
-      { label: "Fikr Studio", keys: ["mod", "2"] },
-      { label: "Connections", keys: ["mod", "3"] },
+      { label: "Chat", keys: ["mod", "1"] },
+      { label: "Knowledge", keys: ["mod", "2"] },
+      { label: "Creations", keys: ["mod", "3"] },
+      { label: "Connections", keys: ["mod", "4"] },
       { label: "Settings", keys: ["mod", ","] },
     ],
   },

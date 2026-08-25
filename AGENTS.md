@@ -85,8 +85,26 @@ preload.js               ← Narrow renderer IPC bridge
 
 **Key rules:**
 - CSS vars use oklch CHANNELS ONLY (L C H) — not full `oklch()` values
+- Use shadcn/Radix components for dropdowns, date pickers, and comparable interactive controls; never expose browser-native control chrome.
 - Widget JSX uses 100% inline CSS — no Tailwind classes inside widget scope
 - Cloud sync goes through authenticated fikr.one APIs; never ship Firebase Admin credentials
+
+## Agent connection boundary
+
+- Local MCP is free and local-only. Fikr Studio must be open. Use it for reads,
+  searches, creates, updates, deletes, and canvas tools from an AI client on the
+  same computer.
+- Remote or background note delivery requires Plus or Pro and must use a
+  SaveADay Messenger Hook created at `https://www.fikr.one/dashboard/settings`.
+- Messenger is one-way note ingestion. It is not remote MCP and does not expose
+  read, search, edit, delete, or canvas tools.
+- Do not request a Relay API Key for remote note delivery. Do not expose or
+  tunnel the local MCP endpoint to the internet.
+- When the user supplies **Copy instructions for agent** text, treat the URL,
+  source key, and signing secret as server-only secrets. Never commit or log
+  them. The hook already selects the Fikr user and project.
+
+Human and agent instructions are in `docs/messenger-notes.md`.
 
 ## Knowledge
 
@@ -100,3 +118,13 @@ All knowledge in `.agents/context/knowledge/`:
 ```bash
 bash .agents/skills/heartbeat/setup-hooks.sh
 ```
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

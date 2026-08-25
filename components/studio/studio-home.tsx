@@ -92,7 +92,7 @@ function ProjectCard({ proj, onOpen, onArchive, onDuplicate, view }: CardProps) 
       >
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         <div className="flex-1 min-w-0">
-          <span className="block truncate text-[13px] font-semibold">{proj.name}</span>
+          <span className="block truncate text-sm font-semibold">{proj.name}</span>
         </div>
         <StatusBadge status={proj.status} />
         <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
@@ -240,7 +240,7 @@ export function StudioHome({
         {/* LEFT: page title */}
         <div className="studio-toolbar__left">
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>Studio</span>
+            <span style={{ fontSize: "var(--text-sm)", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>Studio</span>
           </div>
         </div>
 
@@ -286,7 +286,7 @@ export function StudioHome({
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
                 <div className="flex items-baseline gap-2">
-                  <h2 className="text-[13px] font-semibold text-foreground">Articles</h2>
+                  <h2 className="text-sm font-semibold text-foreground">Articles</h2>
                   <span className="text-xs text-muted-foreground">{displayed.length}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Draft, refine, and publish articles from your notes.</p>
@@ -298,7 +298,7 @@ export function StudioHome({
                 <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-secondary">
                   <FileText className="size-5 text-muted-foreground" />
                 </div>
-                <h3 className="mb-1 text-[13px] font-semibold">No articles yet</h3>
+                <h3 className="mb-1 text-sm font-semibold">No articles yet</h3>
                 <p className="mb-4 max-w-xs text-xs leading-5 text-muted-foreground">
                   Create an article to start turning your notes into publishable content.
                 </p>
@@ -365,7 +365,7 @@ export function StudioHome({
               className="flex w-full max-w-md flex-col gap-5 rounded-lg border border-border/50 bg-background p-5 shadow-2xl"
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-[13px] font-semibold">New Article</h2>
+                <h2 className="text-sm font-semibold">New Article</h2>
                 <button onClick={() => setShowModal(false)} className="rounded-md p-1.5 transition-colors hover:bg-secondary/50" aria-label="Close new article">
                   <X className="size-4" />
                 </button>
@@ -382,7 +382,7 @@ export function StudioHome({
                       <button
                         key={mode.id}
                         onClick={() => setSelectedMode(mode.id)}
-                        className={`flex items-center gap-3 rounded-lg border p-3 text-left text-[13px] transition-colors ${
+                        className={`flex items-center gap-3 rounded-lg border p-3 text-left text-sm transition-colors ${
                           selectedMode === mode.id
                             ? "border-foreground/30 bg-secondary"
                             : "border-border/40 hover:bg-secondary/50"
@@ -408,7 +408,7 @@ export function StudioHome({
                     <button
                       key={p}
                       onClick={() => setSelectedPlatform(p)}
-                      className={`flex-1 rounded-lg border py-2.5 text-[13px] font-medium capitalize transition-colors ${
+                      className={`flex-1 rounded-lg border py-2.5 text-sm font-medium capitalize transition-colors ${
                         selectedPlatform === p
                           ? "border-foreground/30 bg-secondary text-foreground"
                           : "border-border/40 text-muted-foreground hover:bg-secondary/50"
@@ -422,7 +422,7 @@ export function StudioHome({
 
               <button
                 onClick={handleCreate}
-                className="w-full rounded-lg bg-foreground py-2.5 text-[13px] font-semibold text-background transition-opacity hover:opacity-85 active:opacity-75"
+                className="w-full rounded-lg bg-foreground py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-85 active:opacity-75"
               >
                 Create Article
               </button>

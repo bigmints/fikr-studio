@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { buildBlockMap } = require('app-builder-lib/out/targets/blockmap/blockmap');
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-const dist = path.resolve('dist');
+const dist = path.resolve(process.argv[2] || 'dist');
 const dmg = path.join(dist, `Fikr Studio-${pkg.version}-arm64.dmg`);
 const zip = path.join(dist, `Fikr Studio-${pkg.version}-arm64-mac.zip`);
 

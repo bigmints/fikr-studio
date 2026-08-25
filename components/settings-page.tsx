@@ -1,73 +1,113 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   Cpu,
   User,
-  Plug,
   CreditCard,
+  CalendarDays,
+  ReceiptText,
   Key,
   Eye,
   EyeOff,
-  ChevronDown,
-  Check,
   Cloud,
-  Terminal,
   ExternalLink,
-  Copy,
   LogOut,
   Zap,
   Shield,
   ArrowLeft,
   Sparkles,
   RefreshCw,
+  Bot,
+  ArrowUpRight,
 } from "lucide-react";
-import { AI_PROVIDER_PRESETS, getPreset, type AISettings } from "@/lib/ai-settings";
+import { AI_PROVIDER_PRESETS, getPreset, type AIProvider, type AISettings } from "@/lib/ai-settings";
 import { signOut, onIdTokenChanged, User as FirebaseUser } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { analytics } from "@/lib/analytics";
-import { ConnectionsPage } from "@/components/connections-page";
+import { Button } from "@/components/ui/button";
+import { ApiKeyBanner } from "@/components/api-key-banner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AgentMcpConnections } from "@/components/agent-mcp-connections";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
-export type SettingsSection = "llm" | "account" | "connections";
+export type SettingsSection = "llm" | "tools" | "account";
 
 interface SettingsPageProps {
   open: boolean;
   initialSection?: SettingsSection;
   aiSettings: AISettings;
   onUpdateAISettings: (patch: Partial<AISettings>) => void;
-  mcpPort?: number | null;
-  mcpToken?: string | null;
   onClose: () => void;
   /** Lifted auth state for usage polling in parent */
-  onAuthChange?: (user: any, idToken: string | null, plan: string, relayKey?: string) => void;
+  onAuthChange?: (user: any, idToken: string | null, plan: string) => void;
+  showApiKeyBanner?: boolean;
 }
 
 const NAV: { id: SettingsSection; label: string; description: string; Icon: React.FC<{ className?: string }> }[] = [
   { id: "llm",          label: "LLM Setup",       description: "API keys & provider",          Icon: Cpu },
-  { id: "account",      label: "Account",          description: "Profile & plan",               Icon: User },
-  { id: "connections",  label: "Connections",      description: "AI clients & integrations",    Icon: Plug },
+  { id: "tools",        label: "Chat tools",      description: "MCP servers & permissions",    Icon: Bot },
+  { id: "account",      label: "Account",          description: "Profile & billing",            Icon: User },
 ];
+
+interface BillingSummary {
+  plan: string;
+  nextPayment: { amount: number | null; currency: string | null; date: string } | null;
+  paymentMethod: {
+    type: string;
+    brand: string;
+    last4: string | null;
+    expMonth: number | null;
+    expYear: number | null;
+  } | null;
+  invoices: Array<{
+    id: string | null;
+    number: string | null;
+    date: string | null;
+    amount: number | null;
+    currency: string | null;
+    status: string;
+    url: string | null;
+  }>;
+  stripeAvailable: boolean;
+}
+
+function formatBillingDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+function formatBillingAmount(amount: number | null | undefined, currency: string | null | undefined) {
+  if (typeof amount !== "number" || !currency) return null;
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
+}
+
+function readablePaymentBrand(brand: string) {
+  return brand.replace(/_/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
+}
 
 export function SettingsPage({
   open,
   initialSection = "account",
   aiSettings,
   onUpdateAISettings,
-  mcpPort,
-  mcpToken,
   onClose,
   onAuthChange,
+  showApiKeyBanner = false,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [draft, setDraft] = useState<AISettings>(aiSettings);
   const [showKey, setShowKey] = useState(false);
-  const [providerOpen, setProviderOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userPlan, setUserPlan] = useState("Free");
-  const [relayApiKey, setRelayApiKey] = useState("");
-  const [copiedRelay, setCopiedRelay] = useState(false);
+  const [billing, setBilling] = useState<BillingSummary | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
 
   const isPro = userPlan.toLowerCase().includes("pro");
@@ -83,13 +123,6 @@ export function SettingsPage({
     }
   }, [open, initialSection, aiSettings]);
 
-  // Escape to close
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape" && open) onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
   // Firebase authentication; account authority comes from verified fikr.one APIs.
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -98,6 +131,7 @@ export function SettingsPage({
     const unsub = onIdTokenChanged(auth, async (u) => {
       setUser(u);
       if (u) {
+        setBillingLoading(true);
         const token = await u.getIdToken().catch(() => null);
         const ipc = (window as any).fikrStudio;
         const verified = token && ipc?.setUser
@@ -108,16 +142,17 @@ export function SettingsPage({
           : verified;
         const planRaw = account?.plan || "free";
         const plan = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
-        const relayKey = account?.relayApiKey || "";
         setUserPlan(plan);
-        setRelayApiKey(relayKey);
-        onAuthChange?.(u, token, plan, relayKey);
+        setBilling(account?.billing ?? null);
+        setBillingLoading(false);
+        onAuthChange?.(u, token, plan);
       } else {
         const ipc = (window as any).fikrStudio;
         if (ipc?.setUser) await ipc.setUser(null, null).catch(() => null);
         setUserPlan("Free");
-        setRelayApiKey("");
-        onAuthChange?.(null, null, "Free", "");
+        setBilling(null);
+        setBillingLoading(false);
+        onAuthChange?.(null, null, "Free");
       }
     });
     return () => unsub();
@@ -130,177 +165,136 @@ export function SettingsPage({
     toast("Settings saved");
   };
 
-  const planBadgeClass = isPro
-    ? "text-amber-400 bg-amber-400/10 border-amber-400/30"
-    : isPlus
-    ? "text-teal-400 bg-teal-400/10 border-teal-400/30"
-    : "text-muted-foreground bg-muted/50 border-border/40";
-
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="settings-page"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[100] flex bg-background"
-          style={{ WebkitAppRegion: "no-drag" } as any}
-        >
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="inset-0 left-0 top-0 z-[300] flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 p-0 shadow-none sm:max-w-none md:flex-row"
+        style={{ WebkitAppRegion: "no-drag" } as any}
+      >
           {/* ── Left sidebar ────────────────────────────────── */}
-          <aside className="w-56 shrink-0 flex flex-col bg-sidebar border-r border-border/50 h-full">
-            {/* Drag region + back */}
-            <div className="h-10 shrink-0" style={{ WebkitAppRegion: "drag" } as any} />
-            <div className="px-4 pb-5 shrink-0">
-              <button
+          <aside className="flex h-auto w-full shrink-0 flex-col border-b border-border/50 bg-sidebar md:h-full md:w-[var(--fikr-context-sidebar-width)] md:border-b-0 md:border-r">
+            <header className="flex h-14 shrink-0 items-center border-b border-border px-3">
+              <Button
+                type="button"
+                variant="ghost"
                 onClick={onClose}
-                className="flex min-h-8 items-center gap-2 text-[13px] text-muted-foreground hover:text-foreground transition-colors group"
+                className="group -ml-1 h-8 gap-2 px-2 text-sm text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
                 Back to workspace
-              </button>
-            </div>
+              </Button>
+            </header>
 
-            <div className="px-4 pb-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+            <div className="hidden px-4 pb-2 pt-4 md:block">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">
                 Settings
               </p>
             </div>
 
-            <nav className="flex flex-col gap-0.5 px-2 flex-1">
+            <nav className="flex flex-1 gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:gap-0.5 md:overflow-visible md:px-2 md:pb-0">
               {NAV.filter(n => !(n.id === "llm" && isManagedPlan)).map(({ id, label, description, Icon }) => (
-                <button
+                <Button
                   key={id}
+                  type="button"
+                  variant="ghost"
                   onClick={() => { analytics.track("settings_nav", { section: id }); setSection(id); }}
-                  className={`flex min-h-11 items-center gap-3 w-full px-3 rounded-md text-left transition-colors duration-100 group ${
+                  className={`group flex min-h-11 min-w-max items-center justify-start gap-2 rounded-md px-3 text-left transition-colors duration-100 md:w-full md:gap-3 ${
                     section === id
-                      ? "bg-foreground/[0.08] text-foreground"
-                      : "text-foreground/70 hover:bg-muted/50 hover:text-foreground"
+                      ? "bg-primary/12 text-primary"
+                      : "text-foreground/70 hover:bg-primary/8 hover:text-primary"
                   }`}
                 >
-                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
+                  <Icon className="size-5 shrink-0 text-primary/75 group-hover:text-primary" />
                   <div className="flex flex-col leading-none gap-0.5">
-                    <span className="text-[13px] font-medium">{label}</span>
-                    <span className="text-[11px] text-muted-foreground/70">{description}</span>
+                    <span className="text-sm font-semibold">{label}</span>
+                    <span className="hidden text-xs text-muted-foreground/70 md:block">{description}</span>
                   </div>
-                </button>
+                </Button>
               ))}
             </nav>
 
-            {/* Plan badge */}
-            {user && (
-              <div className="p-4 mt-auto shrink-0">
-                <div className={`flex items-center gap-2 px-3 py-2.5 rounded-md border text-[13px] font-semibold tracking-tight transition-colors ${planBadgeClass}`}>
-                  {isPro ? <Zap className="h-4 w-4 shrink-0" /> : isPlus ? <Cloud className="h-4 w-4 shrink-0" /> : <Shield className="h-4 w-4 shrink-0" />}
-                  <span className="flex-1">{userPlan} Plan</span>
-                  {!isManagedPlan && (
-                    <button
-                      onClick={() => window.open("https://fikr.one", "_blank")}
-                      className="ml-auto flex items-center gap-1 text-primary hover:underline text-[11px] font-bold uppercase tracking-wider"
-                    >
-                      <Sparkles className="h-3 w-3" /> Upgrade
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
           </aside>
 
           {/* ── Main content ────────────────────────────────── */}
           <div className="flex-1 flex flex-col min-w-0">
-            {/* Top bar */}
-            <div className="h-10 shrink-0" style={{ WebkitAppRegion: "drag" } as any} />
+            {showApiKeyBanner && <ApiKeyBanner onAddKey={() => setSection("llm")} />}
+            <header className="flex h-14 shrink-0 items-center border-b border-border px-5 sm:px-8">
+              <div className="min-w-0">
+                <DialogTitle className="truncate text-lg font-bold leading-tight tracking-tight">{NAV.find(n => n.id === section)?.label}</DialogTitle>
+                <DialogDescription className="text-xs">{NAV.find(n => n.id === section)?.description}</DialogDescription>
+              </div>
+            </header>
 
             {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <div className="mx-auto w-full max-w-[720px] px-8 py-10 space-y-8">
-
-                {/* Page header */}
-                {!(section === "account" && !user) && (
-                  <div className="mb-8">
-                    <h1 className="font-serif text-[30px] font-medium leading-tight text-foreground">
-                      {NAV.find(n => n.id === section)?.label}
-                    </h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {NAV.find(n => n.id === section)?.description}
-                    </p>
-                  </div>
-                )}
-
-                {/* ── Connections ── */}
-                {section === "connections" && (
-                  <ConnectionsPage
-                    mcpPort={mcpPort ?? null}
-                    mcpToken={mcpToken ?? null}
-                    plan={userPlan}
-                    relayApiKey={relayApiKey}
-                  />
-                )}
+              <div className="mx-auto w-full max-w-[720px] space-y-7 px-5 py-6 sm:px-8 md:py-8">
 
                 {/* ── LLM Setup ── */}
                 {section === "llm" && (
-                  <div className="flex flex-col gap-6">
+                  <Card className="gap-5 py-5 shadow-none">
+                    <CardHeader className="gap-1 px-5">
+                      <CardTitle className="text-lg">AI provider</CardTitle>
+                      <CardDescription>Choose who powers generation in Fikr Studio.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-5 px-5">
                     <div className="flex flex-col gap-2">
-                      <label className="text-[12px] font-semibold text-foreground">Provider</label>
-                      <div className="relative">
-                        <button
-                          onClick={() => setProviderOpen(v => !v)}
-                          className="flex min-h-11 w-full items-center justify-between rounded-md border border-border/70 bg-background px-3.5 hover:bg-muted/40 transition-colors"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <Cpu className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">{currentPreset.label}</span>
-                          </div>
-                          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${providerOpen ? "rotate-180" : ""}`} />
-                        </button>
-                        <AnimatePresence>
-                          {providerOpen && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -4 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -4 }}
-                              transition={{ duration: 0.1 }}
-                              className="absolute top-full left-0 right-0 z-20 mt-1.5 rounded-lg border border-border/60 bg-popover p-1.5 shadow-xl overflow-hidden"
-                            >
-                              {AI_PROVIDER_PRESETS.map(preset => (
-                                <button key={preset.id}
-                                  onClick={() => { setDraft(d => ({ ...d, provider: preset.id, apiKey: "", taskModels: { analysis: null, tools: null, transcription: null, vision: null, embedding: null }, customBaseUrl: "" })); setProviderOpen(false); }}
-                                  className="flex min-h-9 w-full items-center gap-3 rounded-md px-3 text-[13px] hover:bg-foreground/[0.07] transition-colors"
-                                >
-                                  <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${draft.provider === preset.id ? "border-primary bg-primary" : "border-border/50"}`}>
-                                    {draft.provider === preset.id && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
-                                  </div>
-                                  <span className="text-sm font-medium">{preset.label}</span>
-                                </button>
-                              ))}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
+                      <label className="text-xs font-semibold text-foreground" htmlFor="ai-provider">Provider</label>
+                      <Select
+                        value={draft.provider}
+                        onValueChange={(value) => setDraft((current) => {
+                          const provider = value as AIProvider;
+                          if (current.provider === provider) return current;
+                          return {
+                            ...current,
+                            provider,
+                            apiKey: "",
+                            taskModels: { analysis: null, tools: null, transcription: null, vision: null, embedding: null },
+                          };
+                        })}
+                      >
+                        <SelectTrigger id="ai-provider" aria-label="AI provider" className="min-h-11 w-full rounded-md border-border/70 bg-background px-3.5">
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <Cpu className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <SelectValue />
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AI_PROVIDER_PRESETS.map((preset) => (
+                            <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="flex flex-col gap-2">
-                      <label className="text-[12px] font-semibold text-foreground">API Key</label>
-                      <div className="flex min-h-11 items-center gap-3 rounded-md border border-border/70 bg-background px-3.5 focus-within:border-foreground/50 transition-colors">
-                        <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <input
-                          type="text"
+                      <label htmlFor="llm-api-key" className="text-xs font-semibold text-foreground">API Key</label>
+                      <div className="relative">
+                        <Key className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="llm-api-key"
+                          type={showKey ? "text" : "password"}
                           value={draft.apiKey}
                           onChange={e => setDraft(d => ({ ...d, apiKey: e.target.value }))}
                           placeholder={currentPreset.keyPlaceholder || "Paste your API key here"}
-                          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/40"
-                          style={showKey ? undefined : ({ WebkitTextSecurity: "disc" } as never)}
+                          className="h-11 pl-10 pr-11"
                           autoComplete="off" spellCheck={false}
                         />
-                        <button onClick={() => setShowKey(v => !v)} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={showKey ? "Hide API key" : "Show API key"}
+                          onClick={() => setShowKey(v => !v)}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        >
                           {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
+                        </Button>
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
                         <p className="text-xs text-muted-foreground">Stored on this Mac and sent only to the selected AI provider.</p>
                         {currentPreset.keyUrl && currentPreset.keyUrl !== "#" && (
-                          <a href={currentPreset.keyUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary hover:underline">
+                          <a href={currentPreset.keyUrl} target="_blank" rel="noopener noreferrer" className="flex shrink-0 items-center gap-1 text-xs text-primary hover:underline">
                             Get a key <ExternalLink className="h-3 w-3" />
                           </a>
                         )}
@@ -309,15 +303,27 @@ export function SettingsPage({
 
 
 
-                    <div className="pt-2 flex justify-end gap-3">
-                      <button onClick={onClose} className="min-h-9 px-4 rounded-md text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+                    <div className="flex justify-end gap-2 border-t border-border/60 pt-5">
+                      <Button type="button" variant="ghost" onClick={onClose}>
                         Cancel
-                      </button>
-                      <button onClick={handleSave} className="min-h-9 px-5 rounded-md text-[13px] font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                      </Button>
+                      <Button type="button" onClick={handleSave}>
                         Save Changes
-                      </button>
+                      </Button>
                     </div>
-                  </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* ── Chat tools ── */}
+                {section === "tools" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <AgentMcpConnections embedded />
+                  </motion.div>
                 )}
 
                 {/* ── Account ── */}
@@ -330,83 +336,185 @@ export function SettingsPage({
                   >
                     {user ? (
                       <>
-                        {/* Profile card */}
-                        <div className="flex items-center gap-5 border-b border-border/60 pb-6">
-                          <div className="relative flex aspect-square size-16 shrink-0 items-center justify-center rounded-full bg-muted border-2 border-background shadow-sm text-primary font-bold text-xl overflow-hidden">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                          <div className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-semibold text-foreground">
                             {user.photoURL
                               ? <img src={user.photoURL} alt="" className="h-full w-full object-cover" />
                               : (user.displayName?.charAt(0) || user.email?.charAt(0) || "U").toUpperCase()}
                           </div>
-                          
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold tracking-tight text-foreground text-lg truncate leading-tight">{user.displayName || "Fikr User"}</p>
-                            <p className="text-sm text-muted-foreground truncate mb-2">{user.email}</p>
-                            
-                            <div className="flex items-center gap-3">
-                              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${
-                                isPro ? "bg-amber-500/10 border-amber-500/20 text-amber-600" : isPlus ? "bg-teal-500/10 border-teal-500/20 text-teal-600" : "bg-muted border-border text-muted-foreground"
-                              }`}>
-                                {isPro ? <Zap className="size-3" /> : isPlus ? <Cloud className="size-3" /> : null}
-                                {userPlan}
-                              </div>
-                              <button
-                                onClick={() => window.open("https://fikr.one/dashboard", "_blank")}
-                                className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-primary hover:underline"
-                              >
-                                {isPro ? "Manage billing" : "Upgrade"} <ExternalLink className="size-3" />
-                              </button>
-                            </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-base font-semibold text-foreground">{user.displayName || "Fikr User"}</p>
+                            <p className="truncate text-sm text-muted-foreground">{user.email}</p>
                           </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => window.open("https://fikr.one/dashboard/billing", "_blank")}
+                            className="w-full sm:w-auto"
+                          >
+                            View billing on fikr.one
+                            <ArrowUpRight className="size-4" />
+                          </Button>
                         </div>
 
-                        {/* Simplified Actions */}
-                        <div className="flex flex-col gap-2 mt-2">
-                          <div className="flex min-h-16 items-center justify-between border-b border-border/50 py-3 transition-colors">
-                            <div className="flex items-center gap-3.5 min-w-0">
-                              <div className="p-2 rounded-md bg-muted text-foreground">
-                                <Key className="h-4 w-4" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-foreground">Relay API Key</p>
-                                <p className="text-xs text-muted-foreground truncate max-w-[200px] sm:max-w-[300px] font-mono mt-0.5">{relayApiKey || "—"}</p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(relayApiKey); setCopiedRelay(true); setTimeout(() => setCopiedRelay(false), 1500); }}
-                              className={`min-h-8 px-3 rounded-md text-xs font-semibold transition-colors shrink-0 ${copiedRelay ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-muted text-foreground hover:bg-foreground hover:text-background"}`}
-                            >
-                              {copiedRelay ? "Copied" : "Copy"}
-                            </button>
+                        {billingLoading ? (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="h-36 animate-pulse rounded-xl border border-border bg-muted/30 sm:col-span-2" />
+                            <div className="h-28 animate-pulse rounded-xl border border-border bg-muted/30" />
+                            <div className="h-28 animate-pulse rounded-xl border border-border bg-muted/30" />
                           </div>
+                        ) : (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Card className="gap-4 overflow-hidden border-primary/20 bg-primary/[0.055] py-5 shadow-none sm:col-span-2">
+                              <CardHeader className="flex-row items-start justify-between gap-4 px-5">
+                                <div className="space-y-1.5">
+                                  <CardDescription>Current plan</CardDescription>
+                                  <CardTitle className="text-2xl">{userPlan}</CardTitle>
+                                </div>
+                                <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+                                  isPro
+                                    ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                    : isPlus
+                                      ? "border-teal-500/25 bg-teal-500/10 text-teal-700 dark:text-teal-300"
+                                      : "border-border bg-background text-muted-foreground"
+                                }`}>
+                                  {isManagedPlan ? "Active" : "Local"}
+                                </span>
+                              </CardHeader>
+                              <CardContent className="px-5">
+                                <p className="max-w-lg text-sm leading-6 text-muted-foreground">
+                                  {isPro
+                                    ? "Managed AI, cloud sync, and 1.5 million words each month."
+                                    : isPlus
+                                      ? "Managed AI, cloud sync, and 500,000 words each month."
+                                      : "Use your own AI key and keep your workspace on this computer."}
+                                </p>
+                              </CardContent>
+                            </Card>
 
-                          <button
+                            <Card className="gap-4 py-5 shadow-none">
+                              <CardHeader className="flex-row items-center gap-3 px-5">
+                                <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                                  <CalendarDays className="size-4" />
+                                </div>
+                                <div className="space-y-1">
+                                  <CardDescription>Next payment</CardDescription>
+                                  <CardTitle className="text-base">
+                                    {formatBillingAmount(billing?.nextPayment?.amount, billing?.nextPayment?.currency)
+                                      ?? (billing?.nextPayment ? "Scheduled" : "None scheduled")}
+                                  </CardTitle>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="px-5 text-sm text-muted-foreground">
+                                {formatBillingDate(billing?.nextPayment?.date)
+                                  ?? (isManagedPlan ? "Check fikr.one for renewal details" : "Free plan")}
+                              </CardContent>
+                            </Card>
+
+                            <Card className="gap-4 py-5 shadow-none">
+                              <CardHeader className="flex-row items-center gap-3 px-5">
+                                <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                                  <CreditCard className="size-4" />
+                                </div>
+                                <div className="min-w-0 space-y-1">
+                                  <CardDescription>Payment method</CardDescription>
+                                  <CardTitle className="truncate text-base">
+                                    {billing?.paymentMethod
+                                      ? `${readablePaymentBrand(billing.paymentMethod.brand)}${billing.paymentMethod.last4 ? ` •••• ${billing.paymentMethod.last4}` : ""}`
+                                      : "Not available"}
+                                  </CardTitle>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="px-5 text-sm text-muted-foreground">
+                                {billing?.paymentMethod?.expMonth && billing.paymentMethod.expYear
+                                  ? `Expires ${String(billing.paymentMethod.expMonth).padStart(2, "0")}/${String(billing.paymentMethod.expYear).slice(-2)}`
+                                  : (isManagedPlan ? "Managed securely on fikr.one" : "No card required")}
+                              </CardContent>
+                            </Card>
+                          </div>
+                        )}
+
+                        <Card className="gap-0 overflow-hidden py-0 shadow-none">
+                          <CardHeader className="flex-row items-center gap-3 border-b border-border px-5 py-4">
+                            <ReceiptText className="size-4 text-muted-foreground" />
+                            <div className="space-y-0.5">
+                              <CardTitle className="text-sm">Invoice history</CardTitle>
+                              <CardDescription className="text-xs">Your latest billing receipts</CardDescription>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="p-0">
+                            {billingLoading ? (
+                              <div className="space-y-3 p-5">
+                                <div className="h-10 animate-pulse rounded-md bg-muted/40" />
+                                <div className="h-10 animate-pulse rounded-md bg-muted/40" />
+                              </div>
+                            ) : billing?.invoices?.length ? (
+                              <div className="divide-y divide-border">
+                                {billing.invoices.map((invoice, index) => {
+                                  const invoiceAmount = formatBillingAmount(invoice.amount, invoice.currency);
+                                  const invoiceDate = formatBillingDate(invoice.date);
+                                  return (
+                                    <div key={invoice.id ?? `${invoice.date}-${index}`} className="flex items-center gap-3 px-5 py-3.5">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium text-foreground">{invoice.number || "Invoice"}</p>
+                                        <p className="text-xs text-muted-foreground">{invoiceDate || "Date unavailable"}</p>
+                                      </div>
+                                      <div className="shrink-0 text-right">
+                                        <p className="text-sm font-medium tabular-nums">{invoiceAmount || "—"}</p>
+                                        <p className="text-xs capitalize text-muted-foreground">{invoice.status}</p>
+                                      </div>
+                                      {invoice.url && (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          aria-label={`Open ${invoice.number || "invoice"}`}
+                                          onClick={() => window.open(invoice.url!, "_blank")}
+                                        >
+                                          <ArrowUpRight className="size-4" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="px-5 py-8 text-center">
+                                <p className="text-sm font-medium text-foreground">No invoices yet</p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {isManagedPlan ? "New receipts will appear here after payment." : "Invoices appear after you subscribe on fikr.one."}
+                                </p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+
+                        <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Sign out of Fikr Studio</p>
+                            <p className="text-xs text-muted-foreground">Your local workspace stays on this computer.</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
                             onClick={() => signOut(getFirebaseAuth())}
-                            className="group flex min-h-16 items-center gap-3.5 border-b border-border/50 py-3 hover:text-destructive transition-colors w-full text-left"
+                            className="text-muted-foreground hover:text-destructive"
                           >
-                            <div className="p-2 rounded-md bg-muted text-muted-foreground group-hover:text-destructive transition-colors">
-                              <LogOut className="h-4 w-4" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold text-foreground group-hover:text-destructive transition-colors">Sign Out</p>
-                            </div>
-                          </button>
+                            <LogOut className="size-4" />
+                            Sign out
+                          </Button>
                         </div>
                       </>
                     ) : (
-                      <div className="py-8 sm:py-10">
-                        <div className="flex flex-col items-start max-w-xl">
-                          <div className="mb-6 inline-flex size-12 items-center justify-center rounded-lg bg-foreground text-background">
-                            <Cloud className="h-6 w-6" />
-                          </div>
-                          
-                          <h3 className="font-serif text-[32px] font-medium leading-tight text-foreground mb-3">
-                            Take your workspace with you
-                          </h3>
-                          <p className="text-muted-foreground text-[15px] leading-relaxed mb-8 max-w-lg">
-                            Add account-scoped cloud sync, managed AI access, and an authenticated relay while Studio is running.
-                          </p>
+                      <Card className="gap-0 overflow-hidden py-0 shadow-none">
+                        <div className="bg-gradient-to-br from-primary/16 via-primary/7 to-background px-6 py-7 sm:px-8 sm:py-9">
+                          <span className="mb-4 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><Cloud className="size-5" /></span>
+                          <CardTitle className="max-w-md text-xl">Your Fikr account, in one place</CardTitle>
+                          <CardDescription className="mt-2 max-w-lg leading-6">Sign in to see your plan, next payment, payment method, and invoice history.</CardDescription>
+                        </div>
+                        <CardContent className="px-6 py-6 sm:px-8">
 
-                          <div className="grid gap-4 w-full text-left mb-9 sm:grid-cols-2">
+                          <div className="grid w-full gap-x-8 gap-y-5 text-left sm:grid-cols-2">
                             <div className="flex items-start gap-3">
                               <div className="mt-0.5 rounded-md bg-muted p-1.5 text-foreground">
                                 <RefreshCw className="h-4 w-4" />
@@ -430,8 +538,8 @@ export function SettingsPage({
                                 <Zap className="h-4 w-4" />
                               </div>
                               <div>
-                                <p className="font-semibold text-sm text-foreground">Cloud Relay</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Remote access while Studio is open</p>
+                                <p className="font-semibold text-sm text-foreground">Messenger Notes</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Remote note delivery while Studio is closed</p>
                               </div>
                             </div>
                             <div className="flex items-start gap-3">
@@ -445,20 +553,21 @@ export function SettingsPage({
                             </div>
                           </div>
 
-                          {loginError && <p className="text-[13px] font-bold text-destructive mb-4 px-4 py-2 bg-destructive/10 rounded-lg">{loginError}</p>}
+                          {loginError && <p className="text-sm font-bold text-destructive mb-4 px-4 py-2 bg-destructive/10 rounded-lg">{loginError}</p>}
                           
-                          <button
+                          <Button
+                            type="button"
                             onClick={() => { setLoginError(""); (window as any).fikrStudio?.openAuth(); }}
-                            className="min-h-11 px-6 rounded-md bg-primary text-primary-foreground font-semibold text-[14px] transition-opacity hover:opacity-85"
+                            className="mt-6"
                           >
                             Sign in with Fikr Cloud
-                          </button>
+                          </Button>
                           
-                          <p className="text-[12px] font-medium text-muted-foreground mt-4">
+                          <p className="text-xs font-medium text-muted-foreground mt-4">
                             Free plan available. No credit card required.
                           </p>
-                        </div>
-                      </div>
+                        </CardContent>
+                      </Card>
                     )}
                   </motion.div>
                 )}
@@ -466,8 +575,7 @@ export function SettingsPage({
               </div>
             </div>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </DialogContent>
+    </Dialog>
   );
 }

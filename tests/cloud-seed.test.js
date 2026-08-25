@@ -18,6 +18,33 @@ test('treats an initialized empty cloud as authoritative instead of resurrecting
   });
 });
 
+test('preserves local chats when an older initialized cloud payload omits chatThreads', () => {
+  const localChats = [{ id: 'chat-local', messages: [] }];
+  const cloud = { projects: [{ id: 'cloud' }], studioProjects: [] };
+
+  assert.deepEqual(selectFirstSyncWorkspace({
+    cloudWorkspace: cloud,
+    initialized: true,
+    localWorkspace: { projects: [{ id: 'local' }], chatThreads: localChats },
+  }), {
+    workspace: { ...cloud, chatThreads: localChats },
+    shouldSeed: false,
+  });
+});
+
+test('keeps an explicit empty cloud chatThreads array authoritative', () => {
+  const cloud = { projects: [{ id: 'cloud' }], studioProjects: [], chatThreads: [] };
+
+  assert.deepEqual(selectFirstSyncWorkspace({
+    cloudWorkspace: cloud,
+    initialized: true,
+    localWorkspace: { projects: [{ id: 'local' }], chatThreads: [{ id: 'stale' }] },
+  }), {
+    workspace: cloud,
+    shouldSeed: false,
+  });
+});
+
 test('normalizes legacy raw project arrays before first cloud upload', () => {
   assert.deepEqual(selectFirstSyncWorkspace({ cloudWorkspace: null, initialized: false, localWorkspace: [{ id: 'legacy' }] }), {
     workspace: { projects: [{ id: 'legacy' }], activeProjectId: '', studioProjects: [], activeStudioProjectId: '' },

@@ -44,9 +44,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { normalizeMarkdownForRichEditor } from "@/lib/markdown-entry";
 import {
@@ -123,6 +126,9 @@ export function MarkdownEntryEditor({
   const [formattingMode, setFormattingMode] = React.useState<MarkdownFormatMode | null>(null);
   const [formattingError, setFormattingError] = React.useState<string | null>(null);
   const [formattingNotice, setFormattingNotice] = React.useState<string | null>(null);
+  const [pendingDiscard, setPendingDiscard] = React.useState<"close" | "discard" | null>(null);
+  const [linkDialogOpen, setLinkDialogOpen] = React.useState(false);
+  const [linkUrl, setLinkUrl] = React.useState("https://");
   const hasContent = value.trim().length > 0;
   const isDirty = value !== initialValue;
   const wordCount = value.trim() ? value.trim().split(/\s+/).length : 0;
@@ -181,11 +187,10 @@ export function MarkdownEntryEditor({
           height: "100%",
           backgroundColor: "transparent",
           color: "var(--foreground)",
-          fontSize: "17px",
+          fontSize: "var(--text-base)",
         },
         ".cm-scroller": {
-          fontFamily: "var(--font-sans)",
-          lineHeight: "1.8",
+          lineHeight: "var(--text-base--line-height)",
           padding: "112px clamp(24px, 7vw, 96px) 180px",
           scrollbarWidth: "thin",
         },
@@ -267,19 +272,32 @@ export function MarkdownEntryEditor({
     return () => window.removeEventListener("keydown", handleSaveShortcut, true);
   }, [hasContent, onSave, open]);
 
-  const requestClose = React.useCallback(() => {
-    if (
-      isDirty &&
-      !draftIsRecoverable &&
-      !window.confirm("Discard your unsaved Markdown changes?")
-    ) {
-      return;
-    }
+  const finishClose = React.useCallback(() => {
     formattingAbortRef.current?.abort();
     formattingAbortRef.current = null;
     setFormattingMode(null);
     onClose();
-  }, [draftIsRecoverable, isDirty, onClose]);
+  }, [onClose]);
+
+  const requestClose = React.useCallback(() => {
+    if (isDirty && !draftIsRecoverable) {
+      setPendingDiscard("close");
+      return;
+    }
+    finishClose();
+  }, [draftIsRecoverable, finishClose, isDirty]);
+
+  const requestDiscard = React.useCallback(() => {
+    if (!onDiscard || !hasContent) return;
+    setPendingDiscard("discard");
+  }, [hasContent, onDiscard]);
+
+  const confirmDiscard = React.useCallback(() => {
+    const action = pendingDiscard;
+    setPendingDiscard(null);
+    if (action === "discard") onDiscard?.();
+    else if (action === "close") finishClose();
+  }, [finishClose, onDiscard, pendingDiscard]);
 
   const replaceSelection = React.useCallback(
     (opening: string, closing: string, placeholder: string) => {
@@ -395,14 +413,20 @@ export function MarkdownEntryEditor({
     if (viewMode === "write" && richEditor) {
       if (richSelectionContainsCode()) return;
       const previousUrl = richEditor.getAttributes("link").href as string | undefined;
-      const url = window.prompt("Link URL", previousUrl || "https://");
-      if (url === null) return;
-      if (!url.trim()) richEditor.chain().focus().extendMarkRange("link").unsetLink().run();
-      else richEditor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
+      setLinkUrl(previousUrl || "https://");
+      setLinkDialogOpen(true);
       return;
     }
     replaceSelection("[", "](https://)", "link text");
   }, [replaceSelection, richEditor, richSelectionContainsCode, viewMode]);
+
+  const applyLink = React.useCallback(() => {
+    if (!richEditor) return;
+    const url = linkUrl.trim();
+    if (!url || url === "https://") richEditor.chain().focus().extendMarkRange("link").unsetLink().run();
+    else richEditor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+    setLinkDialogOpen(false);
+  }, [linkUrl, richEditor]);
 
   const toggleBulletList = React.useCallback(() => {
     if (viewMode === "write" && richEditor) richEditor.chain().focus().toggleBulletList().run();
@@ -570,6 +594,7 @@ export function MarkdownEntryEditor({
   }, [open, setLink, toggleBold, toggleItalic]);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(next) => !next && requestClose()}>
       <DialogContent
         showCloseButton={false}
@@ -591,8 +616,8 @@ export function MarkdownEntryEditor({
               <FileText className="size-4" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-semibold tracking-tight text-foreground">{contextLabel}</p>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/65">
+              <p className="truncate text-sm font-semibold tracking-tight text-foreground">{contextLabel}</p>
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground/65">
                 <span className={cn("size-1.5 rounded-full", isDirty ? "bg-amber-400" : "bg-emerald-400")} />
                 <span>{statusLabel}</span>
               </div>
@@ -612,7 +637,7 @@ export function MarkdownEntryEditor({
                   aria-label={label}
                   aria-pressed={viewMode === mode}
                   className={cn(
-                    "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium transition-colors",
+                    "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
                     viewMode === mode
                       ? "bg-background text-foreground shadow-sm ring-1 ring-border/35"
                       : "text-muted-foreground/70 hover:text-foreground",
@@ -656,7 +681,7 @@ export function MarkdownEntryEditor({
                 </ToolbarButton>
                 <span className="mx-1 h-5 w-px shrink-0 bg-border/55" />
                 <ToolbarButton label="Heading 1" onClick={() => toggleHeading(1)} className={cn(viewMode === "write" && richEditor?.isActive("heading", { level: 1 }) && "bg-secondary text-foreground")}><Heading1 /></ToolbarButton>
-                <ToolbarButton label="Heading 2" onClick={() => toggleHeading(2)} className={cn(viewMode === "write" && richEditor?.isActive("heading", { level: 2 }) && "bg-secondary text-foreground")}><span className="text-[11px] font-bold">H2</span></ToolbarButton>
+                <ToolbarButton label="Heading 2" onClick={() => toggleHeading(2)} className={cn(viewMode === "write" && richEditor?.isActive("heading", { level: 2 }) && "bg-secondary text-foreground")}><span className="text-xs font-bold">H2</span></ToolbarButton>
                 <ToolbarButton label="Bold" onClick={toggleBold} className={cn(viewMode === "write" && richEditor?.isActive("bold") && "bg-secondary text-foreground")}><Bold /></ToolbarButton>
                 <ToolbarButton label="Italic" onClick={toggleItalic} className={cn(viewMode === "write" && richEditor?.isActive("italic") && "bg-secondary text-foreground")}><Italic /></ToolbarButton>
                 <ToolbarButton label="Strikethrough" onClick={toggleStrike} className={cn(viewMode === "write" && richEditor?.isActive("strike") && "bg-secondary text-foreground")}><Strikethrough /></ToolbarButton>
@@ -738,14 +763,14 @@ export function MarkdownEntryEditor({
 
         </main>
 
-        <footer className="flex h-11 min-w-0 items-center justify-between gap-3 border-t border-border/25 bg-background/90 px-4 text-[11px] text-muted-foreground/60 backdrop-blur-xl sm:px-6">
+        <footer className="flex h-11 min-w-0 items-center justify-between gap-3 border-t border-border/25 bg-background/90 px-4 text-xs text-muted-foreground/60 backdrop-blur-xl sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
             <span>{wordCount.toLocaleString()} words</span><span className="opacity-35">·</span><span>{value.length.toLocaleString()} characters</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <span className="hidden sm:inline">⌘ S to save</span>
             {onDiscard && (
-              <Button type="button" variant="ghost" size="xs" onClick={onDiscard} disabled={!hasContent} className="rounded-lg text-muted-foreground/60 hover:text-destructive">
+              <Button type="button" variant="ghost" size="xs" onClick={requestDiscard} disabled={!hasContent} className="rounded-lg text-muted-foreground/60 hover:text-destructive">
                 <Trash2 className="size-3" />
                 Discard
               </Button>
@@ -754,7 +779,10 @@ export function MarkdownEntryEditor({
         </footer>
 
         <style>{`
-          .markdown-rich-editor .ProseMirror { min-height: calc(100dvh - 18rem); }
+          .markdown-rich-editor .ProseMirror {
+            min-height: calc(100dvh - 18rem);
+            color: color-mix(in oklch, var(--foreground) 88%, transparent);
+          }
           .markdown-rich-editor .is-editor-empty:first-child::before {
             color: color-mix(in oklch, var(--muted-foreground) 48%, transparent);
             content: attr(data-placeholder);
@@ -762,22 +790,61 @@ export function MarkdownEntryEditor({
             height: 0;
             pointer-events: none;
           }
-          .markdown-rich-editor .ProseMirror h1 { font-family: var(--font-display); font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 500; line-height: 1.14; margin: 0 0 1.25rem; letter-spacing: -0.02em; }
-          .markdown-rich-editor .ProseMirror h2 { font-family: var(--font-display); font-size: 1.65rem; font-weight: 500; line-height: 1.25; margin-top: 2.4rem; letter-spacing: -0.02em; }
-          .markdown-rich-editor .ProseMirror h3 { font-family: var(--font-sans); font-size: 1.25rem; font-weight: 600; margin-top: 2rem; }
-          .markdown-rich-editor .ProseMirror p { font-size: 1.05rem; line-height: 1.82; margin-bottom: 0.9rem; }
-          .markdown-rich-editor .ProseMirror blockquote { border-left: 2px solid #3CA6A6; font-family: var(--font-sans); font-size: 1rem; padding: 0.25rem 0 0.25rem 1.25rem; }
-          .markdown-rich-editor .ProseMirror pre { border-radius: 12px; padding: 1rem 1.15rem; }
+          .markdown-rich-editor .ProseMirror ul:not([data-type="taskList"]),
+          .markdown-rich-editor .ProseMirror ol { margin: 0.25rem 0 1.1rem; padding-left: 1.4rem; }
+          .markdown-rich-editor .ProseMirror li { margin: 0.42rem 0; padding-left: 0.25rem; }
+          .markdown-rich-editor .ProseMirror blockquote { margin: 1.15rem 0 1.35rem; border-left: 2px solid color-mix(in oklch, var(--primary) 72%, transparent); padding: 0.2rem 0 0.2rem 1rem; color: color-mix(in oklch, var(--foreground) 72%, transparent); }
           .markdown-rich-editor .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0; }
           .markdown-rich-editor .ProseMirror li[data-type="taskItem"] { align-items: flex-start; display: flex; gap: 0.65rem; }
           .markdown-rich-editor .ProseMirror li[data-type="taskItem"] > label { margin-top: 0.32rem; }
           .markdown-rich-editor .ProseMirror li[data-type="taskItem"] > div { flex: 1; }
-          .markdown-rich-editor .ProseMirror table { border-collapse: collapse; margin: 1.5rem 0; width: 100%; }
+          .markdown-rich-editor .ProseMirror table { border-collapse: collapse; margin: 1.15rem 0 1.35rem; width: 100%; }
           .markdown-rich-editor .ProseMirror th,
           .markdown-rich-editor .ProseMirror td { border: 1px solid color-mix(in oklch, var(--border) 65%, transparent); padding: 0.65rem 0.8rem; text-align: left; }
           .markdown-rich-editor .ProseMirror th { background: color-mix(in oklch, var(--secondary) 55%, transparent); font-weight: 600; }
         `}</style>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={pendingDiscard !== null} onOpenChange={(next) => !next && setPendingDiscard(null)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{pendingDiscard === "discard" ? "Discard this draft?" : "Discard changes?"}</DialogTitle>
+          <DialogDescription>
+            {pendingDiscard === "discard"
+              ? "This removes the locally saved draft and cannot be undone."
+              : "Your unsaved Markdown changes will be lost."}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => setPendingDiscard(null)}>Keep editing</Button>
+          <Button type="button" variant="destructive" onClick={confirmDiscard}>Discard</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={(event) => { event.preventDefault(); applyLink(); }}>
+          <DialogHeader>
+            <DialogTitle>Add link</DialogTitle>
+            <DialogDescription>Paste a complete web address. Clear it to remove the current link.</DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            aria-label="Link URL"
+            value={linkUrl}
+            onChange={(event) => setLinkUrl(event.target.value)}
+            className="mt-5"
+            placeholder="https://example.com"
+          />
+          <DialogFooter className="mt-5">
+            <Button type="button" variant="ghost" onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
+            <Button type="submit">Apply link</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

@@ -26,7 +26,7 @@ export function HeatmapToolbar({ activeColor, onSetColor, isRefining }: Props) {
             borderColor: activeColor === color ? hex : "transparent",
             color:       activeColor === color ? hex : undefined,
           }}
-          className={`flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all text-left ${
+          className={`flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all text-left ${
             activeColor === color
               ? "bg-card shadow-sm"
               : "text-muted-foreground hover:text-foreground hover:bg-card/60"
@@ -39,14 +39,14 @@ export function HeatmapToolbar({ activeColor, onSetColor, isRefining }: Props) {
           />
           {label}
           {isRefining && activeColor === color && (
-            <span className="ml-auto text-[11px] animate-pulse">Refining…</span>
+            <span className="ml-auto text-xs animate-pulse">Refining…</span>
           )}
         </button>
       ))}
       {activeColor && (
         <button
           onClick={() => onSetColor(null)}
-          className="text-[11px] text-muted-foreground/60 hover:text-muted-foreground text-center mt-0.5 transition-colors"
+          className="text-xs text-muted-foreground/60 hover:text-muted-foreground text-center mt-0.5 transition-colors"
         >
           Clear selection
         </button>

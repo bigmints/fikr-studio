@@ -148,12 +148,12 @@ export function KanbanArea({
               <div className="flex items-center justify-between px-3 py-2.5 mb-3 rounded-lg border border-border/20 bg-secondary/20 shadow-sm backdrop-blur-sm">
                 <div className="flex items-center gap-2.5">
                   <col.icon className="h-4 w-4 text-muted-foreground/70" />
-                  <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-foreground/80">
+                  <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-foreground/80">
                     {col.title}
                   </h3>
                 </div>
                 <div className="bg-background/80 px-2 py-0.5 rounded-md border border-border/40 shadow-inner">
-                  <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                  <span className="font-mono text-xs text-muted-foreground font-semibold">
                     {col.blocks.length}
                   </span>
                 </div>
@@ -200,11 +200,11 @@ export function KanbanArea({
             <div className="opacity-80 mix-blend-plus-lighter">
               <img
                 src="logo-icon.png"
-                alt="Fikr Studio"
+                alt="Fikr"
                 className="h-14 w-14 object-contain"
               />
             </div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/35 -mt-2">
+            <p className="font-mono text-xs uppercase tracking-widest text-foreground/35 -mt-2">
               type-grouped board view
             </p>
 
@@ -240,12 +240,12 @@ export function KanbanArea({
                   />
                   <div className="flex flex-col gap-1">
                     <span
-                      className="font-mono text-[10px] uppercase tracking-[0.2em]"
+                      className="font-mono text-xs uppercase tracking-widest"
                       style={{ color }}
                     >
                       {label}
                     </span>
-                    <p className="text-[14px] leading-snug text-foreground/50">
+                    <p className="text-sm leading-snug text-foreground/50">
                       {hint}
                     </p>
                   </div>
@@ -253,7 +253,7 @@ export function KanbanArea({
               ))}
             </div>
 
-            <p className="text-[13px] text-foreground/50 uppercase tracking-[0.15em] whitespace-nowrap">
+            <p className="text-sm text-foreground/50 uppercase tracking-widest whitespace-nowrap">
               {`type anything · #type to classify · ${mod}K for commands`}
             </p>
           </div>

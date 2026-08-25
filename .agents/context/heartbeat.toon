@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-08-06T06:42:39Z"
+  last_seen: "2026-08-25T09:09:18Z"
   host: "BigMac-2"
-  task: "release_v0_1_23_and_harden_delivery: hardening canonical release"
+  task: "Session end: complete_production_readiness_audit_verify_studio_ — recovery verified"
   status: alive

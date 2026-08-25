@@ -82,11 +82,12 @@ export function BulkActionPanel({
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          data-testid="bulk-action-panel"
           initial={{ x: "100%" }}
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
           transition={{ type: "spring", damping: 28, stiffness: 240 }}
-          className="absolute right-0 top-0 bottom-0 w-72 bg-background border-l border-border/40 shadow-2xl z-50 flex flex-col overflow-hidden"
+          className="absolute bottom-0 right-0 top-0 z-50 flex w-full flex-col overflow-hidden border-l border-border/40 bg-background shadow-2xl sm:w-72"
         >
           {/* ── Header ── */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-border/20 shrink-0">
@@ -94,26 +95,28 @@ export function BulkActionPanel({
               {subView !== "root" && (
                 <button
                   onClick={() => setSubView("root")}
+                  aria-label="Back to bulk actions"
                   className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                 </button>
               )}
               <div>
-                <p className="text-[11px] font-semibold text-muted-foreground/70">
+                <p className="text-xs font-semibold text-muted-foreground/70">
                   {subView === "root"
                     ? "Bulk Actions"
                     : subView === "move"
                     ? "Move to workspace"
                     : "Set Category"}
                 </p>
-                <p className="text-[13px] font-semibold text-foreground leading-tight">
+                <p className="text-sm font-semibold text-foreground leading-tight">
                   {selectedCount} note{selectedCount !== 1 ? "s" : ""} selected
                 </p>
               </div>
             </div>
             <button
               onClick={onClose}
+              aria-label="Close bulk actions"
               className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="w-4 h-4" />
@@ -209,10 +212,10 @@ export function BulkActionPanel({
                         onClick={() => handleMoveConfirm(project.id)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-secondary transition-colors group text-left"
                       >
-                        <div className="w-7 h-7 rounded-md bg-sky-400/10 text-sky-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                        <div className="w-7 h-7 rounded-md bg-sky-400/10 text-sky-400 flex items-center justify-center text-xs font-bold shrink-0">
                           {project.name.charAt(0).toUpperCase()}
                         </div>
-                        <span className="flex-1 text-[13px] font-medium text-foreground/90 truncate">
+                        <span className="flex-1 text-sm font-medium text-foreground/90 truncate">
                           {project.name}
                         </span>
                         <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
@@ -232,7 +235,7 @@ export function BulkActionPanel({
                   transition={{ duration: 0.14 }}
                   className="p-4 space-y-4"
                 >
-                  <p className="text-[12px] text-muted-foreground leading-snug">
+                  <p className="text-xs text-muted-foreground leading-snug">
                     Type a category name to assign to all {selectedCount} selected
                     note{selectedCount !== 1 ? "s" : ""}. The AI will preserve the
                     new category during future enrichment.
@@ -251,7 +254,7 @@ export function BulkActionPanel({
                           if (e.key === "Escape") setSubView("root");
                         }}
                         placeholder="e.g. Architecture, Research..."
-                        className="flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
+                        className="flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
                       />
                       {newCategory.trim() && (
                         <button
@@ -266,7 +269,7 @@ export function BulkActionPanel({
                     <button
                       onClick={handleRecategorizeConfirm}
                       disabled={!newCategory.trim()}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-all"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-all"
                     >
                       <Check className="w-3.5 h-3.5" />
                       Apply to {selectedCount} note{selectedCount !== 1 ? "s" : ""}
@@ -323,13 +326,13 @@ function ActionRow({
       </div>
       <div className="flex-1 min-w-0">
         <p
-          className={`text-[13px] font-semibold leading-none mb-0.5 ${
+          className={`text-sm font-semibold leading-none mb-0.5 ${
             destructive ? "text-destructive" : "text-foreground/90"
           }`}
         >
           {label}
         </p>
-        <p className="text-[11px] text-muted-foreground truncate">
+        <p className="text-xs text-muted-foreground truncate">
           {description}
         </p>
       </div>

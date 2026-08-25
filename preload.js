@@ -29,6 +29,27 @@ contextBridge.exposeInMainWorld("fikrStudio", {
   setSecureAiKey: (provider, apiKey) => ipcRenderer.invoke("fikr-studio:secure-set-ai-key", provider, apiKey),
   requestAi: (provider, body) => ipcRenderer.invoke("fikr-studio:request-ai", { provider, body }),
 
+  /** Run and cancel bounded Fikr agent workflows in the trusted main process. */
+  runAgent: (request) => ipcRenderer.invoke("fikr-studio:run-agent", request),
+  cancelAgent: (runId) => ipcRenderer.invoke("fikr-studio:cancel-agent", runId),
+  onAgentEvent: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("fikr-studio:agent-event", handler);
+    return () => ipcRenderer.removeListener("fikr-studio:agent-event", handler);
+  },
+  getAgentMcpConnections: () => ipcRenderer.invoke("fikr-studio:get-agent-mcp-connections"),
+  discoverAgentMcpTools: (connection) => ipcRenderer.invoke("fikr-studio:discover-agent-mcp-tools", connection),
+  saveAgentMcpConnection: (connection) => ipcRenderer.invoke("fikr-studio:save-agent-mcp-connection", connection),
+  setAgentMcpConnectionEnabled: (name, enabled) => ipcRenderer.invoke("fikr-studio:set-agent-mcp-connection-enabled", name, enabled),
+  removeAgentMcpConnection: (name) => ipcRenderer.invoke("fikr-studio:remove-agent-mcp-connection", name),
+
+  /** Write plain text through Electron when renderer clipboard permission is unavailable. */
+  writeClipboardText: (text) => ipcRenderer.invoke("fikr-studio:clipboard-write-text", text),
+
+  /** Save a bounded text export through Electron without navigating the renderer. */
+  saveTextFile: (filename, content) => ipcRenderer.invoke("fikr-studio:save-text-file", { filename, content }),
+  saveBase64File: (filename, base64) => ipcRenderer.invoke("fikr-studio:save-base64-file", { filename, base64 }),
+
   /**
    * Register a callback for events pushed from the MCP server.
    * The callback receives { type, payload } objects.
@@ -60,6 +81,7 @@ contextBridge.exposeInMainWorld("fikrStudio", {
   getMcpConnection: () => ipcRenderer.invoke("fikr-studio:get-mcp-connection"),
   /** Return the server-verified account profile and plan. */
   getAccount: () => ipcRenderer.invoke("fikr-studio:get-account"),
+  rotateRelayKey: () => ipcRenderer.invoke("fikr-studio:rotate-relay-key"),
 
   /** Execute a tool directly from the React renderer (e.g. from Cloud Relay) */
   executeTool: (name, args) => ipcRenderer.invoke("fikr-studio:execute-tool", { name, args }),

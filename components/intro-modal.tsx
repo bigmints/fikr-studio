@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Cloud, Key, ChevronDown, Check, Bell, ChevronRight, Eye, EyeOff, Sparkles, Wand2 } from "lucide-react"
+import { Cloud, Key, ChevronDown, Check, Bell, ChevronRight, Eye, EyeOff, Sparkles, Wand2 } from "lucide-react"
 import { getFirebaseAuth } from "@/lib/firebase"
-import { onAuthStateChanged, User, signInWithCustomToken } from "firebase/auth"
+import { onIdTokenChanged, User, signInWithCustomToken } from "firebase/auth"
 import { useAISettings, AI_PROVIDER_PRESETS, type AIProvider, getPreset } from "@/lib/ai-settings"
 import { analytics } from "@/lib/analytics"
 import pkg from "../package.json"
@@ -62,7 +62,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
   useEffect(() => {
     const auth = getFirebaseAuth()
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribeAuth = onIdTokenChanged(auth, async (currentUser) => {
       setUser(currentUser)
       if (currentUser) {
         const token = await currentUser.getIdToken().catch(() => null)
@@ -128,34 +128,40 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
         >
           {/* Backdrop */}
           <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/45"
             onClick={() => onClose()}
           />
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            initial={{ opacity: 0, scale: 0.98, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.2 }}
-            className="relative m-auto w-full max-w-[500px] bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
-            style={{ minHeight: "480px" }}
+            exit={{ opacity: 0, scale: 0.98, y: 8 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="relative m-auto flex w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-background shadow-[0_32px_90px_rgba(0,0,0,0.28)]"
+            style={{ minHeight: "min(520px, calc(100vh - 32px))", maxHeight: "calc(100vh - 32px)" }}
           >
             {/* Header */}
-            <div className="relative z-10 flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
+            <div className="relative z-10 flex items-start justify-between px-6 pt-6 sm:px-8 sm:pt-7 shrink-0">
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
-                    <img src="./logo-icon.png" alt="Fikr Studio" className="h-4 w-4 object-contain brightness-0 invert" />
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-foreground" aria-hidden="true">
+                    <span
+                      className="h-5 w-5 bg-background"
+                      style={{
+                        WebkitMask: "url('/logo.svg') center / contain no-repeat",
+                        mask: "url('/logo.svg') center / contain no-repeat",
+                      }}
+                    />
                   </div>
-                  <span className="font-semibold text-lg text-foreground tracking-tight">Fikr Studio</span>
-                  <span className="text-xs font-medium text-muted-foreground ml-1">v{pkg.version}</span>
+                  <span className="font-serif text-xl font-medium text-foreground tracking-tight">Fikr</span>
+                  <span className="text-xs text-muted-foreground">v{pkg.version}</span>
                 </div>
-                <div className="flex items-center gap-1.5 mt-2">
+                <div className="flex items-center gap-1.5 mt-4" aria-label={`Step ${currentStepIndex + 1} of ${steps.length}`}>
                   {steps.map((s, idx) => (
                     <div
                       key={s}
-                      className={`h-1 rounded-full transition-all duration-300 ${
-                        idx <= currentStepIndex ? "w-8 bg-primary" : "w-4 bg-muted"
+                      className={`h-0.5 transition-all duration-300 ${
+                        idx <= currentStepIndex ? "w-8 bg-foreground" : "w-5 bg-border"
                       }`}
                     />
                   ))}
@@ -163,15 +169,15 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label="Close"
+                className="min-h-8 px-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Skip setup"
               >
-                <X className="h-4 w-4" />
+                Skip
               </button>
             </div>
 
             {/* Content Area */}
-            <div className="relative z-10 flex-1 px-6 py-4 flex flex-col">
+            <div className="relative z-10 flex flex-1 flex-col overflow-y-auto px-6 pb-6 pt-8 sm:px-8 sm:pb-8 sm:pt-10">
               <AnimatePresence mode="wait">
                 {/* STEP 1: INTRO */}
                 {step === "intro" && (
@@ -183,30 +189,30 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                     transition={{ duration: 0.2 }}
                     className="flex flex-col h-full"
                   >
-                    <h2 className="text-2xl font-bold text-foreground mb-3">
-                      Capture first. Enrich when you choose.
+                    <h2 className="font-serif text-3xl font-medium leading-none tracking-tight text-foreground mb-3">
+                      Your thinking, in one place.
                     </h2>
-                    <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-                      Notes stay available locally. Configure your own provider or sign in with an eligible plan when you want AI classification and annotation.
+                    <p className="max-w-[460px] text-muted-foreground text-sm leading-relaxed mb-8">
+                      Capture notes without an account. Add AI only when it is useful, using your own provider or a Fikr plan.
                     </p>
                     
-                    <div className="space-y-4 flex-1">
+                    <div className="space-y-5 flex-1">
                       <div className="flex items-start gap-4">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted border border-border text-foreground shadow-sm">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
                           <Wand2 className="h-4 w-4" />
                         </div>
                         <div>
-                          <h3 className="text-foreground text-sm font-semibold mb-0.5">Local-first capture</h3>
-                          <p className="text-xs text-muted-foreground leading-relaxed">Write and organize notes without an account. AI enrichment is optional and clearly configured.</p>
+                          <h3 className="text-foreground text-sm font-semibold mb-1">Local by default</h3>
+                          <p className="text-xs text-muted-foreground leading-relaxed">Your workspace stays useful without sign-in or an AI connection.</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-4">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted border border-border text-foreground shadow-sm">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
                           <Sparkles className="h-4 w-4" />
                         </div>
                         <div>
-                          <h3 className="text-foreground text-sm font-semibold mb-0.5">Multiple workspace views</h3>
-                          <p className="text-xs text-muted-foreground leading-relaxed">See the shape of your thoughts. Navigate visually and let unexpected connections surface.</p>
+                          <h3 className="text-foreground text-sm font-semibold mb-1">One workspace, multiple views</h3>
+                          <p className="text-xs text-muted-foreground leading-relaxed">Read in an inbox, explore connections, and return to the source at any time.</p>
                         </div>
                       </div>
                     </div>
@@ -214,9 +220,9 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                     <div className="mt-8 flex justify-end">
                       <button
                         onClick={() => setStep("auth")}
-                        className="px-5 py-2.5 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-2 shadow-sm"
+                        className="min-h-10 px-5 text-sm font-medium rounded-md bg-foreground text-background hover:opacity-90 transition-opacity flex items-center gap-2"
                       >
-                        Configure Engine <ChevronRight className="h-4 w-4" />
+                        Continue <ChevronRight className="h-4 w-4" />
                       </button>
                     </div>
                   </motion.div>
@@ -235,19 +241,19 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                     {authMode === "choose" ? (
                       <div className="flex flex-col h-full">
                         <div className="mb-6">
-                          <h2 className="text-2xl font-bold text-foreground mb-2">Connect Intelligence</h2>
-                          <p className="text-sm text-muted-foreground">
-                            Choose how Fikr Studio powers its AI capabilities. You can always change this later in Settings.
+                          <h2 className="font-serif text-3xl font-medium leading-none tracking-tight text-foreground mb-3">Choose how AI works.</h2>
+                          <p className="max-w-[440px] text-sm leading-relaxed text-muted-foreground">
+                            Sign in for managed AI and sync, or connect your own provider. You can change this later.
                           </p>
                         </div>
 
-                        <div className="flex flex-col gap-4 mb-6 mt-8">
+                        <div className="flex flex-col gap-3 mb-6 mt-8">
                           <button 
                             onClick={() => {
                               if (user) setStep("notifications");
                               else (window as any).fikrStudio?.openAuth?.();
                             }}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors shadow-sm"
+                            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 font-medium text-background transition-opacity hover:opacity-90"
                           >
                             <Cloud className="h-5 w-5" />
                             {user ? "Continue with Fikr Cloud" : "Sign in with Fikr Cloud"}
@@ -257,7 +263,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
 
                           <button 
                             onClick={() => setAuthMode("byok")}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-transparent border border-border text-foreground rounded-xl font-medium hover:bg-muted transition-colors"
+                            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-border/80 bg-background px-4 font-medium text-foreground transition-colors hover:bg-muted"
                           >
                             <Key className="h-5 w-5 text-muted-foreground" />
                             Use your own AI API key
@@ -267,9 +273,9 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                     ) : (
                       <div className="flex flex-col h-full">
                         <div className="mb-6">
-                          <h2 className="text-2xl font-bold text-foreground mb-2">Local Configuration</h2>
-                          <p className="text-sm text-muted-foreground">
-                            Configure your local provider. API keys are stored securely on your machine.
+                          <h2 className="font-serif text-3xl font-medium leading-none tracking-tight text-foreground mb-3">Use your own provider.</h2>
+                          <p className="text-sm leading-relaxed text-muted-foreground">
+                            Your API key is stored securely on this Mac and is never synced to Fikr.
                           </p>
                         </div>
 
@@ -277,7 +283,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                           <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Provider</label>
                           <button
                             onClick={() => setProviderOpen(v => !v)}
-                            className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-left hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                            className="flex min-h-11 w-full items-center justify-between rounded-md border border-border/80 bg-background px-3.5 text-left hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-foreground/30"
                           >
                             <span className="text-sm font-medium text-foreground">{currentPreset.label}</span>
                             <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${providerOpen ? "rotate-180" : ""}`} />
@@ -286,13 +292,13 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                             {providerOpen && (
                               <motion.div 
                                 initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}
-                                className="absolute top-[64px] left-0 right-0 z-20 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+                                className="absolute top-[64px] left-0 right-0 z-20 overflow-hidden rounded-lg border border-border/80 bg-popover p-1.5 shadow-xl"
                               >
                                 {AI_PROVIDER_PRESETS.map((preset) => (
                                   <button
                                     key={preset.id}
                                     onClick={() => { setDraftProvider(preset.id); setProviderOpen(false); }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted transition-colors"
+                                    className="flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 text-left hover:bg-muted transition-colors"
                                   >
                                     <div className="w-4 flex justify-center">
                                       {draftProvider === preset.id && <Check className="h-3 w-3 text-primary" />}
@@ -307,7 +313,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
 
                         <div className="mb-4">
                           <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">API Key</label>
-                          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 focus-within:ring-1 focus-within:ring-primary/50 focus-within:border-primary/50">
+                          <div className="flex min-h-11 items-center gap-2 rounded-md border border-border/80 bg-background px-3.5 focus-within:ring-1 focus-within:ring-foreground/30">
                             <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
                             <input
                               type="text"
@@ -335,7 +341,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                           <button
                             onClick={handleSaveByok}
                             disabled={!draftKey.trim()}
-                            className="px-5 py-2.5 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+                            className="min-h-10 px-5 text-sm font-medium rounded-md bg-foreground text-background hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                           >
                             Save & Continue <ChevronRight className="h-4 w-4" />
                           </button>
@@ -355,15 +361,15 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                     transition={{ duration: 0.2 }}
                     className="flex flex-col h-full"
                   >
-                    <div className="flex-1 flex flex-col items-center justify-center text-center gap-6 py-6">
-                      <div className="h-16 w-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
-                        <Bell className="h-7 w-7" />
+                    <div className="flex flex-1 flex-col justify-center gap-7 py-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-md bg-foreground text-background">
+                        <Bell className="h-5 w-5" />
                       </div>
                       
-                      <div>
-                        <h2 className="text-xl font-bold text-foreground mb-2">Stay in the loop</h2>
-                        <p className="text-muted-foreground text-sm max-w-[280px] mx-auto leading-relaxed">
-                          Allow notifications to receive quiet, elegant updates when AI agents finish processing your spatial tasks.
+                      <div className="max-w-[440px]">
+                        <h2 className="font-serif text-3xl font-medium leading-none tracking-tight text-foreground mb-3">Notifications, when useful.</h2>
+                        <p className="text-muted-foreground text-sm leading-relaxed">
+                          Get a quiet alert when background work finishes. No marketing notifications.
                         </p>
                       </div>
                     </div>
@@ -371,15 +377,15 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                     <div className="mt-auto pt-4 flex flex-col gap-2">
                       <button
                         onClick={handleRequestNotifications}
-                        className="w-full px-5 py-2.5 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+                        className="min-h-11 w-full px-5 text-sm font-medium rounded-md bg-foreground text-background hover:opacity-90 transition-opacity"
                       >
-                        Enable Notifications
+                        Allow notifications
                       </button>
                       <button
                         onClick={onClose}
-                        className="w-full px-5 py-2.5 text-sm font-medium rounded-lg bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        className="min-h-10 w-full px-5 text-sm font-medium rounded-md bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                       >
-                        Skip for now
+                        Not now
                       </button>
                     </div>
                   </motion.div>

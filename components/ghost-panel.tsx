@@ -37,6 +37,9 @@ export function GhostPanel({
 }: GhostPanelProps) {
   return (
     <motion.div
+      data-open={isOpen}
+      aria-hidden={!isOpen}
+      inert={!isOpen}
       style={{
         width: isOpen ? 320 : 0,
       }}
@@ -45,9 +48,9 @@ export function GhostPanel({
         width: isOpen ? 320 : 0,
       }}
       transition={panelTransition}
-      className="relative z-50 flex h-full shrink-0 flex-col overflow-hidden bg-background"
+      className="fikr-ghost-panel relative z-50 flex h-full shrink-0 flex-col overflow-hidden bg-background"
     >
-      <div className="w-[320px] flex flex-col h-full">
+      <div className="fikr-ghost-panel__content flex h-full w-[320px] flex-col">
         {/* Header */}
         <div className="flex h-11 items-center justify-between border-b-0 px-4 shrink-0">
           <div className="flex items-center gap-2">
@@ -56,12 +59,14 @@ export function GhostPanel({
               Insights
             </h3>
             {ghostNotes.length > 0 && (
-              <span className="text-[12px] font-medium tabular-nums text-muted-foreground">
+              <span className="text-xs font-medium tabular-nums text-muted-foreground">
                 {ghostNotes.length}
               </span>
             )}
           </div>
           <button
+            type="button"
+            aria-label="Close insights"
             onClick={() => {
               analytics.track("ghost_panel_close");
               onClose();
@@ -99,13 +104,15 @@ export function GhostPanel({
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                       {note.category && !note.isGenerating && (
-                        <span className="text-[11px] font-medium text-muted-foreground/70">
+                        <span className="text-xs font-medium text-muted-foreground/70">
                           {note.category}
                         </span>
                       )}
                     </div>
                     {!note.isGenerating && (
                       <button
+                        type="button"
+                        aria-label={`Dismiss ${note.category || "insight"}`}
                         onClick={() => onDismiss(note.id)}
                         className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-foreground/5 transition-colors"
                       >
@@ -124,12 +131,12 @@ export function GhostPanel({
                     </div>
                   ) : note.isError ? (
                     <div className="flex flex-col gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5">
-                      <p className="text-[12px] text-red-500 dark:text-red-400 font-medium leading-relaxed">
+                      <p className="text-xs text-red-500 dark:text-red-400 font-medium leading-relaxed">
                         {note.statusText || "Generation failed"}
                       </p>
                     </div>
                   ) : (
-                    <div className="max-w-none text-[13px] font-normal leading-relaxed text-foreground/85 markdown-body">
+                    <div className="max-w-none text-sm font-normal leading-relaxed text-foreground/85 markdown-body">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={MarkdownComponents as any}
@@ -143,6 +150,7 @@ export function GhostPanel({
                   {!note.isGenerating &&
                     (note.isError ? (
                       <button
+                        type="button"
                         onClick={() => onRetry(note.id)}
                         className="flex min-h-9 items-center gap-1.5 w-full justify-center rounded-md bg-red-500/10 hover:bg-red-500/20 px-4 text-xs font-semibold text-red-600 dark:text-red-400 transition-colors"
                       >
@@ -151,6 +159,7 @@ export function GhostPanel({
                       </button>
                     ) : (
                       <button
+                        type="button"
                         onClick={() => onClaim(note.id)}
                         className="flex min-h-9 items-center gap-1.5 w-full justify-center rounded-md bg-foreground text-background px-4 text-xs font-semibold transition-opacity hover:opacity-85"
                       >
@@ -166,7 +175,7 @@ export function GhostPanel({
 
         {/* Footer */}
         <div className="border-t-0 px-3 py-2.5 shrink-0">
-          <p className="text-[11px] text-muted-foreground/50 text-center">
+          <p className="text-xs text-muted-foreground/50 text-center">
             Generated from enriched notes
           </p>
         </div>

@@ -1,44 +1,50 @@
 import type { Metadata } from "next";
-import { DM_Sans, Newsreader } from "next/font/google";
-import { MobileWall } from "@/components/mobile-wall";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-dm-sans",
-  display: "swap",
-});
-
-const newsreader = Newsreader({
-  subsets: ["latin"],
-  variable: "--font-newsreader",
-  display: "swap",
-});
+const bundledFontFaces = `
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("fonts/inter-latin-variable.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Source Serif 4";
+    font-style: normal;
+    font-weight: 200 900;
+    font-display: swap;
+    src: url("fonts/source-serif-4-latin-variable.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    font-style: normal;
+    font-weight: 100 800;
+    font-display: swap;
+    src: url("fonts/jetbrains-mono-latin-variable.woff2") format("woff2");
+  }
+`;
 
 export const metadata: Metadata = {
   title: "Fikr Studio",
   description:
-    "A spatial research tool where AI augments your thinking — not replaces it.",
-  icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: "/apple-icon.png",
-  },
+    "Ask, understand, and create from your knowledge.",
   openGraph: {
-    title: "Fikr Studio",
+    title: "Fikr",
     description:
-      "A spatial research tool where AI augments your thinking — not replaces it.",
-    url: "https://fikr.one/studio",
-    siteName: "Fikr Studio",
+      "Ask, understand, and create from your knowledge.",
+    url: "https://fikr.one",
+    siteName: "Fikr",
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Fikr Studio",
+    title: "Fikr",
     description:
-      "A spatial research tool where AI augments your thinking — not replaces it.",
+      "Ask, understand, and create from your knowledge.",
   },
 };
 
@@ -49,17 +55,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="icon.svg" type="image/svg+xml" />
+        <style>{bundledFontFaces}</style>
+      </head>
       <body
-        className={`${dmSans.variable} ${newsreader.variable} font-sans antialiased`}
+        className="font-sans antialiased"
         suppressHydrationWarning
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >
-          <MobileWall />
           {children}
           <Toaster />
         </ThemeProvider>

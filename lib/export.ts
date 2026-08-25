@@ -1,4 +1,5 @@
 import type { ContentType } from "./content-types"
+import { writeClipboardText } from "./clipboard"
 
 // Escape characters that would break markdown table cells
 const mdCell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ")
@@ -305,21 +306,56 @@ export function exportSingleBlockToMarkdown(block: ExportBlock): string {
 
 // ── Download / clipboard helpers ─────────────────────────────────────────────
 
-/** Trigger a browser download of a .md file. */
-export function downloadMarkdown(filename: string, content: string): void {
+type ElectronTextFileBridge = {
+  saveTextFile?: (filename: string, content: string) => Promise<{ saved: boolean; canceled: boolean }>;
+  saveBase64File?: (filename: string, base64: string) => Promise<{ saved: boolean; canceled: boolean }>;
+};
+
+/** Save a .md file without navigating the Electron renderer. */
+export async function downloadMarkdown(filename: string, content: string): Promise<boolean> {
+  const bridge = typeof window !== "undefined"
+    ? (window as unknown as { fikrStudio?: ElectronTextFileBridge }).fikrStudio
+    : undefined;
+  if (bridge?.saveTextFile) {
+    const result = await bridge.saveTextFile(filename, content);
+    return result.saved;
+  }
   const blob = new Blob([content], { type: "text/markdown;charset=utf-8" })
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement("a")
   a.href     = url
   a.download = filename
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  return true
+}
+
+/** Save a generated PNG without navigating the Electron renderer. */
+export async function downloadPngDataUrl(filename: string, dataUrl: string): Promise<boolean> {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!match) throw new Error("Invalid PNG data URL");
+  const bridge = typeof window !== "undefined"
+    ? (window as unknown as { fikrStudio?: ElectronTextFileBridge }).fikrStudio
+    : undefined;
+  if (bridge?.saveBase64File) {
+    const result = await bridge.saveBase64File(filename, match[1]);
+    return result.saved;
+  }
+  const anchor = document.createElement("a");
+  anchor.href = dataUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  return true;
 }
 
 /** Copy content to clipboard. Returns true on success. */
 export async function copyToClipboard(content: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(content)
+    await writeClipboardText(content)
     return true
   } catch {
     return false

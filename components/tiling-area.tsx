@@ -15,6 +15,7 @@ import { isEditableShortcutTarget } from "@/lib/keyboard-shortcuts";
 import { TilingMinimap } from "./tiling-minimap";
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
 import { ArrowUpDown, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TilingAreaProps {
   blocks: TextBlock[];
@@ -221,7 +222,7 @@ export function TilingArea({
             {filterType && (
               <button
                 onClick={() => setFilterType(null)}
-                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.15em] px-2 py-1 rounded-full transition-all text-primary bg-primary/10"
+                className="flex items-center gap-1 text-xs font-bold uppercase tracking-widest px-2 py-1 rounded-full transition-all text-primary bg-primary/10"
               >
                 <X className="w-2.5 h-2.5" />
                 Clear
@@ -234,7 +235,7 @@ export function TilingArea({
                 <button
                   key={type}
                   onClick={() => setFilterType(isActive ? null : type)}
-                  className={`text-[10px] font-semibold uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all whitespace-nowrap ${
+                  className={`text-xs font-semibold uppercase tracking-widest px-2.5 py-1 rounded-full transition-all whitespace-nowrap ${
                     !isActive && "text-muted-foreground/60 hover:text-foreground"
                   }`}
                   style={isActive ? {
@@ -251,19 +252,18 @@ export function TilingArea({
             })}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground/60">
-            <ArrowUpDown className="w-3 h-3" />
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value as typeof sortBy)}
-              className="text-[10px] font-semibold uppercase tracking-[0.12em] bg-transparent border-none outline-none cursor-pointer text-muted-foreground/70"
-            >
-              <option value="newest">Newest</option>
-              <option value="oldest">Oldest</option>
-              <option value="confidence">Confidence</option>
-              <option value="pinned">Pinned</option>
-            </select>
-          </div>
+          <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+            <SelectTrigger aria-label="Sort notes" className="h-8 w-auto shrink-0 gap-1.5 border-0 bg-transparent px-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70 hover:bg-secondary/60">
+              <ArrowUpDown className="size-3" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="oldest">Oldest</SelectItem>
+              <SelectItem value="confidence">Confidence</SelectItem>
+              <SelectItem value="pinned">Pinned</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       )}
 

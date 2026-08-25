@@ -92,10 +92,9 @@ export function VimInput({
   }, [onSubmit, value]);
 
   const discard = React.useCallback(() => {
-    if (value.trim() && !window.confirm("Discard this entry draft?")) return;
     setValue("");
     setEditorOpen(false);
-  }, [value]);
+  }, []);
 
   return (
     <>

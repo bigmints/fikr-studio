@@ -4,9 +4,9 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { SearchProvider } from "@/lib/search-store";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { LayoutGrid, Sparkles, Mic, Video, FileText, X } from "lucide-react";
+import { LayoutGrid, Sparkles, Mic, Video, FileText } from "lucide-react";
 import { TilingArea } from "@/components/tiling-area";
-import { ListArea } from "@/components/list-area";
+import { ListArea, type SortOption } from "@/components/list-area";
 import { GraphArea } from "@/components/graph-area";
 import { ProjectSidebar } from "@/components/project-sidebar";
 import { SettingsPage, type SettingsSection } from "@/components/settings-page";
@@ -23,12 +23,22 @@ import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { isEditableShortcutTarget } from "@/lib/keyboard-shortcuts";
 import { UpdateCheckIndicator } from "@/components/update-check-indicator";
+import { ApiKeyBanner } from "@/components/api-key-banner";
+import { FikrChat } from "@/components/fikr-chat";
+import { CreationsPage } from "@/components/creations-page";
+import { type FikrSurface } from "@/components/project-sidebar";
+import { type FikrArtifact, type FikrChatThread } from "@/lib/fikr-chat";
+import {
+  createCreationFromArtifact,
+  creationMatchesArtifact,
+  createKnowledgeNoteFromAnswer,
+  normalizeChatThreads,
+} from "@/lib/chat-domain.mjs";
 
 function GlobalSearchEngine({ projects }: { projects: any[] }) {
   useSearchEffect({ projects });
   return null;
 }
-import { StudioRoot } from "@/components/studio/studio-root";
 import { ConnectionsPage } from "@/components/connections-page";
 import { INITIAL_PROJECTS } from "@/lib/initial-data";
 import { useAISettings } from "@/lib/ai-settings";
@@ -47,7 +57,6 @@ import {
 } from "@/lib/nodepad-format";
 import { detectContentType } from "@/lib/detect-content-type";
 import { analytics } from "@/lib/analytics";
-import { limitWords } from "@/lib/utils";
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -71,6 +80,8 @@ import { type WordUsage } from "@/components/status-bar";
 export default function Page() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [studioProjects, setStudioProjects] = useState<any[]>([]);
+  const [chatThreads, setChatThreads] = useState<FikrChatThread[]>([]);
+  const [activeChatThreadId, setActiveChatThreadId] = useState<string | null>(null);
   const [activeStudioProjectId, setActiveStudioProjectId] = useState<string>("");
   const [activeProjectId, setActiveProjectId] = useState<string>("");
   const [highlightedBlockId, setHighlightedBlockId] = useState<string | null>(
@@ -80,12 +91,13 @@ export default function Page() {
   // Suppresses the save-on-change effect during cloud push (workspace-synced).
   // Without this, the effect would immediately re-upload the stale pre-sync state.
   const isSyncingFromCloud = useRef(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isIndexOpen, setIsIndexOpen] = useState(false);
   const [isGhostPanelOpen, setIsGhostPanelOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"tiling" | "list" | "graph">(
     "list",
   );
+  const [knowledgeSortBy, setKnowledgeSortBy] = useState<SortOption>("newest");
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
@@ -93,15 +105,20 @@ export default function Page() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
+  const [isNoteSelectionMode, setIsNoteSelectionMode] = useState(false);
   const [jumpToSettings, setJumpToSettings] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("account");
-  const [isApiBannerDismissed, setIsApiBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setIsSidebarOpen(false);
+    }
+  }, []);
 
   // ── Auth + usage polling ─────────────────────────────────────────────────
   const [cloudIdToken, setCloudIdToken] = useState<string | null>(null);
   const [cloudPlan, setCloudPlan] = useState<string>("Free");
-  const [cloudRelayKey, setCloudRelayKey] = useState<string>("");
   const [wordUsage, setWordUsage] = useState<WordUsage | null>(null);
   const usagePollRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -134,8 +151,7 @@ export default function Page() {
 
   // Handle auth changes from SettingsModal → start/stop polling
   const handleAuthChange = useCallback(
-    (user: any, idToken: string | null, plan: string, relayKey?: string) => {
-      if (relayKey !== undefined) setCloudRelayKey(relayKey);
+    (user: any, idToken: string | null, plan: string) => {
       setCloudIdToken(idToken);
       setCloudPlan(plan);
       // Send only the ID token; main verifies identity and plan through fikr.one.
@@ -172,7 +188,7 @@ export default function Page() {
   };
   const [mcpPort, setMcpPort] = useState<number | null>(null);
   const [mcpToken, setMcpToken] = useState<string | null>(null);
-  const [activeApp, setActiveApp] = useState("Fikr Intel");
+  const [activeSurface, setActiveSurface] = useState<FikrSurface>("Chat");
   const [isIntroOpen, setIsIntroOpen] = useState(false);
   const [showHelpTooltip, setShowHelpTooltip] = useState(false);
   const helpTooltipTimer = useRef<NodeJS.Timeout | null>(null);
@@ -183,6 +199,9 @@ export default function Page() {
     currentModel,
     isHydrated,
   } = useAISettings();
+  const showApiKeyBanner = isHydrated
+    && !settings.apiKey
+    && !["plus", "pro"].some((tier) => cloudPlan.toLowerCase().includes(tier));
   const debounceTimers = useRef<Record<string, Record<string, NodeJS.Timeout>>>(
     {},
   );
@@ -259,7 +278,11 @@ export default function Page() {
   // The inbox always opens with a useful reading/editing surface. Preserve the
   // current selection when possible and otherwise select the newest note.
   useEffect(() => {
-    if (!isLoaded || viewMode !== "list") return;
+    if (!isLoaded || viewMode !== "list" || isNoteSelectionMode) return;
+    if (window.matchMedia("(max-width: 1023px)").matches && !selectedNoteId) {
+      setHighlightedBlockId(null);
+      return;
+    }
     if (blocks.length === 0) {
       setSelectedNoteId(null);
       setHighlightedBlockId(null);
@@ -269,7 +292,13 @@ export default function Page() {
     const newestNote = [...blocks].sort((a, b) => b.timestamp - a.timestamp)[0];
     setSelectedNoteId(newestNote.id);
     setHighlightedBlockId(newestNote.id);
-  }, [blocks, isLoaded, selectedNoteId, viewMode]);
+  }, [blocks, isLoaded, isNoteSelectionMode, selectedNoteId, viewMode]);
+
+  useEffect(() => {
+    if (!isNoteSelectionMode) return;
+    setSelectedNoteId(null);
+    setHighlightedBlockId(null);
+  }, [isNoteSelectionMode]);
 
   const updateActiveProject = useCallback(
     (updater: (p: Project) => Project) => {
@@ -384,6 +413,18 @@ export default function Page() {
       setActiveProjectId(initialActiveId);
       setIsLoaded(true);
 
+      try {
+        const rawThreads = ipc
+          ? diskData?.chatThreads
+          : JSON.parse(localStorage.getItem("fikr-chat-threads") || "[]");
+        const restoredThreads = normalizeChatThreads(rawThreads) as FikrChatThread[];
+        setChatThreads(restoredThreads);
+        setActiveChatThreadId(null);
+      } catch (e) {
+        console.error("Failed to load chat conversations", e);
+        setChatThreads([]);
+      }
+
       // Load studio projects — in Electron use diskData (same workspace.json),
       // fall back to localStorage in browser mode.
       try {
@@ -448,6 +489,7 @@ export default function Page() {
           activeProjectId,
           studioProjects: studioProjectsRef.current,
           activeStudioProjectId,
+          chatThreads,
         })
         .then((saved: boolean) => {
           if (!saved) {
@@ -468,6 +510,7 @@ export default function Page() {
         localStorage.setItem("nodepad-projects", JSON.stringify(projects));
         localStorage.setItem("nodepad-active-project", activeProjectId);
         localStorage.setItem("nodepad-backup", JSON.stringify(projects));
+        localStorage.setItem("fikr-chat-threads", JSON.stringify(chatThreads));
       } catch {
         toast.error("Changes couldn’t be saved", {
           id: "workspace-save-error",
@@ -475,7 +518,7 @@ export default function Page() {
         });
       }
     }
-  }, [projects, activeProjectId, activeStudioProjectId, isLoaded]);
+  }, [projects, activeProjectId, activeStudioProjectId, chatThreads, isLoaded]);
 
   // 3. MCP Live Events — listen for notes/projects pushed by external AI agents
   useEffect(() => {
@@ -554,6 +597,10 @@ export default function Page() {
           if (workspace?.studioProjects?.length > 0) {
             setStudioProjects(workspace.studioProjects);
           }
+          if (workspace?.chatThreads) {
+            setChatThreads(normalizeChatThreads(workspace.chatThreads) as FikrChatThread[]);
+            setActiveChatThreadId(null);
+          }
         } else if (event.type === "workspace-cleared") {
           // User chose "Clear everything" during logout.
           // Reset to a blank slate so no data bleeds into the logged-out session.
@@ -561,10 +608,13 @@ export default function Page() {
           setActiveProjectId(INITIAL_PROJECTS[0]?.id ?? "");
           setStudioProjects([]);
           setActiveStudioProjectId("");
+          setChatThreads([]);
+          setActiveChatThreadId(null);
           localStorage.removeItem("fikr-studio-projects");
           localStorage.removeItem("nodepad-projects");
           localStorage.removeItem("nodepad-active-project");
           localStorage.removeItem("nodepad-backup");
+          localStorage.removeItem("fikr-chat-threads");
         } else if (event.type === "mcp-port-updated") {
           setMcpPort(event.payload.port);
         }
@@ -612,34 +662,6 @@ export default function Page() {
     [],
   );
 
-  const handleCreateStudioProject = useCallback(() => {
-    const id = generateId();
-    const newProj = {
-      id,
-      name: "New Article",
-      mode: "article",
-      platform: "linkedin",
-      status: "ideating",
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    setStudioProjects((prev) => [newProj, ...prev]);
-    setActiveStudioProjectId(id);
-    toast("Article created");
-    
-    // Save to IPC/localStorage
-    if (typeof window !== "undefined" && (window as any).fikrStudio) {
-      (window as any).fikrStudio.saveWorkspace({
-        projects,
-        activeProjectId,
-        studioProjects: [newProj, ...studioProjects],
-        activeStudioProjectId: id
-      });
-    } else {
-      localStorage.setItem("fikr-studio-projects", JSON.stringify([newProj, ...studioProjects]));
-    }
-  }, [projects, activeProjectId, studioProjects]);
-
   // A ref to read current projects without causing re-renders or stale closures
   const projectsRef = useRef(projects);
   useEffect(() => {
@@ -652,184 +674,25 @@ export default function Page() {
     studioProjectsRef.current = studioProjects;
   }, [studioProjects]);
 
+  const chatThreadsRef = useRef(chatThreads);
+  useEffect(() => {
+    chatThreadsRef.current = chatThreads;
+  }, [chatThreads]);
+
   // Persist studioProjects helper (always available at page level)
-  const persistStudio = useCallback((updated: any[]) => {
+  const persistStudio = useCallback((updated: any[], nextActiveStudioProjectId = activeStudioProjectId) => {
     if (typeof window !== "undefined" && (window as any).fikrStudio?.saveWorkspace) {
       (window as any).fikrStudio.saveWorkspace({
         projects: projectsRef.current,
         activeProjectId,
         studioProjects: updated,
-        activeStudioProjectId,
+        activeStudioProjectId: nextActiveStudioProjectId,
+        chatThreads: chatThreadsRef.current,
       });
     } else {
       localStorage.setItem("fikr-studio-projects", JSON.stringify(updated));
     }
   }, [activeProjectId, activeStudioProjectId]);
-
-  // ── Article version management ────────────────────────────────────────────
-  const MAX_VERSIONS = typeof window !== "undefined" && (window as any).fikrStudio ? 30 : 10;
-
-  const saveArticleVersion = useCallback((
-    projectId: string,
-    label: string,
-    markdown: string,
-    isManual: boolean,
-  ) => {
-    if (!markdown?.trim()) return;
-    const version: import("@/lib/generate/types").ArticleVersion = {
-      id: generateId(),
-      label,
-      savedAt: Date.now(),
-      markdown,
-      wordCount: markdown.trim().split(/\s+/).filter(Boolean).length,
-      isManual,
-    };
-    setStudioProjects((prev: any[]) => {
-      const updated = prev.map((p: any) => {
-        if (p.id !== projectId) return p;
-        const existing: import("@/lib/generate/types").ArticleVersion[] = p.versions ?? [];
-        const next = [...existing, version];
-        // Cap: evict oldest non-manual first, then oldest manual
-        while (next.length > MAX_VERSIONS) {
-          const dropIdx = next.findIndex((v) => !v.isManual);
-          next.splice(dropIdx !== -1 ? dropIdx : 0, 1);
-        }
-        return { ...p, versions: next };
-      });
-      persistStudio(updated);
-      return updated;
-    });
-  }, [persistStudio, MAX_VERSIONS]);
-
-  const revertToVersion = useCallback((
-    projectId: string,
-    versionId: string,
-    currentMarkdown: string,
-  ) => {
-    setStudioProjects((prev: any[]) => {
-      const updated = prev.map((p: any) => {
-        if (p.id !== projectId) return p;
-        const target = (p.versions ?? []).find(
-          (v: import("@/lib/generate/types").ArticleVersion) => v.id === versionId,
-        );
-        if (!target) return p;
-        // Snapshot current state before reverting so user can always undo the revert
-        const snapshot: import("@/lib/generate/types").ArticleVersion = {
-          id: generateId(),
-          label: "Before revert",
-          savedAt: Date.now(),
-          markdown: currentMarkdown,
-          wordCount: currentMarkdown.trim().split(/\s+/).filter(Boolean).length,
-          isManual: false,
-        };
-        const versions = [...(p.versions ?? []), snapshot];
-        while (versions.length > MAX_VERSIONS) {
-          const dropIdx = versions.findIndex((v: import("@/lib/generate/types").ArticleVersion) => !v.isManual);
-          versions.splice(dropIdx !== -1 ? dropIdx : 0, 1);
-        }
-        return { ...p, outputMarkdown: target.markdown, versions, updatedAt: Date.now() };
-      });
-      persistStudio(updated);
-      return updated;
-    });
-  }, [persistStudio, MAX_VERSIONS]);
-
-  /**
-   * Background generation — lives at page level so it survives mode switching.
-   * Called by StudioRoot when the user clicks Generate.
-   */
-  const handleStudioGenerate = useCallback(async (
-    projectId: string,
-    params: import("@/lib/generate/types").GenerateParams,
-    projectName: string,
-  ) => {
-    const { streamGenerate } = await import("@/lib/generate/generate-stream");
-
-    let outputMarkdown = "";
-    let flushBuffer = "";
-    const FLUSH_EVERY = 150; // flush to state every ~150 chars for streaming feel
-    try {
-      const result = await streamGenerate(
-        params,
-        (chunk) => {
-          outputMarkdown += chunk;
-          flushBuffer   += chunk;
-          if (flushBuffer.length >= FLUSH_EVERY) {
-            flushBuffer = "";
-            const snap = outputMarkdown;
-            setStudioProjects((prev) => prev.map((p: any) =>
-              p.id === projectId ? { ...p, outputMarkdown: snap } : p
-            ));
-          }
-        },
-        new AbortController().signal,
-      );
-      setStudioProjects((prev) => {
-        const updated = prev.map((p: any) => {
-          if (p.id !== projectId) return p;
-          
-          let finalName = p.name;
-          if (outputMarkdown) {
-            const match = outputMarkdown.match(/^#\s+(.+)$/m);
-            if (match && match[1]) {
-              finalName = match[1].trim();
-            }
-          }
-
-          // Auto-snapshot "Generated" version
-          const genVersion: import("@/lib/generate/types").ArticleVersion = {
-            id: generateId(),
-            label: "Generated",
-            savedAt: Date.now(),
-            markdown: outputMarkdown,
-            wordCount: outputMarkdown.trim().split(/\s+/).filter(Boolean).length,
-            isManual: false,
-          };
-          const existingVersions: import("@/lib/generate/types").ArticleVersion[] = p.versions ?? [];
-          const nextVersions = [...existingVersions, genVersion];
-          const maxV = typeof window !== "undefined" && (window as any).fikrStudio ? 30 : 10;
-          while (nextVersions.length > maxV) {
-            const dropIdx = nextVersions.findIndex((v: import("@/lib/generate/types").ArticleVersion) => !v.isManual);
-            nextVersions.splice(dropIdx !== -1 ? dropIdx : 0, 1);
-          }
-
-          return { 
-            ...p, 
-            name: limitWords(finalName, 3),
-            status: "done", 
-            outputMarkdown, 
-            citations: result.citations,
-            systemPrompt: result.systemPrompt,
-            updatedAt: Date.now(),
-            versions: nextVersions,
-          };
-        });
-        persistStudio(updated);
-        return updated;
-      });
-
-      toast("Article ready", {
-        description: `“${projectName}” is ready to read in Studio.`,
-        duration: 6_000,
-      });
-
-    } catch (err: unknown) {
-      const isAbort = (err as { name?: string })?.name === "AbortError";
-      const msg = isAbort ? "The generation timed out after 90 seconds. Try a simpler prompt or check your local model server." : (err instanceof Error ? err.message : "Unknown error");
-      console.error("[Studio] streamGenerate error:", msg);
-
-      setStudioProjects((prev) => {
-        const updated = prev.map((p: any) =>
-          p.id === projectId ? { ...p, status: "error", error: msg, updatedAt: Date.now() } : p,
-        );
-        persistStudio(updated);
-        return updated;
-      });
-
-      toast.error("Generation failed", { description: msg, duration: 6_000 });
-    }
-  }, [persistStudio]);
-
 
   // Stable ref to active blocks — lets useCallbacks read current blocks without
   // listing `blocks` in their deps (which would recreate them on every state change
@@ -1346,21 +1209,25 @@ export default function Page() {
         setIsSearchOpen(true);
       } else if (!e.shiftKey && !e.altKey && key === "n") {
         e.preventDefault();
-        setActiveApp("Fikr Intel");
+        setActiveSurface("Knowledge");
         setSettingsOpen(false);
         setIsSearchOpen(false);
         setNewEntryOpenRequest((request) => request + 1);
       } else if (!e.shiftKey && !e.altKey && key === "1") {
         e.preventDefault();
-        setActiveApp("Fikr Intel");
+        setActiveSurface("Chat");
         setSettingsOpen(false);
       } else if (!e.shiftKey && !e.altKey && key === "2") {
         e.preventDefault();
-        setActiveApp("Fikr Studio");
+        setActiveSurface("Knowledge");
         setSettingsOpen(false);
       } else if (!e.shiftKey && !e.altKey && key === "3") {
         e.preventDefault();
-        setActiveApp("Connections");
+        setActiveSurface("Creations");
+        setSettingsOpen(false);
+      } else if (!e.shiftKey && !e.altKey && key === "4") {
+        e.preventDefault();
+        setActiveSurface("Connections");
         setSettingsOpen(false);
       } else if (!e.shiftKey && !e.altKey && key === ",") {
         e.preventDefault();
@@ -1368,29 +1235,29 @@ export default function Page() {
         setSettingsOpen(true);
       } else if (e.shiftKey && !e.altKey && key === "i") {
         e.preventDefault();
-        setActiveApp("Fikr Intel");
+        setActiveSurface("Knowledge");
         setSettingsOpen(false);
         setIsGhostPanelOpen((open) => !open);
       } else if (!e.shiftKey && e.altKey && key === "l") {
         e.preventDefault();
-        setActiveApp("Fikr Intel");
+        setActiveSurface("Knowledge");
         setSettingsOpen(false);
         setViewMode("list");
       } else if (!e.shiftKey && e.altKey && key === "g") {
         e.preventDefault();
-        setActiveApp("Fikr Intel");
+        setActiveSurface("Knowledge");
         setSettingsOpen(false);
         setSelectedNoteId(null);
         setHighlightedBlockId(null);
         setViewMode("graph");
-      } else if (!e.shiftKey && !e.altKey && key === "z" && activeApp === "Fikr Intel") {
+      } else if (!e.shiftKey && !e.altKey && key === "z" && activeSurface === "Knowledge") {
         e.preventDefault();
         undo();
       }
     };
     window.addEventListener("keydown", handleKeys);
     return () => window.removeEventListener("keydown", handleKeys);
-  }, [activeApp, isKeyboardShortcutsOpen, isMenuOpen, isSearchOpen, isGhostPanelOpen, undo]);
+  }, [activeSurface, isKeyboardShortcutsOpen, isMenuOpen, isSearchOpen, isGhostPanelOpen, undo]);
 
   const addBlock = useCallback(
     (text: string, forcedType?: ContentType, allowInlineType = true) => {
@@ -1633,27 +1500,68 @@ export default function Page() {
     setSelectedNoteIds(new Set());
   }, [selectedNoteIds, activeProjectId, updateActiveProject, enrichBlock]);
 
-  const handleBulkMove = useCallback((targetProjectId: string) => {
-    if (selectedNoteIds.size === 0) return;
-    const target = projects.find(p => p.id === targetProjectId);
-    if (!target) return;
+  const handleMoveNotes = useCallback((noteIds: string[], targetProjectId: string) => {
+    const moveIds = new Set(noteIds);
+    if (moveIds.size === 0 || targetProjectId === activeProjectId) return;
 
-    const blocksToMove = blocksRef.current.filter(b => selectedNoteIds.has(b.id));
-    
-    pushHistory(activeProjectId, blocksRef.current);
-    updateActiveProject((p) => ({
-      ...p,
-      blocks: p.blocks.filter((b) => !selectedNoteIds.has(b.id)),
+    const currentProjects = projectsRef.current;
+    const source = currentProjects.find((project) => project.id === activeProjectId);
+    const target = currentProjects.find((project) => project.id === targetProjectId);
+    if (!source || !target) return;
+
+    const blocksToMove = source.blocks.filter((block) => moveIds.has(block.id));
+    if (blocksToMove.length === 0) return;
+
+    pushHistory(activeProjectId, source.blocks);
+    setProjects((current) => current.map((project) => {
+      if (project.id === activeProjectId) {
+        return { ...project, blocks: project.blocks.filter((block) => !moveIds.has(block.id)) };
+      }
+      if (project.id === targetProjectId) {
+        const existingIds = new Set(project.blocks.map((block) => block.id));
+        return {
+          ...project,
+          blocks: [
+            ...project.blocks,
+            ...blocksToMove.filter((block) => !existingIds.has(block.id)),
+          ],
+        };
+      }
+      return project;
     }));
 
-    setProjects(prev => prev.map(p => 
-      p.id === targetProjectId 
-        ? { ...p, blocks: [...p.blocks, ...blocksToMove] }
-        : p
-    ));
-
     setSelectedNoteIds(new Set());
-  }, [selectedNoteIds, projects, activeProjectId, pushHistory, updateActiveProject]);
+    setSelectedNoteId((current) => current && moveIds.has(current) ? null : current);
+    analytics.track("note_move", {
+      count: blocksToMove.length,
+      fromProject: activeProjectId,
+      toProject: targetProjectId,
+    });
+    toast(blocksToMove.length === 1 ? "Note moved" : "Notes moved", {
+      description: `${blocksToMove.length} note${blocksToMove.length === 1 ? "" : "s"} moved to ${target.name}`,
+    });
+
+    void Promise.all(blocksToMove.map((block) => {
+      const indexText = VectorIndex.buildIndexText({
+        text: block.text,
+        title: block.title,
+        annotation: block.annotation,
+        contentType: block.contentType,
+        category: block.category,
+      });
+      return vectorIndex.add(
+        block.id,
+        targetProjectId,
+        indexText,
+        block.contentType,
+        block.confidence,
+      );
+    })).catch((error) => console.error("Failed to reindex moved notes", error));
+  }, [activeProjectId, pushHistory]);
+
+  const handleBulkMove = useCallback((targetProjectId: string) => {
+    handleMoveNotes(Array.from(selectedNoteIds), targetProjectId);
+  }, [handleMoveNotes, selectedNoteIds]);
 
   const editAnnotation = useCallback(
     (id: string, newAnnotation: string) => {
@@ -1812,18 +1720,20 @@ export default function Page() {
     }));
   }, [updateActiveProject]);
 
-  const createProject = useCallback(() => {
+  const createProject = useCallback((requestedName?: string) => {
     analytics.track("project_create");
+    const name = requestedName?.trim().slice(0, 80) || "New workspace";
     const newProject: Project = {
       id: generateId(),
-      name: "New workspace",
+      name,
       blocks: [],
       collapsedIds: [],
       ghostNotes: [],
     };
     setProjects((prev) => [...prev, newProject]);
     setActiveProjectId(newProject.id);
-    toast("Workspace created");
+    toast(requestedName ? "Space created" : "Workspace created", requestedName ? { description: name } : undefined);
+    return newProject.id;
   }, []);
 
   useEffect(() => {
@@ -1837,7 +1747,7 @@ export default function Page() {
         event.key.toLowerCase() !== "n"
       ) return;
       event.preventDefault();
-      setActiveApp("Fikr Intel");
+      setActiveSurface("Knowledge");
       setSettingsOpen(false);
       createProject();
     };
@@ -1891,8 +1801,11 @@ export default function Page() {
         analytics.track("export_nodepad", { project: activeProjectId });
         const project = projectsRef.current.find((item) => item.id === activeProjectId);
         if (project) {
-          downloadNodepadFile(project);
-          toast("Workspace exported", { description: `${project.name}.fikrdata` });
+          void downloadNodepadFile(project)
+            .then((saved) => {
+              if (saved) toast("Workspace exported", { description: `${project.name}.fikrdata` });
+            })
+            .catch(() => toast.error("Couldn’t export workspace"));
         } else {
           toast.error("Couldn’t export workspace");
         }
@@ -1908,6 +1821,139 @@ export default function Page() {
     },
     [clearBlocks, addBlock, activeProjectId, createProject],
   );
+
+  const handleSaveChatKnowledge = useCallback((
+    threadId: string,
+    draft: { title: string; content: string; kind: "insight" | "knowledge-note" },
+    projectId: string,
+  ) => {
+    const target = projectsRef.current.find((project) => project.id === projectId);
+    if (!target) {
+      toast.error("Choose a Knowledge workspace first");
+      return false;
+    }
+    const duplicate = target.blocks.some((block) =>
+      (block as TextBlock & { sourceThreadId?: string }).sourceThreadId === threadId && block.text.trim() === draft.content.trim(),
+    );
+    if (duplicate) {
+      toast(draft.kind === "insight" ? "Insight already saved" : "Note already saved", { description: `It’s already in ${target.name}.` });
+      return false;
+    }
+
+    const note = createKnowledgeNoteFromAnswer({
+      answer: draft.content,
+      title: draft.title,
+      kind: draft.kind,
+      threadId,
+      existingIds: target.blocks.map((block) => block.id),
+    }) as TextBlock;
+    setProjects((current) => current.map((project) => project.id === projectId
+      ? { ...project, blocks: [...project.blocks, note] }
+      : project));
+    const indexText = VectorIndex.buildIndexText(note);
+    void vectorIndex.add(note.id, projectId, indexText, note.contentType, note.confidence).catch(() => {});
+    toast(draft.kind === "insight" ? "Insight saved to Knowledge" : "Note saved to Knowledge", { description: target.name });
+    return true;
+  }, []);
+
+  const handleSaveChatCreation = useCallback((threadId: string, artifact: FikrArtifact) => {
+    const existing = studioProjectsRef.current.find((creation: any) =>
+      creationMatchesArtifact(creation, artifact),
+    );
+    if (existing) {
+      toast("Creation already saved");
+      return false;
+    }
+    const creation = createCreationFromArtifact({
+      artifact,
+      threadId,
+      existingIds: studioProjectsRef.current.map((candidate: any) => candidate.id),
+    });
+    const updated = [creation, ...studioProjectsRef.current];
+    studioProjectsRef.current = updated;
+    setStudioProjects(updated);
+    setActiveStudioProjectId(creation.id);
+    persistStudio(updated);
+    toast("Saved to Creations", { description: creation.name });
+    return true;
+  }, [persistStudio]);
+
+  const isChatCreationSaved = useCallback((_threadId: string, artifact: FikrArtifact) => (
+    studioProjectsRef.current.some((creation: any) =>
+      creationMatchesArtifact(creation, artifact),
+    )
+  ), []);
+
+  const handleDeleteChat = useCallback((threadId: string) => {
+    const current = chatThreadsRef.current;
+    const deletedIndex = current.findIndex((thread) => thread.id === threadId);
+    if (deletedIndex < 0) return;
+    const deletedThread = current[deletedIndex];
+    const wasActive = activeChatThreadId === threadId;
+    const updated = current.filter((thread) => thread.id !== threadId);
+    chatThreadsRef.current = updated;
+    setChatThreads(updated);
+    if (wasActive) setActiveChatThreadId(null);
+    analytics.track("chat_delete", { threadId });
+    toast("Chat deleted", {
+      description: deletedThread.title,
+      duration: 6_000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const restored = [...chatThreadsRef.current];
+          if (restored.some((thread) => thread.id === deletedThread.id)) return;
+          restored.splice(Math.min(deletedIndex, restored.length), 0, deletedThread);
+          chatThreadsRef.current = restored;
+          setChatThreads(restored);
+          if (wasActive) setActiveChatThreadId(deletedThread.id);
+        },
+      },
+    });
+  }, [activeChatThreadId]);
+
+  const handleDeleteCreation = useCallback((creationId: string) => {
+    const current = studioProjectsRef.current;
+    const deletedIndex = current.findIndex((creation: any) => creation.id === creationId);
+    if (deletedIndex < 0) return;
+    const deletedCreation = current[deletedIndex];
+    const wasActive = activeStudioProjectId === creationId;
+    const updated = current.filter((creation: any) => creation.id !== creationId);
+    const nextActiveId = wasActive ? updated[0]?.id ?? "" : activeStudioProjectId;
+    studioProjectsRef.current = updated;
+    setStudioProjects(updated);
+    if (wasActive) setActiveStudioProjectId(nextActiveId);
+    persistStudio(updated, nextActiveId);
+    analytics.track("creation_delete", { creationId });
+    toast("Creation deleted", {
+      description: deletedCreation.name || "Untitled creation",
+      duration: 6_000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const restored = [...studioProjectsRef.current];
+          if (restored.some((creation: any) => creation.id === deletedCreation.id)) return;
+          restored.splice(Math.min(deletedIndex, restored.length), 0, deletedCreation);
+          studioProjectsRef.current = restored;
+          setStudioProjects(restored);
+          const restoredActiveId = wasActive ? deletedCreation.id : activeStudioProjectId;
+          if (wasActive) setActiveStudioProjectId(restoredActiveId);
+          persistStudio(restored, restoredActiveId);
+        },
+      },
+    });
+  }, [activeStudioProjectId, persistStudio]);
+
+  const handleUpdateCreation = useCallback((creationId: string, outputMarkdown: string) => {
+    const updated = studioProjectsRef.current.map((creation: any) => creation.id === creationId
+      ? { ...creation, outputMarkdown, updatedAt: Date.now() }
+      : creation);
+    studioProjectsRef.current = updated;
+    setStudioProjects(updated);
+    persistStudio(updated);
+    analytics.track("creation_update", { creationId });
+    toast("Creation updated");
+  }, [persistStudio]);
 
   return (
     <SearchProvider>
@@ -1925,12 +1971,16 @@ export default function Page() {
 
          <ProjectSidebar
            isOpen={isSidebarOpen}
+           onOpen={() => setIsSidebarOpen(true)}
            onClose={() => setIsSidebarOpen(false)}
            projects={projects}
            activeProjectId={activeProjectId}
            onSelectProject={(id) => {
              analytics.track("project_select", { projectId: id });
              setActiveProjectId(id);
+             setSelectedNoteId(null);
+             setSelectedNoteIds(new Set());
+             setIsNoteSelectionMode(false);
            }}
            onCreateProject={createProject}
            onRenameProject={renameProject}
@@ -1941,31 +1991,41 @@ export default function Page() {
            onSettingsOpened={() => setJumpToSettings(false)}
            onOpenSettings={openSettings}
            mcpPort={mcpPort}
-           activeApp={activeApp}
-           setActiveApp={setActiveApp}
+           activeSurface={activeSurface}
+           setActiveSurface={setActiveSurface}
+           chatThreads={chatThreads}
+           activeChatThreadId={activeChatThreadId}
+           onSelectChatThread={(id) => {
+             setActiveSurface("Chat");
+             setActiveChatThreadId(id);
+           }}
+           onNewChat={() => {
+             setActiveSurface("Chat");
+             setActiveChatThreadId(null);
+           }}
+           onDeleteChat={handleDeleteChat}
            onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
            studioProjects={studioProjects}
            activeStudioProjectId={activeStudioProjectId}
            onSelectStudioProject={setActiveStudioProjectId}
-           onCreateStudioProject={handleCreateStudioProject}
            activeStudioWordCount={(() => {
              const p = studioProjects.find((p: any) => p.id === activeStudioProjectId);
              const md = p?.outputMarkdown ?? "";
              return md ? md.trim().split(/\s+/).filter(Boolean).length : 0;
            })()}
+           onMoveNotes={handleMoveNotes}
+           hideMobileMenu={activeSurface === "Knowledge" && Boolean(selectedNoteId)}
          />
 
-        <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* ── Shared toolbar — always visible in Fikr Intel ── */}
-          {activeApp === "Fikr Intel" && (
+        <div className="fikr-app-content relative flex min-w-0 flex-1 flex-col overflow-hidden">
+          {showApiKeyBanner && <ApiKeyBanner onAddKey={() => openSettings("llm")} />}
+
+          {/* The existing workspace toolbar belongs to Knowledge. */}
+          {activeSurface === "Knowledge" && (
             <StatusBar
               isGhostPanelOpen={isGhostPanelOpen}
             ghostNoteCount={ghostNotes.filter((n) => !n.isGenerating).length}
-            activeProjectName={
-              activeApp === "Fikr Intel"
-                ? (activeProject?.name || "")
-                : (studioProjects.find((p: any) => p.id === activeStudioProjectId)?.name || "")
-            }
+            activeProjectName={activeProject?.name || ""}
             viewMode={viewMode}
             onGhostPanelToggle={() => {
               analytics.track("ghost_panel_toggle");
@@ -1979,14 +2039,6 @@ export default function Page() {
                 setHighlightedBlockId(null);
               }
             }}
-            onSearchClick={
-              activeApp === "Fikr Intel"
-                ? () => {
-                    analytics.track("search_open");
-                    setIsSearchOpen(true);
-                  }
-                : undefined
-            }
             onImport={() => {
               analytics.track("import_file");
               importInputRef.current?.click();
@@ -2000,9 +2052,9 @@ export default function Page() {
             onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
             isMenuOpen={isMenuOpen}
             setIsMenuOpen={setIsMenuOpen}
-            enrichingCount={activeApp === "Fikr Intel" ? blocks.filter((b) => b.isEnriching).length : 0}
+            enrichingCount={blocks.filter((b) => b.isEnriching).length}
             modelLabel={
-              activeApp === "Fikr Intel" && isHydrated && settings.apiKey
+              isHydrated && settings.apiKey
                 ? currentModel.shortLabel
                 : undefined
             }
@@ -2012,79 +2064,39 @@ export default function Page() {
           />
           )}
 
-          {activeApp === "Connections" ? (
+          {activeSurface === "Connections" ? (
             <ConnectionsPage
               mcpPort={mcpPort}
               mcpToken={mcpToken}
               plan={cloudPlan}
-              relayApiKey={cloudRelayKey}
             />
-          ) : activeApp === "Fikr Intel" ? (
+          ) : activeSurface === "Chat" ? (
+            <FikrChat
+              projects={projects}
+              threads={chatThreads}
+              setThreads={setChatThreads}
+              activeThreadId={activeChatThreadId}
+              onActiveThreadChange={setActiveChatThreadId}
+              onSaveKnowledge={handleSaveChatKnowledge}
+              onCreateSpace={createProject}
+              isCreationSaved={isChatCreationSaved}
+              onSaveCreation={handleSaveChatCreation}
+              onOpenCreations={() => setActiveSurface("Creations")}
+            />
+          ) : activeSurface === "Creations" ? (
+            <CreationsPage
+              creations={studioProjects}
+              onDeleteCreation={handleDeleteCreation}
+              onUpdateCreation={handleUpdateCreation}
+            />
+          ) : (
             <>
-
-          {isHydrated && !isApiBannerDismissed && !settings.apiKey && !["plus", "pro"].some(t => cloudPlan.toLowerCase().includes(t)) && (
-            <div className="shrink-0 px-3 py-1.5">
-              <div
-                role="alert"
-                className="flex min-h-9 items-center justify-between gap-4 rounded-md bg-secondary/70 px-3 text-xs text-foreground"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="shrink-0 text-foreground"
-                  >
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                  </svg>
-                  <span className="text-foreground/80 leading-snug">
-                    AI enrichment requires an API key to classify and annotate your notes.
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <a
-                    href="https://fikr.one/pricing"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 rounded-md bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
-                  >
-                    View plans
-                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-                  </a>
-                  <button
-                    onClick={() => {
-                      setIsSidebarOpen(true);
-                      setJumpToSettings(true);
-                    }}
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-foreground px-2.5 py-1 text-xs font-medium text-background transition-opacity hover:opacity-85"
-                  >
-                    Add your key →
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsApiBannerDismissed(true)}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-background hover:text-foreground"
-                    title="Dismiss"
-                    aria-label="Dismiss API key notice"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="flex flex-1 overflow-hidden relative">
             <main className="relative flex-1 overflow-hidden">
               {isLoaded ? (
                 viewMode === "list" ? (
-                  <div className="grid h-full min-w-0 grid-cols-[minmax(280px,300px)_minmax(0,1fr)] overflow-hidden min-[1100px]:grid-cols-[minmax(300px,320px)_minmax(0,1fr)] min-[1440px]:grid-cols-[minmax(340px,380px)_minmax(0,1fr)]">
+                  <div className="grid h-full min-w-0 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(280px,300px)_minmax(0,1fr)] min-[1100px]:grid-cols-[minmax(300px,320px)_minmax(0,1fr)] min-[1440px]:grid-cols-[minmax(340px,380px)_minmax(0,1fr)]">
                     <ListArea
                       blocks={activeProject.blocks}
                       highlightedBlockId={highlightedBlockId}
@@ -2092,19 +2104,30 @@ export default function Page() {
                       selectedBlockId={selectedNoteId}
                       selectedBlockIds={selectedNoteIds}
                       onOpenDetail={handleSelectNote}
+                      onSelectAll={(ids) => {
+                        setSelectedNoteId(null);
+                        setSelectedNoteIds(new Set(ids));
+                      }}
+                      onClearSelection={() => setSelectedNoteIds(new Set())}
+                      selectionMode={isNoteSelectionMode}
+                      onSelectionModeChange={setIsNoteSelectionMode}
+                      sortBy={knowledgeSortBy}
+                      onSortByChange={setKnowledgeSortBy}
                     />
-                    <NoteDetailPanel
-                      mode="workspace"
-                      block={selectedNoteId ? (activeProject?.blocks.find((b) => b.id === selectedNoteId) ?? null) : null}
-                      isOpen
-                      onClose={() => { setSelectedNoteId(null); setHighlightedBlockId(null); }}
-                      onEdit={editBlock}
-                      onEditAnnotation={editAnnotation}
-                      onReEnrich={reEnrichBlock}
-                      onDelete={deleteBlock}
-                      onTogglePin={handleTogglePin}
-                      onChangeType={handleChangeType}
-                    />
+                    <div className={`${selectedNoteId ? "fixed inset-0 z-[130] block pb-[env(safe-area-inset-bottom)]" : "hidden"} min-h-0 bg-background lg:static lg:z-auto lg:block lg:pb-0`}>
+                      <NoteDetailPanel
+                        mode="workspace"
+                        block={selectedNoteId ? (activeProject?.blocks.find((b) => b.id === selectedNoteId) ?? null) : null}
+                        isOpen
+                        onClose={() => { setSelectedNoteId(null); setHighlightedBlockId(null); }}
+                        onEdit={editBlock}
+                        onEditAnnotation={editAnnotation}
+                        onReEnrich={reEnrichBlock}
+                        onDelete={deleteBlock}
+                        onTogglePin={handleTogglePin}
+                        onChangeType={handleChangeType}
+                      />
+                    </div>
                   </div>
                 ) : viewMode === "tiling" ? (
                   <TilingArea
@@ -2201,19 +2224,6 @@ export default function Page() {
               }
             />
           </>
-        ) : (
-          <StudioRoot
-            studioProjects={studioProjects}
-            setStudioProjects={setStudioProjects}
-            intelBlocks={blocks}
-            onHighlightNote={setHighlightedBlockId}
-            activeProjectId={activeStudioProjectId}
-            setActiveProjectId={setActiveStudioProjectId}
-            onStartGeneration={handleStudioGenerate}
-            onSaveVersion={saveArticleVersion}
-            onRevertToVersion={revertToVersion}
-            onPersist={persistStudio}
-          />
         )}
         </div>
 
@@ -2233,7 +2243,7 @@ export default function Page() {
           onClose={() => setIsSearchOpen(false)}
           projects={projects}
           onSelectResult={(blockId, projectId) => {
-            setActiveApp("Fikr Intel");
+            setActiveSurface("Knowledge");
             if (projectId !== activeProjectId) setActiveProjectId(projectId);
             setHighlightedBlockId(blockId);
             setSelectedNoteId(blockId);
@@ -2255,10 +2265,9 @@ export default function Page() {
           initialSection={settingsSection}
           aiSettings={settings}
           onUpdateAISettings={updateSettings}
-          mcpPort={mcpPort}
-          mcpToken={mcpToken}
           onClose={() => setSettingsOpen(false)}
           onAuthChange={handleAuthChange}
+          showApiKeyBanner={showApiKeyBanner}
         />
       </div>
     </SearchProvider>

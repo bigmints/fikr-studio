@@ -21,7 +21,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useSearch } from "@/lib/search-store";
 import { generateSnippet } from "@/lib/search-store";
-import { vectorIndex, textSearch } from "@/lib/vector-index";
+import { vectorIndex } from "@/lib/vector-index";
+import { mergeHybridSearchResults, textSearch } from "@/lib/search-domain.mjs";
 import { analytics } from "@/lib/analytics";
 import { getModelLoaded, isModelLoaded } from "@/lib/embeddings";
 
@@ -202,7 +203,7 @@ export function SearchPanel(props: SearchPanelProps) {
         <div className="border-t border-border/40 px-4 py-3">
           <div className="flex items-center gap-2 text-muted-foreground/60">
             <Search className="h-3.5 w-3.5 opacity-50" />
-            <span className="text-[11px] font-mono">
+            <span className="text-xs font-mono">
               AI search unavailable — using text match only
             </span>
           </div>
@@ -210,14 +211,13 @@ export function SearchPanel(props: SearchPanelProps) {
         {results.length > 0 && (
           <div className="max-h-60 overflow-y-auto scrollbar-none">
             <div className="px-4 py-1.5">
-              <span className="text-[11px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
                 Search Results
               </span>
             </div>
             {results.map((result, index) => {
               const Icon = getIconForType(result.contentType);
               const isSelected = index === selectedIndex;
-              const scorePercent = Math.round(result.score * 100);
               return (
                 <button
                   key={result.blockId}
@@ -240,19 +240,16 @@ export function SearchPanel(props: SearchPanelProps) {
                     }`}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-mono truncate leading-snug">
+                    <div className="text-xs font-mono truncate leading-snug">
                       {result.snippet || result.text}
                     </div>
-                    <div className="text-[11px] text-muted-foreground/60">
+                    <div className="text-xs text-muted-foreground/60">
                       {result.projectName}
                       {result.contentType !== "general"
                         ? ` · ${result.contentType}`
                         : ""}
                     </div>
                   </div>
-                  <span className="text-[11px] font-mono text-muted-foreground/50">
-                    {scorePercent}%
-                  </span>
                 </button>
               );
             })}
@@ -268,7 +265,7 @@ export function SearchPanel(props: SearchPanelProps) {
       <div className="border-t border-border/40 px-4 py-3">
         <div className="flex items-center gap-2 text-muted-foreground/60">
           <SearchSpinner />
-          <span className="text-[11px] font-mono">Building search index…</span>
+          <span className="text-xs font-mono">Building search index…</span>
         </div>
       </div>
     );
@@ -280,7 +277,7 @@ export function SearchPanel(props: SearchPanelProps) {
       <div className="border-t border-border/40 px-4 py-3">
         <div className="flex items-center gap-2 text-muted-foreground/60">
           <SearchSpinner />
-          <span className="text-[11px] font-mono">Searching notes…</span>
+          <span className="text-xs font-mono">Searching notes…</span>
         </div>
       </div>
     );
@@ -298,7 +295,7 @@ export function SearchPanel(props: SearchPanelProps) {
       <div className="px-4 py-1.5">
         <div className="flex items-center gap-1.5">
           <Sparkles className="h-3 w-3 text-primary/60" />
-          <span className="text-[11px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
             Search Results
           </span>
         </div>
@@ -313,10 +310,10 @@ export function SearchPanel(props: SearchPanelProps) {
       >
         {enrichedResults.length === 0 ? (
           <div className="px-2 py-6 text-center">
-            <p className="text-[12px] text-muted-foreground/50">
+            <p className="text-xs text-muted-foreground/50">
               No matching notes found
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground/50">
+            <p className="mt-1 text-xs text-muted-foreground/50">
               Try different keywords or check your spelling
             </p>
           </div>
@@ -324,8 +321,6 @@ export function SearchPanel(props: SearchPanelProps) {
           enrichedResults.map((result, index) => {
             const Icon = getIconForType(result.contentType);
             const isSelected = index === selectedIndex;
-            const scorePercent = Math.round(result.score * 100);
-
             return (
               <button
                 key={result.blockId}
@@ -362,7 +357,7 @@ export function SearchPanel(props: SearchPanelProps) {
                 <div className="flex-1 min-w-0">
                   <div
                     className={cn(
-                      "text-[12px] font-mono leading-snug truncate",
+                      "text-xs font-mono leading-snug truncate",
                       isSelected
                         ? "text-foreground"
                         : "text-muted-foreground/80",
@@ -370,7 +365,7 @@ export function SearchPanel(props: SearchPanelProps) {
                   >
                     {result.snippet}
                   </div>
-                  <div className="text-[11px] text-muted-foreground/60 truncate">
+                  <div className="text-xs text-muted-foreground/60 truncate">
                     {result.projectName}
                     {result.contentType !== "general" && (
                       <span className="ml-1.5 opacity-70">
@@ -380,15 +375,6 @@ export function SearchPanel(props: SearchPanelProps) {
                   </div>
                 </div>
 
-                {/* Score badge */}
-                <span
-                  className={cn(
-                    "shrink-0 font-mono text-[11px] tabular-nums",
-                    isSelected ? "text-primary/70" : "text-muted-foreground/40",
-                  )}
-                >
-                  {scorePercent}%
-                </span>
               </button>
             );
           })
@@ -572,33 +558,20 @@ export function useSearchEffect(options: UseSearchEffectOptions): void {
             const semanticHits = await vectorIndex.search(q, 10);
             // Merge: if semantic result has higher score, replace text result
             if (semanticHits.length > 0) {
-              const semanticMap = new Map(
-                semanticHits.map((h) => [h.blockId, h]),
-              );
-              const merged = textEnriched.map((r) => {
-                const semantic = semanticMap.get(r.blockId);
-                if (semantic && semantic.score > r.score) {
-                  return { ...r, score: semantic.score * 1.5 }; // Boost semantic
-                }
-                return r;
+              const semanticEnriched = semanticHits.map((s) => {
+                const blockData = blockMap.get(s.blockId);
+                const proj = projects.find((p) => p.id === s.projectId);
+                return {
+                  blockId: s.blockId,
+                  projectId: s.projectId,
+                  projectName: proj?.name ?? "Unknown",
+                  text: blockData?.text ?? "",
+                  snippet: generateSnippet(blockData?.text ?? "", 120),
+                  score: s.score,
+                  contentType: blockData?.contentType ?? "general",
+                };
               });
-              // Add semantic-only results not in text
-              for (const s of semanticHits) {
-                if (!textEnriched.find((r) => r.blockId === s.blockId)) {
-                  const blockData = blockMap.get(s.blockId);
-                  const proj = projects.find((p) => p.id === s.projectId);
-                  merged.push({
-                    blockId: s.blockId,
-                    projectId: s.projectId,
-                    projectName: proj?.name ?? "Unknown",
-                    text: blockData?.text ?? "",
-                    snippet: generateSnippet(blockData?.text ?? "", 120),
-                    score: s.score * 1.5,
-                    contentType: blockData?.contentType ?? "general",
-                  });
-                }
-              }
-              merged.sort((a, b) => b.score - a.score);
+              const merged = mergeHybridSearchResults(textEnriched, semanticEnriched);
               setResults(merged.slice(0, 20));
             }
           } catch (e) {

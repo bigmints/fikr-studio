@@ -8,6 +8,8 @@ import {
   Sparkles, Image as ImageIcon, Share2, X, Shuffle, Layout,
 } from "lucide-react";
 import type { StudioProject } from "@/lib/generate/types";
+import { writeClipboardText } from "@/lib/clipboard";
+import { downloadMarkdown, downloadPngDataUrl } from "@/lib/export";
 
 // ── Platform config ─────────────────────────────────────────────────────────
 const PLATFORMS: Record<string, {
@@ -108,12 +110,12 @@ function SocialCard({ title, snippet, platform, gradientIdx, ratioOverride }: {
           width: 36, height: 36, borderRadius: 10,
           background: gradientIdx === 0 ? cfg.accent : "rgba(255,255,255,0.2)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 14, fontWeight: 900, color: gradientIdx === 0 ? cfg.fg : "#fff",
+          fontSize: "var(--text-sm)", fontWeight: 900, color: gradientIdx === 0 ? cfg.fg : "#fff",
         }}>
           {cfg.logo}
         </div>
-        <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.7, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-          Fikr Studio
+        <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, opacity: 0.7, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          Fikr
         </span>
       </div>
 
@@ -133,11 +135,11 @@ function SocialCard({ title, snippet, platform, gradientIdx, ratioOverride }: {
 
       {/* Bottom: CTA */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.15)" }}>
-        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.65, textTransform: "capitalize" }}>
+        <span style={{ fontSize: "var(--text-xs)", fontWeight: 600, opacity: 0.65, textTransform: "capitalize" }}>
           Read on {cfg.label}
         </span>
         <div style={{
-          fontSize: 11, fontWeight: 700, padding: "5px 14px", borderRadius: 20,
+          fontSize: "var(--text-xs)", fontWeight: 700, padding: "5px 14px", borderRadius: 20,
           background: gradientIdx === 0 ? cfg.accent : "rgba(255,255,255,0.2)",
           letterSpacing: "0.02em",
         }}>
@@ -181,7 +183,7 @@ function ShareSheet({ onClose, onSelectPlatform, currentPlatform }: {
 
         <div style={{ padding: "0 24px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-            <p style={{ fontSize: 16, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>Share to Platform</p>
+            <p style={{ fontSize: "var(--text-base)", fontWeight: 700, color: "var(--foreground)", margin: 0 }}>Share to Platform</p>
             <button onClick={onClose} className="studio-icon-btn"><X className="size-4" /></button>
           </div>
 
@@ -205,20 +207,20 @@ function ShareSheet({ onClose, onSelectPlatform, currentPlatform }: {
                     width: 36, height: 36, borderRadius: 10, flexShrink: 0,
                     background: cfg.bg, color: cfg.fg,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 13, fontWeight: 900, boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                    fontSize: "var(--text-sm)", fontWeight: 900, boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                   }}>
                     {cfg.logo}
                   </div>
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>{cfg.label}</p>
-                    {isActive && <p style={{ fontSize: 11, color: "var(--muted-foreground)", margin: 0, fontWeight: 600 }}>Current</p>}
+                    <p style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--foreground)", margin: 0 }}>{cfg.label}</p>
+                    {isActive && <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", margin: 0, fontWeight: 600 }}>Current</p>}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          <p style={{ fontSize: 12, color: "var(--muted-foreground)", textAlign: "center", marginTop: 20, lineHeight: 1.5 }}>
+          <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", textAlign: "center", marginTop: 20, lineHeight: 1.5 }}>
             Changing platform updates the card design & opens the right destination.
           </p>
         </div>
@@ -280,14 +282,11 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
   const handleDownloadImage = async () => {
     const dataUrl = await captureCard();
     if (!dataUrl) return;
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = `${title.slice(0, 50).replace(/\s+/g, "-")}-card.png`;
-    a.click();
+    await downloadPngDataUrl(`${title.slice(0, 50).replace(/\s+/g, "-")}-card.png`, dataUrl);
   };
 
   const handleCopyMarkdown = async () => {
-    await navigator.clipboard.writeText(markdown);
+    await writeClipboardText(markdown);
     setMdCopied(true);
     setTimeout(() => setMdCopied(false), 2200);
   };
@@ -319,7 +318,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
             <button onClick={onClose} className="studio-icon-btn"><ArrowLeft className="size-4" /></button>
             <div style={{ width: 1, height: 16, background: "color-mix(in oklch, var(--border) 60%, transparent)" }} />
             <div>
-              <p style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2, color: "var(--foreground)", margin: 0 }}>
+              <p style={{ fontSize: "var(--text-sm)", fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2, color: "var(--foreground)", margin: 0 }}>
                 Prepare Article
               </p>
             </div>
@@ -329,7 +328,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
             <AnimatePresence>
               {published && (
                 <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  style={{ fontSize: 11, fontWeight: 600, color: "var(--primary)", display: "flex", alignItems: "center", gap: 4 }}>
+                  style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--primary)", display: "flex", alignItems: "center", gap: 4 }}>
                   <Check className="size-3.5" /> Opened
                 </motion.span>
               )}
@@ -357,10 +356,10 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                   <Sparkles className="size-4" />
                 </div>
                 <div>
-                  <h1 style={{ fontSize: 26, fontWeight: 500, fontFamily: "var(--font-display)", letterSpacing: "-0.02em", lineHeight: 1.2, color: "var(--foreground)", margin: "0 0 6px" }}>
+                  <h1 style={{ fontSize: "var(--text-3xl)", fontWeight: 500, fontFamily: "var(--font-display)", letterSpacing: "-0.02em", lineHeight: 1.2, color: "var(--foreground)", margin: "0 0 6px" }}>
                     Your article is ready
                   </h1>
-                  <p style={{ fontSize: 13, color: "var(--muted-foreground)", margin: 0, lineHeight: 1.5 }}>
+                  <p style={{ fontSize: "var(--text-sm)", color: "var(--muted-foreground)", margin: 0, lineHeight: 1.5 }}>
                     Download the card image and paste it when publishing to {cfg.label}.
                   </p>
                 </div>
@@ -396,7 +395,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                   <SocialCard title={title} snippet={snippet} platform={platform} gradientIdx={gradientIdx} ratioOverride={ratioMode} />
                 </div>
 
-                <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 10, textAlign: "center" }}>
+                <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", marginTop: 10, textAlign: "center" }}>
                   Copy the image above and paste it as a cover when publishing to {cfg.label}
                 </p>
               </section>
@@ -410,13 +409,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                       {mdCopied ? <Check className="size-3" /> : <Copy className="size-3" />}
                       {mdCopied ? "Copied!" : "Copy Text"}
                     </button>
-                    <button onClick={() => {
-                      const blob = new Blob([markdown], { type: "text/markdown" });
-                      const a = document.createElement("a");
-                      a.href = URL.createObjectURL(blob);
-                      a.download = `${title.slice(0, 50).replace(/\s+/g, "-")}.md`;
-                      a.click();
-                    }} className="studio-pill-btn flex items-center gap-1">
+                    <button onClick={() => void downloadMarkdown(`${title.slice(0, 50).replace(/\s+/g, "-")}.md`, markdown)} className="studio-pill-btn flex items-center gap-1">
                       <Download className="size-3" /> .md
                     </button>
                   </div>
@@ -427,7 +420,7 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                   border: "1px solid color-mix(in oklch, var(--border) 55%, transparent)",
                   maxHeight: 300, overflowY: "auto",
                 }} className="custom-scrollbar">
-                  <pre style={{ fontSize: 11.5, lineHeight: 1.7, whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", color: "var(--foreground)", opacity: 0.78, margin: 0 }}>
+                  <pre style={{ fontSize: "var(--text-xs)", lineHeight: 1.7, whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", color: "var(--foreground)", opacity: 0.78, margin: 0 }}>
                     {markdown}
                   </pre>
                 </div>
@@ -450,13 +443,13 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                 <div style={{
                   width: 30, height: 30, borderRadius: 8, background: cfg.bg, color: cfg.fg,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 12, fontWeight: 900, flexShrink: 0,
+                  fontSize: "var(--text-xs)", fontWeight: 900, flexShrink: 0,
                 }}>
                   {cfg.logo}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>{cfg.label}</p>
-                  <p style={{ fontSize: 11, color: "var(--muted-foreground)", margin: 0 }}>Change platform</p>
+                  <p style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--foreground)", margin: 0 }}>{cfg.label}</p>
+                  <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", margin: 0 }}>Change platform</p>
                 </div>
                 <Share2 className="size-3.5" style={{ color: "var(--muted-foreground)", flexShrink: 0 }} />
               </button>
@@ -470,8 +463,8 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                 { label: "Characters", value: markdown.length.toLocaleString() },
               ].map(({ label, value }) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--foreground)" }}>{value}</span>
+                  <span style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)" }}>{label}</span>
+                  <span style={{ fontSize: "var(--text-xs)", fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--foreground)" }}>{value}</span>
                 </div>
               ))}
             </div>
@@ -483,9 +476,9 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
                   <div style={{
                     width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
                     background: "var(--foreground)", color: "var(--background)",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--text-xs)", fontWeight: 700,
                   }}>{i + 1}</div>
-                  <span style={{ fontSize: 12, lineHeight: 1.5, color: "var(--foreground)", opacity: 0.72 }}>{s}</span>
+                  <span style={{ fontSize: "var(--text-xs)", lineHeight: 1.5, color: "var(--foreground)", opacity: 0.72 }}>{s}</span>
                 </div>
               ))}
             </div>
@@ -494,13 +487,13 @@ export function ArtifactDrawer({ project, markdown, onClose }: Props) {
               <button onClick={handlePublish}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  padding: "11px 0", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none",
+                  padding: "11px 0", borderRadius: 6, fontSize: "var(--text-sm)", fontWeight: 700, cursor: "pointer", border: "none",
                   background: "var(--foreground)", color: "var(--background)",
                   transition: "all 0.15s",
                 }}>
                 <ExternalLink className="size-4" /> Open {cfg.label}
               </button>
-              <button onClick={onClose} className="studio-btn-ghost" style={{ width: "100%", marginTop: 8, justifyContent: "center", fontSize: 12 }}>
+              <button onClick={onClose} className="studio-btn-ghost" style={{ width: "100%", marginTop: 8, justifyContent: "center", fontSize: "var(--text-xs)" }}>
                 ← Back to Editor
               </button>
             </div>

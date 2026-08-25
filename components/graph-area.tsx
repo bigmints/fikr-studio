@@ -863,16 +863,16 @@ export function GraphArea({
                         className: "h-3 w-3 flex-shrink-0",
                         style: { color: "black", opacity: 0.7 },
                       })}
-                    <span className="text-[11px] font-semibold text-black/75">
+                    <span className="text-xs font-semibold text-black/75">
                       {node.isSynthesis ? "Synthesis" : config?.label}
                     </span>
                     {node.block?.category && (
-                      <span className="ml-auto text-[11px] text-black/55 truncate max-w-[90px]">
+                      <span className="ml-auto text-xs text-black/55 truncate max-w-[90px]">
                         {node.block.category}
                       </span>
                     )}
                     {node.degree > 0 && (
-                      <span className="ml-auto font-mono text-[11px] text-black/50">
+                      <span className="ml-auto font-mono text-xs text-black/50">
                         {node.degree} link{node.degree !== 1 ? "s" : ""}
                       </span>
                     )}
@@ -894,10 +894,10 @@ export function GraphArea({
         {/* ── Legend: centrality explanation ───────────────────────────── */}
         {blocks.length > 2 && (
           <div className="absolute bottom-4 right-4 pointer-events-none flex flex-col items-end gap-1">
-            <span className="text-[11px] text-muted-foreground/45">
+            <span className="text-xs text-muted-foreground/45">
               centre = most connected
             </span>
-            <span className="text-[11px] text-muted-foreground/45">
+            <span className="text-xs text-muted-foreground/45">
               edge = isolated
             </span>
           </div>
@@ -905,14 +905,14 @@ export function GraphArea({
 
         {/* ── Hints ─────────────────────────────────────────────────────── */}
         <div className="absolute bottom-4 left-4 pointer-events-none">
-          <span className="text-[11px] text-muted-foreground/45">
+          <span className="text-xs text-muted-foreground/45">
             Scroll to zoom · drag to pan · drag a note to reposition
           </span>
         </div>
 
         {blocks.length > 0 && (
           <div className="absolute top-4 left-4 pointer-events-none">
-            <span className="text-[11px] text-muted-foreground/45">
+            <span className="text-xs text-muted-foreground/45">
               {blocks.length} note{blocks.length !== 1 ? "s" : ""}
               {ghostNote ? " · synthesis active" : ""}
             </span>

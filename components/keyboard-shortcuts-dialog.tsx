@@ -26,7 +26,7 @@ export function KeyboardShortcutsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[82vh] max-w-[660px] gap-0 overflow-hidden rounded-[10px] border-border/70 p-0">
         <DialogHeader className="border-b border-border/55 px-7 py-6 pr-14">
-          <DialogTitle className="font-serif text-[28px] font-medium leading-tight">
+          <DialogTitle className="font-serif text-3xl font-medium leading-tight">
             Keyboard shortcuts
           </DialogTitle>
           <DialogDescription>
@@ -37,7 +37,7 @@ export function KeyboardShortcutsDialog({
         <div className="custom-scrollbar grid overflow-y-auto px-7 py-5 sm:grid-cols-2 sm:gap-x-10">
           {APP_SHORTCUT_GROUPS.map((group) => (
             <section key={group.label} className="mb-6 break-inside-avoid">
-              <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {group.label}
               </h2>
               <div>
@@ -47,11 +47,11 @@ export function KeyboardShortcutsDialog({
                     className="flex min-h-10 items-center justify-between gap-4 border-b border-border/35 py-2 last:border-0"
                   >
                     <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-foreground">
+                      <p className="text-sm font-medium text-foreground">
                         {shortcut.label}
                       </p>
                       {shortcut.note && (
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {shortcut.note}
                         </p>
                       )}

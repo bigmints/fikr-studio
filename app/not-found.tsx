@@ -1,7 +1,5 @@
 "use client"
 
-import Link from "next/link"
-
 export default function NotFound() {
   return (
     <div className="relative flex h-screen w-screen flex-col items-center justify-center overflow-hidden bg-background">
@@ -52,9 +50,9 @@ export default function NotFound() {
 
         {/* Logo mark */}
         <div className="mb-2 flex items-center gap-2">
-          <img src="logo-icon.png" alt="Fikr Studio" className="h-5 w-5 object-contain opacity-80" />
+          <img src="logo-icon.png" alt="Fikr" className="h-5 w-5 object-contain opacity-80" />
           <span className="font-mono text-xs font-semibold tracking-tight text-foreground/60">
-            Fikr Studio
+            Fikr
           </span>
         </div>
 
@@ -78,12 +76,12 @@ export default function NotFound() {
         </div>
 
         {/* CTA */}
-        <Link
-          href="/"
+        <a
+          href="index.html"
           className="mt-2 inline-flex items-center gap-2 rounded-sm border border-border/60 bg-card/80 px-5 py-2.5 font-mono text-xs font-medium text-foreground/80 transition-colors hover:border-border hover:bg-card hover:text-foreground"
         >
           ← Back to canvas
-        </Link>
+        </a>
       </div>
     </div>
   )

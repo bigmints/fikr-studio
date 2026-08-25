@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, Menu, Tray, nativeImage, safeStorage, session } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog, Menu, Tray, nativeImage, safeStorage, session, clipboard } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
@@ -7,18 +7,24 @@ const os = require("os");
 const { randomBytes } = require('crypto');
 const { consumeAuthCallback } = require('./lib/auth-callback');
 const { isAuthorizedMcpRequest: authorizeMcpRequest } = require('./lib/mcp-auth');
+const { searchStoredNotes } = require('./lib/mcp-search');
 const { createWorkspaceStore } = require('./lib/workspace-store');
+const { resolveWorkspaceDirectory } = require('./lib/workspace-path');
+const { createWorkspaceLock } = require('./lib/workspace-lock');
 const { updateJsonConfig } = require('./lib/json-config-store');
 const { performAiRequest } = require('./lib/ai-request');
+const { discoverMcpTools, runFikrAgent, validateAgentRequest } = require('./lib/agent-runtime');
+const { createAgentMcpConfigStore } = require('./lib/agent-mcp-config');
 const { clearLocalFiles } = require('./lib/local-data');
 const { selectFirstSyncWorkspace } = require('./lib/cloud-seed');
 const { embedRelevanceVector } = require('./lib/relevance-vectors');
 const { validateMcpRpc, validateToolCall } = require('./lib/mcp-validation');
-const { externalRelayMessageToRpc } = require('./lib/external-relay-message');
 const { configureSafeStorageProfile } = require('./lib/secure-storage-profile');
 const { loadOrCreateLocalMcpAuthToken } = require('./lib/local-mcp-auth');
 const { installDownloadedUpdate } = require('./lib/update-install');
 const { sendUpdateStatus } = require('./lib/update-status');
+const { normalizeBase64Export, normalizeTextExport } = require('./lib/file-export');
+const { createExternalWorkspaceOpBuffer } = require('./lib/external-workspace-ops');
 
 // ─── Authenticated cloud-sync client ─────────────────────────────────────────
 // Firebase Admin credentials remain on fikr.one; the desktop sends only an ID token.
@@ -30,6 +36,9 @@ let currentUserId = null;
 /** Firebase ID token for calling fikr.one APIs (refreshed on auth state change) */
 let currentIdToken = null;
 let currentAccountProfile = null;
+
+/** Active local agent runs keyed by renderer-provided run ID. */
+const activeAgentRuns = new Map();
 
 /** True after the renderer has reported the current Firebase auth state. */
 let authStateResolved = false;
@@ -75,7 +84,6 @@ async function setCurrentUser(uid, idToken) {
       : '[CloudSync] Cloud sync disabled — local mode');
   }
   scheduleRelayPoll();
-  scheduleExternalRelayPoll();
   return currentAccountProfile;
 }
 
@@ -84,7 +92,11 @@ async function setCurrentUser(uid, idToken) {
 // dev server instead of the static export in out/.
 const IS_DEV = process.env.ELECTRON_IS_DEV === '1';
 const DEV_SERVER_URL = 'http://localhost:3741';
+const MAIN_WINDOW_TITLE = 'Fikr Studio';
 const secureStorageProfile = configureSafeStorageProfile(app, IS_DEV);
+const agentMcpConfigStore = createAgentMcpConfigStore(
+  path.join(secureStorageProfile.userDataPath, 'agent-mcp-connections.json'),
+);
 const UPDATE_FEED = {
   provider: "github",
   owner: "bigmints",
@@ -260,10 +272,7 @@ if (!gotTheLock) {
   process.exit(0);
 } else {
   app.on("second-instance", (event, commandLine, workingDirectory) => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+    void revealMainWindow();
     // Handle URL from second instance (e.g. Windows/Linux or macOS dev mode)
     const url = commandLine.find(arg => arg.startsWith("fikr-studio://"));
     if (url) handleAuthCallback(url);
@@ -272,9 +281,16 @@ if (!gotTheLock) {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 let MCP_PORT = 3025;
-const WORKSPACE_DIR = path.join(app.getPath("home"), ".fikr-studio");
+// Explicit QA override keeps destructive packaged-app and MCP verification away
+// from a user's real local-first workspace. Normal launches retain ~/.fikr-studio.
+const WORKSPACE_DIR = resolveWorkspaceDirectory({
+  path,
+  appHome: app.getPath("home"),
+  override: process.env.FIKR_STUDIO_WORKSPACE_DIR,
+});
 const WORKSPACE_FILE = path.join(WORKSPACE_DIR, "workspace.json");
 const WORKSPACE_BACKUP_FILE = path.join(WORKSPACE_DIR, "workspace.backup.json");
+const WORKSPACE_LOCK_FILE = path.join(WORKSPACE_DIR, "workspace.lock");
 const INTRO_FILE = path.join(WORKSPACE_DIR, "intro-seen");
 const SECURE_AI_KEYS_FILE = secureStorageProfile.secureAiKeysFile;
 const MCP_AUTH_FILE = path.join(secureStorageProfile.userDataPath, 'mcp-auth.json');
@@ -285,6 +301,8 @@ const workspaceStore = createWorkspaceStore({
   primaryFile: WORKSPACE_FILE,
   backupFile: WORKSPACE_BACKUP_FILE,
 });
+const workspaceLock = createWorkspaceLock({ fs, filePath: WORKSPACE_LOCK_FILE });
+const externalWorkspaceOps = createExternalWorkspaceOpBuffer();
 
 // ─── Node / npx resolver ──────────────────────────────────────────────────────
 /**
@@ -590,16 +608,17 @@ ipcMain.handle("fikr-studio:load-projects", async (event) => {
 ipcMain.handle("fikr-studio:save-projects", async (_event, data) => {
   assertTrustedIpc(_event);
   assertWorkspacePayload(data);
-  const ok = saveProjectsToDisk(data);  // always write local cache
+  const protectedData = externalWorkspaceOps.protect(data);
+  const ok = saveProjectsToDisk(protectedData);  // always write local cache
   scheduleEmbedQueue();  // debounced — at most once per 30s
   // Plus/Pro: background sync through the authenticated API after cloud load.
   // If we haven't loaded from cloud yet, we don't know what the authoritative state
   // is — saving now risks overwriting another device's data with our stale disk cache.
   if (currentUserId && isCloudSyncReady) {
-    dc.saveWorkspace(currentIdToken, data, lastSyncedNoteIds, lastSyncedProjectIds, lastSyncedGenProjectIds)
+    dc.saveWorkspace(currentIdToken, protectedData, lastSyncedNoteIds, lastSyncedProjectIds, lastSyncedGenProjectIds)
       .then(() => {
-        updateLastSyncedIds(data);
-        triggerServerEmbed(data);
+        updateLastSyncedIds(protectedData);
+        triggerServerEmbed(protectedData);
       })
       .catch((err) => {
         console.error('[CloudSync] save-projects sync failed:', err.message);
@@ -622,6 +641,12 @@ ipcMain.handle('fikr-studio:get-account', async (event) => {
   assertTrustedIpc(event);
   if (!currentIdToken || !currentAccountProfile) return null;
   let relayApiKey = '';
+  let billing = null;
+  try {
+    billing = await dc.getBillingSummary(currentIdToken);
+  } catch (error) {
+    if (error.status !== 404) console.warn('[Billing] Failed to load account summary:', error.message);
+  }
   if (currentUserId) {
     try {
       relayApiKey = (await dc.getRelayKey(currentIdToken)).relayApiKey || '';
@@ -629,7 +654,12 @@ ipcMain.handle('fikr-studio:get-account', async (event) => {
       if (error.status !== 403) console.warn('[CloudRelay] Failed to load relay key:', error.message);
     }
   }
-  return { ...currentAccountProfile, relayApiKey };
+  return { ...currentAccountProfile, billing, relayApiKey };
+});
+ipcMain.handle('fikr-studio:rotate-relay-key', async (event) => {
+  assertTrustedIpc(event);
+  if (!currentIdToken || !currentUserId) throw new Error('Authentication required');
+  return dc.rotateRelayKey(currentIdToken);
 });
 ipcMain.handle("fikr-studio:open-auth", async (event) => {
   assertTrustedIpc(event);
@@ -855,6 +885,111 @@ ipcMain.handle('fikr-studio:request-ai', async (event, payload) => {
   assertAiProvider(provider);
   const apiKey = readSecureAiKeys()[provider] ?? '';
   return performAiRequest({ provider, body, apiKey });
+});
+
+ipcMain.handle('fikr-studio:run-agent', async (event, payload) => {
+  assertTrustedIpc(event);
+  const configuredMcpServers = agentMcpConfigStore.list().filter((connection) => connection.enabled);
+  const request = validateAgentRequest({ ...payload, mcpServers: configuredMcpServers });
+  if (activeAgentRuns.has(request.runId)) throw new Error('Agent run is already active');
+  if (activeAgentRuns.size >= 3) throw new Error('Too many active agent runs');
+
+  const controller = new AbortController();
+  activeAgentRuns.set(request.runId, { controller, senderId: event.sender.id });
+  const apiKey = request.provider === 'local'
+    ? ''
+    : readSecureAiKeys()[request.provider] ?? '';
+
+  try {
+    return await runFikrAgent({
+      request,
+      apiKey,
+      signal: controller.signal,
+      onEvent: (agentEvent) => {
+        if (!event.sender.isDestroyed()) event.sender.send('fikr-studio:agent-event', agentEvent);
+      },
+    });
+  } catch (error) {
+    if (controller.signal.aborted) return { canceled: true };
+    throw error;
+  } finally {
+    activeAgentRuns.delete(request.runId);
+  }
+});
+
+ipcMain.handle('fikr-studio:cancel-agent', async (event, runId) => {
+  assertTrustedIpc(event);
+  const safeRunId = typeof runId === 'string' ? runId.trim().slice(0, 240) : '';
+  const activeRun = activeAgentRuns.get(safeRunId);
+  if (!activeRun || activeRun.senderId !== event.sender.id) return false;
+  activeRun.controller.abort();
+  return true;
+});
+
+ipcMain.handle('fikr-studio:get-agent-mcp-connections', (event) => {
+  assertTrustedIpc(event);
+  return agentMcpConfigStore.listSafe();
+});
+
+ipcMain.handle('fikr-studio:discover-agent-mcp-tools', async (event, candidate) => {
+  assertTrustedIpc(event);
+  return discoverMcpTools(candidate);
+});
+
+ipcMain.handle('fikr-studio:save-agent-mcp-connection', (event, connection) => {
+  assertTrustedIpc(event);
+  return agentMcpConfigStore.upsert(connection);
+});
+
+ipcMain.handle('fikr-studio:set-agent-mcp-connection-enabled', (event, name, enabled) => {
+  assertTrustedIpc(event);
+  return agentMcpConfigStore.setEnabled(name, enabled);
+});
+
+ipcMain.handle('fikr-studio:remove-agent-mcp-connection', (event, name) => {
+  assertTrustedIpc(event);
+  return agentMcpConfigStore.remove(name);
+});
+
+ipcMain.handle('fikr-studio:clipboard-write-text', (event, text) => {
+  assertTrustedIpc(event);
+  if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 5 * 1024 * 1024) {
+    throw new Error('Invalid clipboard text');
+  }
+  clipboard.writeText(text);
+  return true;
+});
+
+ipcMain.handle('fikr-studio:save-text-file', async (event, payload) => {
+  assertTrustedIpc(event);
+  const { filename, content, extension } = normalizeTextExport(payload);
+  const extensionLabels = {
+    fikrdata: 'Fikr workspace',
+    md: 'Markdown',
+    json: 'JSON',
+    txt: 'Text',
+  };
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export from Fikr Studio',
+    defaultPath: filename,
+    filters: [{ name: extensionLabels[extension] || 'Text', extensions: [extension] }],
+  });
+  if (result.canceled || !result.filePath) return { saved: false, canceled: true };
+  fs.writeFileSync(result.filePath, content, { encoding: 'utf8', mode: 0o600 });
+  return { saved: true, canceled: false };
+});
+
+ipcMain.handle('fikr-studio:save-base64-file', async (event, payload) => {
+  assertTrustedIpc(event);
+  const { filename, content } = normalizeBase64Export(payload);
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export image from Fikr Studio',
+    defaultPath: filename,
+    filters: [{ name: 'PNG image', extensions: ['png'] }],
+  });
+  if (result.canceled || !result.filePath) return { saved: false, canceled: true };
+  fs.writeFileSync(result.filePath, content, { mode: 0o600 });
+  return { saved: true, canceled: false };
 });
 
   function getMcpConfigPath(client) {
@@ -1100,21 +1235,20 @@ async function executeTool(name, args, mainWindow) {
   const workspace = loadProjectsFromDisk() || { projects: [], activeProjectId: "" };
   // Support both the new { projects, activeProjectId } shape and a legacy raw array
   const projects = Array.isArray(workspace) ? workspace : (workspace.projects || []);
-  const save = () => {
+  const save = async () => {
     const data = Array.isArray(workspace) ? projects : { ...workspace, projects };
     saveProjectsToDisk(data);  // always write local cache
     scheduleEmbedQueue();  // debounced
     // Plus/Pro: background sync through the authenticated Studio API.
     if (currentUserId) {
-      dc.saveWorkspace(
+      await dc.saveWorkspace(
         currentIdToken,
         data,
         lastSyncedNoteIds,
         lastSyncedProjectIds,
         lastSyncedGenProjectIds,
-      ).then(() => updateLastSyncedIds(data)).catch((err) => {
-        console.error('[CloudSync] MCP sync failed:', err.message);
-      });
+      );
+      updateLastSyncedIds(data);
     }
   };
   const getProject = (id) =>
@@ -1156,58 +1290,30 @@ async function executeTool(name, args, mainWindow) {
       const limit    = Math.min(args.limit || 10, 50);
       const searchIn = args.project_id ? [getProject(args.project_id)].filter(Boolean) : projects;
 
-      // ── Tier 1: deterministic local relevance search (384 dimensions) ────
-      // Fully offline and dependency-free; no server call or model download.
+      // Deterministic hybrid search. Exact and lexical matches must never be
+      // discarded merely because a stored relevance vector also exists.
       const queryEmbedding = await embedText(query);
-      if (queryEmbedding) {
-        const scored = [];
-        for (const proj of searchIn) {
-          for (const b of proj.blocks || []) {
-            if (!b.text) continue;
-            const sim = b.embedding ? cosineSimilarity(queryEmbedding, b.embedding) : 0;
-            scored.push({
-              score: sim,
-              project: proj.name,
-              project_id: proj.id,
-              id: b.id,
-              text: b.text,
-              type: b.contentType,
-              annotation: b.annotation,
-            });
-          }
-        }
-        const results = scored
-          .sort((a, b) => b.score - a.score)
-          .slice(0, limit)
-          .filter(r => r.score > 0.2)
-          .map(({ score, ...rest }) => ({ ...rest, similarity: Math.round(score * 100) / 100 }));
-
-        return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
-      }
-
-      // Keyword fallback when no stored relevance vector is available.
-      const q = query.toLowerCase();
-      const kwResults = [];
-      for (const proj of searchIn) {
-        for (const b of proj.blocks || []) {
-          const haystack = `${b.text} ${b.annotation || ""} ${b.category || ""}`.toLowerCase();
-          if (haystack.includes(q)) {
-            kwResults.push({ project: proj.name, project_id: proj.id, id: b.id, text: b.text, type: b.contentType, annotation: b.annotation });
-            if (kwResults.length >= limit) break;
-          }
-        }
-        if (kwResults.length >= limit) break;
-      }
-      return { content: [{ type: "text", text: JSON.stringify(kwResults, null, 2) }] };
+      const results = searchStoredNotes({
+        query,
+        projects: searchIn,
+        queryEmbedding,
+        cosineSimilarity,
+        limit,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
     }
 
     case "create_note": {
       if (args.idempotency_key) {
         const existing = projects
           .flatMap((project) => project.blocks || [])
-          .find((note) => note.externalRelayMessageId === args.idempotency_key);
+          .find((note) => note.messengerMessageId === args.idempotency_key);
         if (existing) {
-          return { content: [{ type: "text", text: `Note already created with id: ${existing.id}` }] };
+          await save();
+          return {
+            content: [{ type: "text", text: `Note already created with id: ${existing.id}` }],
+            structuredContent: { noteId: existing.id },
+          };
         }
       }
       const proj = getProject(args.project_id);
@@ -1219,17 +1325,19 @@ async function executeTool(name, args, mainWindow) {
         contentType: "general",
         isEnriching: true, // Let the frontend auto-enrich
         fromMcp: true,
-        ...(args.idempotency_key ? { externalRelayMessageId: args.idempotency_key } : {}),
+        ...(args.idempotency_key ? { messengerMessageId: args.idempotency_key } : {}),
       };
       // Generate embedding synchronously before saving (MCP caller already waits)
       const embedding = await embedText(args.text);
       if (embedding) newNote.embedding = embedding;
       proj.blocks = [...(proj.blocks || []), newNote];
-      save();
+      await save();
       // Push live event to React canvas
+      externalWorkspaceOps.recordNoteAdded(proj.id, newNote);
       pushToRenderer(mainWindow, "note-added", { projectId: proj.id, note: newNote });
       return {
         content: [{ type: "text", text: `Note created with id: ${newNote.id} in project "${proj.name}"` }],
+        structuredContent: { noteId: newNote.id, projectId: proj.id },
       };
     }
 
@@ -1242,7 +1350,8 @@ async function executeTool(name, args, mainWindow) {
         ghostNotes: [],
       };
       projects.push(newProject);
-      save();
+      await save();
+      externalWorkspaceOps.recordProjectCreated(newProject);
       pushToRenderer(mainWindow, "project-created", { project: newProject });
       return {
         content: [{ type: "text", text: `Project "${args.name}" created with id: ${newProject.id}` }],
@@ -1257,7 +1366,8 @@ async function executeTool(name, args, mainWindow) {
       if (proj.blocks.length === before) {
         return { content: [{ type: "text", text: `Note ${args.note_id} not found` }], isError: true };
       }
-      save();
+      await save();
+      externalWorkspaceOps.recordNoteDeleted(proj.id, args.note_id);
       pushToRenderer(mainWindow, "note-deleted", { projectId: proj.id, noteId: args.note_id });
       return { content: [{ type: "text", text: `Note ${args.note_id} deleted` }] };
     }
@@ -1275,7 +1385,8 @@ async function executeTool(name, args, mainWindow) {
       // Re-embed on edit
       const updatedEmbedding = await embedText(args.new_text);
       if (updatedEmbedding) note.embedding = updatedEmbedding;
-      save();
+      await save();
+      externalWorkspaceOps.recordNoteUpdated(proj.id, note);
       pushToRenderer(mainWindow, "note-updated", { projectId: proj.id, note });
       return { content: [{ type: "text", text: `Note ${args.note_id} updated` }] };
     }
@@ -1293,9 +1404,13 @@ async function executeTool(name, args, mainWindow) {
       if (args.idempotency_key) {
         const existing = projects
           .flatMap((project) => project.blocks || [])
-          .find((note) => note.externalRelayMessageId === args.idempotency_key);
+          .find((note) => note.messengerMessageId === args.idempotency_key);
         if (existing) {
-          return { content: [{ type: "text", text: `Pre-synthesized note already stored with id: ${existing.id}` }] };
+          await save();
+          return {
+            content: [{ type: "text", text: `Pre-synthesized note already stored with id: ${existing.id}` }],
+            structuredContent: { noteId: existing.id },
+          };
         }
       }
       const proj = getProject(args.project_id);
@@ -1318,7 +1433,7 @@ async function executeTool(name, args, mainWindow) {
         isError: false,
         fromMcp: true,
         fromSkill: true,      // tracing flag for the canvas
-        ...(args.idempotency_key ? { externalRelayMessageId: args.idempotency_key } : {}),
+        ...(args.idempotency_key ? { messengerMessageId: args.idempotency_key } : {}),
       };
 
       // Embed the combined text+annotation for richer semantic search
@@ -1328,7 +1443,8 @@ async function executeTool(name, args, mainWindow) {
       if (embedding) newNote.embedding = embedding;
 
       proj.blocks = [...(proj.blocks || []), newNote];
-      save();
+      await save();
+      externalWorkspaceOps.recordNoteAdded(proj.id, newNote);
       pushToRenderer(mainWindow, "note-added", { projectId: proj.id, note: newNote });
 
       return {
@@ -1336,6 +1452,7 @@ async function executeTool(name, args, mainWindow) {
           type: "text",
           text: `Pre-synthesized note stored with id: ${newNote.id} in project "${proj.name}". Type: ${newNote.contentType}, Category: "${newNote.category}". Relevance vector: ${embedding ? `generated (${embedding.length} dims)` : "scheduled for the next save"}.`
         }],
+        structuredContent: { noteId: newNote.id, projectId: proj.id },
       };
     }
 
@@ -1480,54 +1597,6 @@ async function pollCloudRelay() {
     // The remote MCP request waits at most 45 seconds. Keep the consumer well
     // below that deadline even after a long idle period.
     scheduleRelayPoll(foundMessage ? 1_000 : Math.min(10_000, 1_000 * (2 ** relayIdlePolls)));
-  }
-}
-
-let externalRelayPollTimer = null;
-let externalRelayPollRunning = false;
-let externalRelayIdlePolls = 0;
-
-function scheduleExternalRelayPoll(delayMs = 5_000) {
-  if (externalRelayPollTimer) clearTimeout(externalRelayPollTimer);
-  externalRelayPollTimer = null;
-  if (!currentUserId || !currentIdToken || !isStartupComplete) return;
-  externalRelayPollTimer = setTimeout(pollExternalRelay, delayMs);
-}
-
-async function pollExternalRelay() {
-  if (externalRelayPollRunning || !currentUserId || !currentIdToken) {
-    return scheduleExternalRelayPoll();
-  }
-  externalRelayPollRunning = true;
-  let processed = 0;
-  try {
-    const response = await dc.leaseExternalMessages(currentIdToken, 5);
-    const messages = Array.isArray(response?.messages) ? response.messages : [];
-    for (const message of messages) {
-      try {
-        const result = await executeMcpRpc(externalRelayMessageToRpc(message));
-        if (result?.isError) throw new Error(result.content?.[0]?.text || 'Studio rejected the external message');
-        await dc.acknowledgeExternalMessage(currentIdToken, message.id, message.leaseToken, result);
-        processed += 1;
-      } catch (error) {
-        await dc.rejectExternalMessage(
-          currentIdToken,
-          message.id,
-          message.leaseToken,
-          error instanceof Error ? error.message : 'External message processing failed',
-        );
-      }
-    }
-  } catch (error) {
-    if (error.status !== 401 && error.status !== 403) {
-      console.warn('[ExternalRelay] Poll failed:', error.message);
-    }
-  } finally {
-    externalRelayPollRunning = false;
-    externalRelayIdlePolls = processed > 0 ? 0 : Math.min(externalRelayIdlePolls + 1, 5);
-    scheduleExternalRelayPoll(processed > 0
-      ? 2_000
-      : Math.min(15_000, 3_000 * (2 ** externalRelayIdlePolls)));
   }
 }
 
@@ -1906,6 +1975,41 @@ let isUpdateInstallInProgress = false;
 let downloadedUpdateReady = false;
 let downloadedUpdateError = null;
 
+function hideMainWindowInBackground() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+
+  // Fikr Studio keeps its MCP and relay services alive after the last window
+  // closes. Removing the Dock tile makes that background state explicit on
+  // macOS; the tray remains the stable way to reopen or quit the app.
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.hide();
+  }
+}
+
+async function revealMainWindow() {
+  if (!app.isReady()) {
+    app.once('ready', () => { void revealMainWindow(); });
+    return;
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+  }
+
+  if (process.platform === 'darwin' && app.dock) {
+    await app.dock.show().catch(error => {
+      console.warn('[Fikr Studio] Could not restore the Dock icon:', error?.message || error);
+    });
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 function showUpdateDialog(options) {
   return dialog.showMessageBox(mainWindow || undefined, options);
 }
@@ -1986,8 +2090,8 @@ function createSplashWindow() {
   _splashQueue = [];
 
   splashWindow = new BrowserWindow({
-    width: 360,
-    height: 280,
+    width: 420,
+    height: 300,
     frame: false,
     transparent: true,
     resizable: false,
@@ -2025,8 +2129,11 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
+    minWidth: 900,
+    minHeight: 600,
     show: false,         // hidden until startup sequence completes
-    titleBarStyle: 'hiddenInset',
+    title: MAIN_WINDOW_TITLE,
+    titleBarStyle: 'default',
     vibrancy: 'under-window',
     visualEffectState: 'active',
     backgroundColor: '#00000000',
@@ -2038,6 +2145,12 @@ function createWindow() {
     },
   });
   hardenWindow(mainWindow);
+
+  // Keep the native title stable when renderer metadata changes.
+  mainWindow.on('page-title-updated', event => {
+    event.preventDefault();
+    mainWindow?.setTitle(MAIN_WINDOW_TITLE);
+  });
 
   if (IS_DEV) {
     mainWindow.loadURL(DEV_SERVER_URL).catch(err => {
@@ -2053,7 +2166,7 @@ function createWindow() {
   mainWindow.on('close', event => {
     if (!isQuiting) {
       event.preventDefault();
-      mainWindow.hide();
+      hideMainWindowInBackground();
     }
   });
 
@@ -2121,10 +2234,7 @@ async function runStartupSequence() {
   splashProgress('ready', 'Ready', 100);
   await new Promise(r => setTimeout(r, 600));  // brief pause so user sees "Ready"
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-  }
+  await revealMainWindow();
 
   // Push synced workspace to renderer now that it's ready
   if (currentUserId && mainWindow) {
@@ -2136,7 +2246,6 @@ async function runStartupSequence() {
   // can trigger the post-auth cloud load path.
   isStartupComplete = true;
   scheduleRelayPoll();
-  scheduleExternalRelayPoll();
 
   // Close splash with a short fade delay
   setTimeout(() => {
@@ -2167,6 +2276,15 @@ function createTrayIcon() {
 }
 
 app.whenReady().then(async () => {
+  const lock = workspaceLock.acquire();
+  if (!lock.acquired) {
+    dialog.showErrorBox(
+      'Fikr Studio is already open',
+      `Another Fikr Studio process is using this workspace (process ${lock.ownerPid ?? 'unknown'}). Close it before opening another build.`,
+    );
+    app.quit();
+    return;
+  }
   session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   applyRendererContentSecurityPolicy();
@@ -2187,12 +2305,7 @@ app.whenReady().then(async () => {
     {
       label: "Open Canvas",
       click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        } else {
-          createWindow();
-        }
+        void revealMainWindow();
       }
     },
     { type: "separator" },
@@ -2393,17 +2506,18 @@ app.whenReady().then(async () => {
   runStartupSequence().catch(err => {
     console.error('[Startup] Startup sequence failed:', err.message);
     // Ensure main window shows even if startup fails
-    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+    void revealMainWindow();
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    void revealMainWindow();
   });
 });
 
 app.on("open-url", (event, url) => {
   event.preventDefault();
+  void revealMainWindow();
   handleAuthCallback(url);
 });
 
@@ -2416,7 +2530,7 @@ app.on("before-quit", () => {
   closePendingAuthServer();
   if (mcpServer) mcpServer.close();
   if (relayPollTimer) clearTimeout(relayPollTimer);
-  if (externalRelayPollTimer) clearTimeout(externalRelayPollTimer);
+  workspaceLock.release();
   try {
     const lockfilePath = path.join(app.getPath("userData"), "mcp-port.json");
     if (fs.existsSync(lockfilePath)) {

@@ -11,6 +11,8 @@
  * export and reset to safe defaults on import.
  */
 
+import { makeExportFilename } from "./export-filename.mjs"
+
 import type { ContentType } from "./content-types"
 
 export const NODEPAD_FILE_VERSION = 1 as const
@@ -105,27 +107,37 @@ export function serialiseProject(project: {
   }
 }
 
-/** Trigger a browser download of a .fikrdata file for the given project. */
-export function downloadNodepadFile(project: {
+type ElectronTextFileBridge = {
+  saveTextFile?: (filename: string, content: string) => Promise<{ saved: boolean; canceled: boolean }>;
+};
+
+/** Save a .fikrdata file without navigating the Electron renderer. */
+export async function downloadNodepadFile(project: {
   id: string; name: string; blocks: any[]; collapsedIds: string[]
   ghostNotes?: any[]; lastGhostTexts?: string[]
   lastGhostBlockCount?: number; lastGhostTimestamp?: number
-}): void {
+}): Promise<boolean> {
   const data = serialiseProject(project)
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json;charset=utf-8",
-  })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement("a")
-  const slug = project.name
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .slice(0, 60)
-  a.href     = url
-  a.download = `${slug || "project"}.fikrdata`
+  const content = JSON.stringify(data, null, 2)
+  const filename = makeExportFilename(project.name, "fikrdata", "project")
+  const bridge = typeof window !== "undefined"
+    ? (window as unknown as { fikrStudio?: ElectronTextFileBridge }).fikrStudio
+    : undefined
+  if (bridge?.saveTextFile) {
+    const result = await bridge.saveTextFile(filename, content)
+    return result.saved
+  }
+
+  const blob = new Blob([content], { type: "application/json;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  return true
 }
 
 // ── Import ────────────────────────────────────────────────────────────────────

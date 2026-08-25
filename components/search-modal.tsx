@@ -112,10 +112,10 @@ export function SearchModal({
                 value={query}
                 onChange={handleChange}
                 placeholder="Search your notes..."
-                className="flex-1 bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted-foreground/50 py-3.5"
+                className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/50 py-3.5"
               />
               <div className="flex items-center gap-2 shrink-0">
-                <Kbd className="text-[11px]">Esc</Kbd>
+                <Kbd className="text-xs">Esc</Kbd>
                 <button
                   onClick={onClose}
                   className="p-1 rounded hover:bg-secondary/60 text-muted-foreground/50 hover:text-foreground transition-colors"
@@ -129,12 +129,12 @@ export function SearchModal({
             {query.length < 2 && state.recentSearches.length > 0 && (
               <div className="max-h-60 overflow-y-auto scrollbar-none py-2">
                 <div className="px-4 py-1.5 flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
+                  <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
                     Recent Searches
                   </span>
                   <button 
                     onClick={() => clearRecentSearches()}
-                    className="text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
+                    className="text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
                   >
                     Clear
                   </button>
@@ -150,7 +150,7 @@ export function SearchModal({
                     className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-secondary/40 text-foreground transition-colors"
                   >
                     <Search className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                    <span className="text-[13px]">{recentQuery}</span>
+                    <span className="text-sm">{recentQuery}</span>
                   </button>
                 ))}
               </div>
@@ -168,16 +168,16 @@ export function SearchModal({
             {state.results.length > 0 && (
               <div className="flex items-center gap-3 border-t border-border/30 px-4 py-2 bg-secondary/10">
                 <div className="flex items-center gap-1.5">
-                  <Kbd className="text-[11px]">↑↓</Kbd>
-                  <span className="text-[11px] text-muted-foreground/60">navigate</span>
+                  <Kbd className="text-xs">↑↓</Kbd>
+                  <span className="text-xs text-muted-foreground/60">navigate</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Kbd className="text-[11px]">↵</Kbd>
-                  <span className="text-[11px] text-muted-foreground/60">open</span>
+                  <Kbd className="text-xs">↵</Kbd>
+                  <span className="text-xs text-muted-foreground/60">open</span>
                 </div>
                 <div className="ml-auto flex items-center gap-1.5">
-                  <Kbd className="text-[11px]">esc</Kbd>
-                  <span className="text-[11px] text-muted-foreground/60">close</span>
+                  <Kbd className="text-xs">esc</Kbd>
+                  <span className="text-xs text-muted-foreground/60">close</span>
                 </div>
               </div>
             )}

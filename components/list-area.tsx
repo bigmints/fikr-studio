@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { ArrowUpDown, Pin, Search, SlidersHorizontal, X } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUpDown, Check, Pin, Search, SlidersHorizontal, X } from "lucide-react";
 import { EmptyWorkspace } from "@/components/empty-workspace";
 import type { TextBlock } from "@/components/tile-card";
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types";
 import { isEditableShortcutTarget } from "@/lib/keyboard-shortcuts";
+import { NOTE_DRAG_MIME } from "@/lib/note-drag";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 
 interface ListAreaProps {
   blocks: TextBlock[];
@@ -14,9 +18,15 @@ interface ListAreaProps {
   selectedBlockId?: string | null;
   selectedBlockIds?: Set<string>;
   onOpenDetail?: (id: string, multiSelect?: boolean) => void;
+  onSelectAll?: (ids: string[]) => void;
+  onClearSelection?: () => void;
+  selectionMode: boolean;
+  onSelectionModeChange: (active: boolean) => void;
+  sortBy: SortOption;
+  onSortByChange: (sort: SortOption) => void;
 }
 
-type SortOption = "newest" | "oldest" | "confidence" | "pinned";
+export type SortOption = "newest" | "oldest" | "confidence" | "pinned";
 
 function relativeTime(timestamp: number) {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -39,15 +49,6 @@ function noteTitle(block: TextBlock) {
     .trim() || "Untitled";
 }
 
-function notePreview(block: TextBlock, title: string) {
-  const plainText = block.text
-    .replace(/^#+\s*/gm, "")
-    .replace(/[*_`>#()~-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return plainText === title ? "" : plainText;
-}
-
 export function ListArea({
   blocks,
   highlightedBlockId,
@@ -55,10 +56,16 @@ export function ListArea({
   selectedBlockId,
   selectedBlockIds,
   onOpenDetail,
+  onSelectAll,
+  onClearSelection,
+  selectionMode,
+  onSelectionModeChange,
+  sortBy,
+  onSortByChange,
 }: ListAreaProps) {
   const [query, setQuery] = useState("");
   const [filterType, setFilterType] = useState<ContentType | "all">("all");
-  const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const previousSelectedCount = useRef(0);
 
   const presentTypes = useMemo(() => {
     const types = new Set(blocks.map((block) => block.contentType));
@@ -90,6 +97,25 @@ export function ListArea({
     const handleKeys = (event: KeyboardEvent) => {
       if (isEditableShortcutTarget(event.target)) return;
 
+      if (selectionMode && event.key === "Escape") {
+        event.preventDefault();
+        onSelectionModeChange(false);
+        onClearSelection?.();
+        return;
+      }
+
+      if (selectionMode && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        onSelectAll?.(listBlocks.map((block) => block.id));
+        return;
+      }
+
+      if (selectionMode && event.key === " " && highlightedBlockId) {
+        event.preventDefault();
+        onOpenDetail?.(highlightedBlockId, true);
+        return;
+      }
+
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       if (!listBlocks.length) return;
       event.preventDefault();
@@ -104,96 +130,160 @@ export function ListArea({
         : (currentIndex - 1 + listBlocks.length) % listBlocks.length;
       const nextId = listBlocks[nextIndex].id;
       onHighlight(nextId);
-      onOpenDetail?.(nextId);
+      if (!selectionMode) onOpenDetail?.(nextId);
       document.getElementById(`list-item-${nextId}`)?.scrollIntoView({ block: "nearest" });
     };
 
     window.addEventListener("keydown", handleKeys);
     return () => window.removeEventListener("keydown", handleKeys);
-  }, [highlightedBlockId, listBlocks, onHighlight, onOpenDetail, selectedBlockId]);
+  }, [
+    highlightedBlockId,
+    listBlocks,
+    onClearSelection,
+    onHighlight,
+    onOpenDetail,
+    onSelectAll,
+    onSelectionModeChange,
+    selectedBlockId,
+    selectionMode,
+  ]);
 
   const filtersActive = query.trim().length > 0 || filterType !== "all";
+  const selectedCount = selectedBlockIds?.size ?? 0;
+  const allVisibleSelected = listBlocks.length > 0 && listBlocks.every((block) => selectedBlockIds?.has(block.id));
+
+  useEffect(() => {
+    if (selectedCount > 0 && !selectionMode) onSelectionModeChange(true);
+    if (previousSelectedCount.current > 0 && selectedCount === 0 && selectionMode) {
+      onSelectionModeChange(false);
+    }
+    previousSelectedCount.current = selectedCount;
+  }, [onSelectionModeChange, selectedCount, selectionMode]);
+
+  const leaveSelectionMode = () => {
+    onSelectionModeChange(false);
+    onClearSelection?.();
+  };
 
   return (
     <section className="flex h-full min-w-0 flex-col overflow-hidden bg-background" aria-label="Notes inbox">
-      <header className="shrink-0 px-4 pb-3 pt-3">
-        <div className="mb-2.5 flex items-center justify-between gap-2">
-          <div className="flex items-baseline gap-2">
-            <h1 className="font-display text-lg font-medium leading-tight text-foreground">Notes</h1>
+      <header className="shrink-0 border-b border-border/55 px-4 pb-3.5 pt-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <h1 className="fikr-toolbar-title">Notes</h1>
             <span
-              className="text-xs font-medium text-muted-foreground/70"
+              className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold tabular-nums text-primary"
               aria-label={`${listBlocks.length} ${listBlocks.length === 1 ? "note" : "notes"}`}
             >
               {listBlocks.length === blocks.length
                 ? blocks.length
-                : `${listBlocks.length}/${blocks.length}`}
+                : `${listBlocks.length} of ${blocks.length}`}
             </span>
           </div>
-          {filtersActive && (
-            <button
-              type="button"
-              onClick={() => { setQuery(""); setFilterType("all"); }}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            >
-              <X className="h-3 w-3" /> Clear
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {selectionMode ? (
+              <>
+                {!allVisibleSelected && listBlocks.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onSelectAll?.(listBlocks.map((block) => block.id))}
+                    className="h-8 px-2 text-xs font-medium text-muted-foreground"
+                  >
+                    Select all
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={leaveSelectionMode}
+                  className="h-8 px-2 text-xs font-semibold"
+                >
+                  Done
+                </Button>
+              </>
+            ) : (
+              <>
+                {filtersActive && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setQuery(""); setFilterType("all"); }}
+                    className="h-8 gap-1 px-2 text-xs font-medium text-muted-foreground"
+                  >
+                    <X className="h-3 w-3" /> Clear
+                  </Button>
+                )}
+                {blocks.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      onSelectionModeChange(true);
+                    }}
+                    className="h-8 px-2 text-xs font-medium text-muted-foreground"
+                    title="Select notes to move, delete, or recategorize"
+                  >
+                    Select
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-[minmax(0,1fr)_2rem_2rem] gap-2">
-          <label className="flex h-9 min-w-0 items-center gap-2.5 rounded-md bg-secondary/70 px-3 transition-colors focus-within:bg-secondary focus-within:ring-2 focus-within:ring-ring/30">
-            <Search className="size-4 shrink-0 text-muted-foreground/75" />
-            <input
+        <div className="grid grid-cols-[minmax(0,1fr)_2.25rem_2.25rem] gap-1.5">
+          <div className="relative min-w-0">
+            <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-3.5 -translate-y-1/2 text-muted-foreground" strokeWidth={1.8} />
+            <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search notes"
-              className="min-w-0 flex-1 bg-transparent text-sm leading-5 text-foreground outline-none placeholder:text-muted-foreground/70"
+              className="h-9 min-w-0 rounded-lg pl-9 pr-8 text-sm"
               aria-label="Search notes in this space"
             />
             {query && (
-              <button type="button" onClick={() => setQuery("")} aria-label="Clear note search">
-                <X className="size-3 text-muted-foreground/80 hover:text-foreground" />
-              </button>
+              <Button type="button" variant="ghost" size="icon-xs" onClick={() => setQuery("")} aria-label="Clear note search" className="absolute right-1.5 top-1/2 -translate-y-1/2">
+                <X className="size-3" />
+              </Button>
             )}
-          </label>
+          </div>
 
-          <label
-            className="relative flex size-8 items-center justify-center rounded-md bg-secondary/60 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-within:ring-2 focus-within:ring-ring/30"
-            title={filterType === "all" ? "Filter notes" : `Filtered by ${CONTENT_TYPE_CONFIG[filterType].label}`}
-          >
-            <SlidersHorizontal className="size-4" />
-            <select
-              value={filterType}
-              onChange={(event) => setFilterType(event.target.value as ContentType | "all")}
-              className="absolute inset-0 cursor-pointer appearance-none opacity-0"
-              aria-label="Filter notes by type"
+          <Select value={filterType} onValueChange={(value) => setFilterType(value as ContentType | "all")}>
+            <SelectTrigger
+              aria-label={`Filter notes by type, current: ${filterType === "all" ? "All types" : CONTENT_TYPE_CONFIG[filterType].label}`}
+              title={filterType === "all" ? "Filter notes" : `Filtered by ${CONTENT_TYPE_CONFIG[filterType].label}`}
+              className="relative size-9 justify-center rounded-lg border-border/70 bg-background p-0 text-muted-foreground shadow-xs hover:bg-secondary/60 hover:text-foreground [&>svg:last-child]:hidden"
             >
-              <option value="all">All types</option>
-              {presentTypes.map((type) => (
-                <option key={type} value={type}>{CONTENT_TYPE_CONFIG[type].label}</option>
-              ))}
-            </select>
-            {filterType !== "all" && (
-              <span className="absolute right-1 top-1 size-1.5 rounded-full bg-foreground" aria-hidden="true" />
-            )}
-          </label>
-          <label
-            className="relative flex size-8 items-center justify-center rounded-md bg-secondary/60 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-within:ring-2 focus-within:ring-ring/30"
-            title={`Sort: ${sortBy === "newest" ? "Newest first" : sortBy === "oldest" ? "Oldest first" : sortBy === "pinned" ? "Pinned first" : "Confidence"}`}
-          >
-            <ArrowUpDown className="size-4" />
-            <select
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as SortOption)}
-              className="absolute inset-0 cursor-pointer appearance-none opacity-0"
-              aria-label="Sort notes"
+              <SlidersHorizontal className="size-3.5" strokeWidth={1.8} />
+              <span className="sr-only"><SelectValue /></span>
+              {filterType !== "all" && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-foreground" aria-hidden="true" />}
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="all">All types</SelectItem>
+              {presentTypes.map((type) => <SelectItem key={type} value={type}>{CONTENT_TYPE_CONFIG[type].label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={(value) => onSortByChange(value as SortOption)}>
+            <SelectTrigger
+              aria-label={`Sort notes, current: ${sortBy === "newest" ? "Newest first" : sortBy === "oldest" ? "Oldest first" : sortBy === "pinned" ? "Pinned first" : "Confidence"}`}
+              title={`Sort: ${sortBy === "newest" ? "Newest first" : sortBy === "oldest" ? "Oldest first" : sortBy === "pinned" ? "Pinned first" : "Confidence"}`}
+              className="size-9 justify-center rounded-lg border-border/70 bg-background p-0 text-muted-foreground shadow-xs hover:bg-secondary/60 hover:text-foreground [&>svg:last-child]:hidden"
             >
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="pinned">Pinned first</option>
-              <option value="confidence">Confidence</option>
-            </select>
-          </label>
+              <ArrowUpDown className="size-3.5" strokeWidth={1.8} />
+              <span className="sr-only"><SelectValue /></span>
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="newest">Newest first</SelectItem>
+              <SelectItem value="oldest">Oldest first</SelectItem>
+              <SelectItem value="pinned">Pinned first</SelectItem>
+              <SelectItem value="confidence">Confidence</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </header>
 
@@ -204,57 +294,86 @@ export function ListArea({
           ) : (
             <div className="flex h-40 flex-col items-center justify-center px-6 text-center">
               <Search className="mb-2 h-5 w-5 text-muted-foreground/60" />
-              <p className="text-[12px] font-medium text-muted-foreground/65">No matching notes</p>
+              <p className="text-xs font-medium text-muted-foreground/65">No matching notes</p>
               <p className="mt-1 text-xs text-muted-foreground/70">Try another search or filter.</p>
             </div>
           )
         ) : (
-          <div role="listbox" aria-label="Notes">
+          <div role="listbox" aria-label="Notes" className="space-y-0.5 px-2 py-2">
             {listBlocks.map((block) => {
               const title = noteTitle(block);
-              const preview = notePreview(block, title);
               const config = CONTENT_TYPE_CONFIG[block.contentType] || CONTENT_TYPE_CONFIG.general;
               const isSelected = selectedBlockId === block.id || selectedBlockIds?.has(block.id);
               const isHighlighted = highlightedBlockId === block.id;
 
               return (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   key={block.id}
                   id={`list-item-${block.id}`}
                   role="option"
                   aria-selected={Boolean(isSelected)}
-                  onClick={(event) => onOpenDetail?.(block.id, event.shiftKey || event.metaKey || event.ctrlKey)}
+                  title={selectionMode ? "Click to select" : "Drag to another workspace to move"}
+                  draggable
+                  onDragStart={(event) => {
+                    const draggedIds = selectedBlockIds?.has(block.id)
+                      ? Array.from(selectedBlockIds)
+                      : [block.id];
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData(NOTE_DRAG_MIME, JSON.stringify(draggedIds));
+                  }}
+                  onClick={(event) => onOpenDetail?.(
+                    block.id,
+                    selectionMode || event.shiftKey || event.metaKey || event.ctrlKey,
+                  )}
                   onMouseEnter={() => onHighlight(block.id)}
                   onMouseLeave={() => onHighlight(selectedBlockId ?? null)}
-                  className={`group relative w-full px-4 py-3.5 text-left transition-colors ${
+                  className={`group relative h-auto w-full justify-start rounded-lg px-3 py-3 text-left transition-colors active:cursor-grabbing ${
                     isSelected
-                      ? "bg-foreground/[0.08]"
+                      ? "bg-primary/10 ring-1 ring-inset ring-primary/15"
                       : isHighlighted
-                        ? "bg-foreground/[0.05]"
-                        : "hover:bg-foreground/[0.035]"
+                        ? "bg-secondary/70"
+                        : "hover:bg-secondary/55"
                   }`}
                 >
-                  <div className="min-w-0">
-                    <div className="min-w-0">
-                      <div className="flex items-start gap-2">
-                        <p className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-5 text-foreground/95">{title}</p>
-                        <time className="shrink-0 pt-0.5 text-xs font-medium leading-5 text-muted-foreground/75">{relativeTime(block.timestamp)}</time>
-                      </div>
-                      {preview && <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-muted-foreground/85">{preview}</p>}
-                      <div className="mt-2 flex min-w-0 items-center gap-1.5 text-xs leading-4">
-                        <span className="truncate font-semibold" style={{ color: config.accentVar }}>{config.label}</span>
-                        {block.category && (
-                          <>
-                            <span className="text-muted-foreground/60">·</span>
-                            <span className="truncate text-muted-foreground/75">{block.category}</span>
-                          </>
-                        )}
-                        {block.isPinned && <Pin className="ml-auto h-2.5 w-2.5 shrink-0 fill-current text-foreground/70" />}
+                  {isSelected && <span className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-primary" aria-hidden="true" />}
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    {selectionMode && (
+                      <span
+                        className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                          selectedBlockIds?.has(block.id)
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border bg-background"
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {selectedBlockIds?.has(block.id) && <Check className="size-3" strokeWidth={2.5} />}
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="min-w-0">
+                        <div className="flex items-start gap-2.5">
+                          <p className="line-clamp-2 min-w-0 flex-1 whitespace-normal text-sm font-semibold leading-5 text-foreground/95">{title}</p>
+                          <time className="shrink-0 pt-px text-xs font-medium tabular-nums text-muted-foreground">{relativeTime(block.timestamp)}</time>
+                        </div>
+                        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 leading-4">
+                          <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <span className="size-1.5 rounded-full" style={{ backgroundColor: config.accentVar }} aria-hidden="true" />
+                            {config.label}
+                          </span>
+                          {block.category && (
+                            <>
+                              <span className="text-xs text-muted-foreground/50">·</span>
+                              <span className="truncate text-xs font-normal text-muted-foreground">{block.category}</span>
+                            </>
+                          )}
+                          {block.isPinned && <Pin className="ml-auto h-2.5 w-2.5 shrink-0 fill-current text-foreground/70" />}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </button>
+                </Button>
               );
             })}
           </div>

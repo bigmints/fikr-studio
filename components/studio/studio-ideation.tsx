@@ -40,8 +40,8 @@ function Slider({
           }}
         />
         <div className="flex justify-between items-center px-0.5">
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold opacity-80">{leftLabel}</span>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold opacity-80">{rightLabel}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold opacity-80">{leftLabel}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold opacity-80">{rightLabel}</span>
         </div>
       </div>
     </div>
@@ -89,7 +89,7 @@ export function StudioIdeation({ project, intelBlocks, onBack, onGenerate }: Pro
           </button>
           <div className="studio-toolbar__divider" />
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2 }}>{project.name}</span>
+            <span style={{ fontSize: "var(--text-sm)", fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2 }}>{project.name}</span>
           </div>
         </div>
 
@@ -136,7 +136,7 @@ export function StudioIdeation({ project, intelBlocks, onBack, onGenerate }: Pro
                   >
                     <div className="flex justify-between items-start mb-2 gap-2">
                       <p className="text-sm font-medium leading-snug text-foreground line-clamp-2">{topic.title}</p>
-                      <span className="text-[10px] font-bold text-primary shrink-0">{topic.score}%</span>
+                      <span className="text-xs font-bold text-primary shrink-0">{topic.score}%</span>
                     </div>
                     {/* Richness bar */}
                     <div className="w-full h-1 rounded-full bg-border/40 overflow-hidden">
@@ -145,7 +145,7 @@ export function StudioIdeation({ project, intelBlocks, onBack, onGenerate }: Pro
                         style={{ width: `${topic.score}%` }}
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-2 line-clamp-2">{topic.previewText}</p>
+                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{topic.previewText}</p>
                   </motion.button>
                 ))}
               </div>

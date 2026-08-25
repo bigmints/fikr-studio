@@ -30,12 +30,12 @@ export function KanbanMinimap({ columns, onColumnClick }: KanbanMinimapProps) {
           <col.icon className="h-4 w-4 text-foreground/60 group-hover:text-foreground transition-colors" />
           
           {/* Indicator dot */}
-          <div className="absolute -top-1 -right-1 min-h-4 min-w-4 px-0.5 flex items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground border-2 border-background scale-0 group-hover:scale-100 transition-transform">
+          <div className="absolute -top-1 -right-1 min-h-4 min-w-4 px-0.5 flex items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground border-2 border-background scale-0 group-hover:scale-100 transition-transform">
             {col.count}
           </div>
 
           {/* Label Tooltip (Minimal) */}
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-popover text-[11px] text-popover-foreground opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-border">
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-popover text-xs text-popover-foreground opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-border">
             {col.title.toUpperCase()}
           </div>
         </button>

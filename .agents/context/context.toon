@@ -2,7 +2,7 @@ project:
   name: fikr-studio
   status: in-development
   created: "2026-01-01"
-  last_updated: "2026-08-06"
+  last_updated: "2026-08-25"
   last_commit: "see git log"
 
 stack:
@@ -33,8 +33,20 @@ architecture:
   state: "React state in renderer; workspace persistence in Electron main process"
   mcp_local: "localhost:3025/sse — free tier, requires Studio open"
   mcp_cloud: "fikr.one/api/mcp/relay — Plus/Pro authenticated tunnel, requires Studio open"
+  messenger_notes: "fikr.one writes Messenger notes directly to Studio Firestore; the desktop has no Messenger queue or polling responsibility"
+  primary_experience: "Unified chat-first Fikr shell; existing note workspace lives under Knowledge and explicit chat artifacts live under Creations"
+  markdown_display: "Chat, Knowledge, and Creations share one GFM display renderer with provider-fence repair, citation normalization, task-list treatment, and mobile-safe tables"
+  ai_provider_selection: "LLM Setup controls normal development and production requests; local inference requires NEXT_PUBLIC_FIKR_LOCAL_AI=1"
+  agent_runtime: "OpenAI Agents SDK owns the bounded BYOK/local tool loop in Electron main; Fikr owns skills, tools, knowledge, security, UI, and provider routing"
+  chat_output_classification: "Chat persistence actions are derived only from validated tool state: answer, insight via draft_insight, knowledge-note via draft_knowledge_note, or creation via artifact tools; citations never imply insight"
+  chat_attachments: "PDF PNG JPEG and WebP uploads are validated in Electron main and sent ephemerally through the Agents SDK; metadata only is persisted, and attachment runs use the configured vision-task model"
+  outbound_mcp: "Up to five hosted HTTP/SSE or local stdio MCP servers imported from standard config; discovery and an explicit per-tool allowlist are required before Chat can connect"
+  external_mutation_consistency: "Electron main protects accepted MCP note and project mutations from stale full-workspace renderer saves until React state reflects each operation"
+  managed_chat: "Plus/Pro retains the legacy cloud chat route until the managed API can return tool calls"
+  clipboard: "Plain-text copy uses trusted preload IPC and Electron clipboard, with a browser fallback outside Electron"
+  account_billing: "Account settings read a bounded billing summary through authenticated fikr.one IPC; Stripe data and all billing management remain on fikr.one"
 
-key_decisions[10]{id,decision,adr}:
+key_decisions[15]{id,decision,adr}:
   001,Next.js static export loaded inside Electron — two layers with strict IPC boundary,.agents/context/adrs/001-nextjs-electron-hybrid-architecture.md
   003,Two-tier MCP (local SSE + cloud Firestore relay) with fikr-studio-mcp NPM proxy,.agents/context/adrs/003-mcp-two-tier-architecture.md
   004,Auth via fikr.one deep link (fikr-studio://auth) + signInWithCustomToken — no standalone auth,.agents/context/adrs/004-sso-deeplink-auth.md
@@ -45,6 +57,11 @@ key_decisions[10]{id,decision,adr}:
   012,Knowledge entries default to a Tiptap formatted writing projection while raw Markdown remains authoritative through explicit Source and Preview modes,.agents/context/adrs/012-markdown-native-rich-writing-surface.md
   013,The Markdown editor exposes only Write and Source; AI Format and Clean up are icon-only in-place toolbar actions with no theme-token changes,.agents/context/adrs/013-two-mode-markdown-editor-controls.md
   014,macOS releases use one fail-closed local and CI pipeline that verifies redownloaded draft assets before publication,.agents/context/adrs/014-fail-closed-macos-release-delivery.md
+  015,Fikr opens to a unified provider-neutral Chat surface while Knowledge preserves the existing workspace and explicit artifacts save to Creations,.agents/context/adrs/015-unified-chat-first-experience.md
+  016,OpenAI Agents SDK owns orchestration while Fikr retains skills tools knowledge security UI and provider routing,.agents/context/adrs/016-agents-sdk-tool-runtime.md
+  017,Chat attachments are bounded validated ephemeral Agents SDK inputs and persist metadata only,.agents/context/adrs/017-bounded-chat-attachments.md
+  018,Electron main buffers accepted MCP mutations until renderer persistence reflects them preventing stale-state overwrite,.agents/context/adrs/018-protect-external-mcp-mutations.md
+  019,Outbound MCP setup imports one standard hosted or local config at a time then requires explicit discovered-tool permissions,.agents/context/adrs/019-standard-mcp-config-import-and-local-servers.md
 
 key_rules:
   - "Firebase Admin credentials never ship in the desktop app"
@@ -54,5 +71,9 @@ key_rules:
   - "npm run lint && npx tsc --noEmit must pass before every commit"
   - "create_note_synthesized preferred over create_note for agent writes"
   - "NPM tokens for fikr-studio-mcp never committed to git"
+  - "Development builds must honor the configured LLM provider unless the explicit local-AI override is enabled"
+  - "Agent tools execute only in Electron main; the renderer never receives provider credentials or direct OS access"
+  - "Outbound MCP connections require validated HTTPS loopback HTTP or local stdio config plus an explicit tool allowlist"
+  - "Dropdowns date pickers and comparable interactive controls use shadcn Radix primitives never browser-native chrome"
 
 # Active tasks tracked in .agents/skills/task-manager/todo.toon

@@ -41,7 +41,7 @@ export const PRESET_MODELS: Record<AITask, Record<AIProvider, string>> = {
   vision: {
     openai:     "gpt-4o-mini",
     gemini:     "gemini-2.0-flash",
-    openrouter: "deepseek/deepseek-v4-pro",
+    openrouter: "openai/gpt-4o-mini",
   },
   embedding: {
     openai:     "text-embedding-3-small",
@@ -221,6 +221,12 @@ export function loadAIConfig(): AIConfig | null {
     // Grounding only supported on openrouter for now
     supportsGrounding: s.provider === "openrouter" && s.webGrounding,
   }
+}
+
+/** Provider/model choice is useful even while the secure key stays in Electron main. */
+export function loadAIProviderSelection(): Pick<AIConfig, "provider" | "taskModels"> {
+  const settings = loadSettings()
+  return { provider: settings.provider, taskModels: settings.taskModels }
 }
 
 /**

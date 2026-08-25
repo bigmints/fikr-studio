@@ -1,5 +1,7 @@
 import React from "react";
 import { useModKey } from "@/lib/utils";
+import { FilePlus2 } from "lucide-react";
+import { Kbd } from "@/components/ui/kbd";
 
 interface EmptyWorkspaceProps {
   title?: string;
@@ -9,39 +11,18 @@ export function EmptyWorkspace({ title }: EmptyWorkspaceProps) {
   const mod = useModKey();
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-background z-0">
-      <div className="flex flex-col items-center text-center max-w-xl px-6">
-        <div className="mb-6">
-          <img
-            src="./logo.svg"
-            alt="Fikr Studio"
-            className="h-14 w-14 object-contain"
-          />
-        </div>
-        <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary mb-8 shadow-sm">
-          <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-[pulse_3s_ease-in-out_infinite]"></span>
-          Local-First Spatial Thinking
-        </div>
-
-        <div className="flex flex-col gap-3 mb-6">
-          <h1 className="text-foreground text-[clamp(1.5rem,3vw,2.25rem)] font-bold tracking-tight leading-[1.2]">
-            "If you think you know something, but don't write it down, you
-            only think you know it."
-          </h1>
-          <a
-            href="https://www.lamport.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-sm text-muted-foreground/50 hover:text-foreground/80 transition-colors pointer-events-auto"
-          >
-            — Leslie Lamport
-          </a>
-        </div>
-
-        <p className="text-base sm:text-lg text-muted-foreground leading-relaxed mb-12 max-w-md mx-auto">
-          Capture and organize notes across list, masonry, and graph views.
-          Configure AI only when you want classification and synthesis.
+    <div className="absolute inset-0 z-0 flex items-center justify-center bg-background px-6 text-center">
+      <div className="flex max-w-sm flex-col items-center">
+        <span className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary ring-1 ring-inset ring-primary/15">
+          <FilePlus2 className="size-5" />
+        </span>
+        <h1 className="font-display text-2xl font-medium tracking-tight text-foreground">Start with one thought</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Add your first note to fill this {title || "workspace"}. Fikr will keep the original Markdown intact.
         </p>
+        <div className="mt-5 inline-flex items-center gap-2 rounded-lg bg-secondary/70 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <Kbd>{mod}</Kbd><Kbd>Enter</Kbd><span>Add a note</span>
+        </div>
       </div>
     </div>
   );

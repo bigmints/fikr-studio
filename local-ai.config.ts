@@ -17,8 +17,9 @@ export const LM_STUDIO_MODELS = {
 };
 
 export const LOCAL_AI_CONFIG = {
-  // Set to true to bypass UI settings and use the local model below
-  enabled: process.env.NODE_ENV === "development",
+  // Local inference is an explicit developer override. Normal development
+  // builds must exercise the provider selected in Fikr's LLM Setup screen.
+  enabled: process.env.NEXT_PUBLIC_FIKR_LOCAL_AI === "1",
 
   // The base URL for your local LLM server (LMStudio default)
   baseUrl: "http://localhost:1234/v1",

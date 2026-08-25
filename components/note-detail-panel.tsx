@@ -3,10 +3,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   X,
+  ArrowLeft,
   Pin,
   RefreshCw,
   Tag,
@@ -15,7 +14,6 @@ import {
   ChevronDown,
   Sparkles,
   FileText,
-  Link as LinkIcon,
   ExternalLink,
   Trash2,
   Download,
@@ -38,6 +36,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { SharedMarkdown } from "@/components/shared-markdown";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function normalizeLead(value: string) {
   return value
@@ -60,52 +69,20 @@ function withoutDuplicateLeadingTitle(markdown: string, title?: string) {
   return lines.join("\n");
 }
 
-// ── Markdown renderer ─────────────────────────────────────────────────────────
-const MD: Record<string, any> = {
-  p: ({ children }: any) => (
-    <p className="mb-4 last:mb-0 leading-[1.75]">{children}</p>
-  ),
-  ul: ({ children }: any) => (
-    <ul className="mb-4 list-disc space-y-1.5 pl-5 last:mb-0">{children}</ul>
-  ),
-  ol: ({ children }: any) => (
-    <ol className="mb-4 list-decimal space-y-1.5 pl-5 last:mb-0">{children}</ol>
-  ),
-  li: ({ children }: any) => <li className="text-foreground/90">{children}</li>,
-  h1: ({ children }: any) => (
-    <h1 className="font-display mb-4 mt-10 text-[26px] font-medium leading-8 tracking-[-0.02em] text-foreground first:mt-0 min-[1440px]:text-[30px] min-[1440px]:leading-9">{children}</h1>
-  ),
-  h2: ({ children }: any) => (
-    <h2 className="font-display mb-3 mt-9 text-[22px] font-medium leading-[30px] tracking-[-0.015em] text-foreground first:mt-0">{children}</h2>
-  ),
-  h3: ({ children }: any) => (
-    <h3 className="mb-2 mt-7 text-lg font-semibold leading-[26px] text-foreground first:mt-0">{children}</h3>
-  ),
-  strong: ({ children }: any) => (
-    <strong className="font-semibold text-foreground">{children}</strong>
-  ),
-  a: ({ href, children }: any) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-0.5 text-primary hover:underline"
-    >
-      <LinkIcon className="h-2.5 w-2.5 shrink-0" />
-      {children}
-    </a>
-  ),
-  code: ({ children }: any) => (
-    <code className="rounded bg-secondary/80 px-1.5 py-0.5 font-mono text-[13px] leading-[21px] text-foreground">
-      {children}
-    </code>
-  ),
-  pre: ({ children }: any) => (
-    <pre className="mb-4 overflow-x-auto rounded-lg bg-secondary/50 p-4 font-mono text-[13px] leading-[21px] text-foreground">
-      {children}
-    </pre>
-  ),
-};
+function noteLead(markdown: string) {
+  return markdown
+    .split("\n")
+    .find((line) => line.trim())
+    ?.replace(/^\s{0,3}#{1,6}\s+/, "")
+    .replace(/[*_`~]/g, "")
+    .trim() || "Untitled note";
+}
+
+function boundedNoteTitle(value: string) {
+  if (value.length <= 96) return value;
+  const clipped = value.slice(0, 93).replace(/\s+\S*$/, "").trim();
+  return `${clipped || value.slice(0, 93)}…`;
+}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface NoteDetailPanelProps {
@@ -142,6 +119,7 @@ export function NoteDetailPanel({
     "original",
   );
   const [expandedEditorOpen, setExpandedEditorOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const annotationRef = useRef<HTMLTextAreaElement>(null);
 
@@ -210,14 +188,18 @@ export function NoteDetailPanel({
 
   const handleDelete = useCallback(() => {
     if (!block) return;
-    if (confirm("Delete this note permanently?")) {
-      analytics.track("detail_delete", { blockId: block.id });
-      onDelete(block.id);
-      handleClose();
-    }
+    setDeleteConfirmOpen(true);
+  }, [block]);
+
+  const confirmDelete = useCallback(() => {
+    if (!block) return;
+    setDeleteConfirmOpen(false);
+    analytics.track("detail_delete", { blockId: block.id });
+    onDelete(block.id);
+    handleClose();
   }, [block, onDelete, handleClose]);
 
-  const handleExportMd = useCallback(() => {
+  const handleExportMd = useCallback(async () => {
     if (!block) return;
     analytics.track("note_export_md", { blockId: block.id });
     const md = exportSingleBlockToMarkdown(block);
@@ -226,8 +208,11 @@ export function NoteDetailPanel({
       .replace(/\s+/g, "-")
       .replace(/[^a-z0-9-]/g, "")
       .slice(0, 30);
-    downloadMarkdown(`${slug || "note"}.md`, md);
-    toast("Markdown exported");
+    try {
+      if (await downloadMarkdown(`${slug || "note"}.md`, md)) toast("Markdown exported");
+    } catch {
+      toast.error("Couldn’t export Markdown");
+    }
   }, [block]);
 
   const handleCopyMd = useCallback(async () => {
@@ -265,7 +250,9 @@ export function NoteDetailPanel({
     hour: "2-digit",
     minute: "2-digit",
   });
-  const originalMarkdown = withoutDuplicateLeadingTitle(block.text, block.title);
+  const sourceTitle = block.title?.trim() || noteLead(block.text);
+  const displayTitle = boundedNoteTitle(sourceTitle);
+  const originalMarkdown = withoutDuplicateLeadingTitle(block.text, sourceTitle);
 
   return (
     <AnimatePresence>
@@ -283,13 +270,25 @@ export function NoteDetailPanel({
             onClick={(e) => e.stopPropagation()}
           >
             <div className={`${mode === "workspace" ? "w-full" : "w-[550px]"} h-full min-w-0 flex flex-col`}>
+            {mode === "workspace" && (
+              <div className="flex h-12 shrink-0 items-center border-b border-border/60 px-3 lg:hidden">
+                <Button type="button" variant="ghost" onClick={handleClose} className="-ml-1 h-10 gap-2 px-2">
+                  <ArrowLeft className="size-4" />
+                  Back to Notes
+                </Button>
+                {block.category && <span className="ml-auto max-w-40 truncate text-xs text-muted-foreground">{block.category}</span>}
+              </div>
+            )}
             {/* ── Header ───────────────────────────────────────────────────── */}
-            <div className="reader-column flex shrink-0 items-center justify-between pb-2 pt-4">
+            <div className="note-detail-header reader-column flex shrink-0 items-center justify-between pb-2 pt-4">
               <div className="flex items-center gap-2.5 min-w-0">
                 {/* Type chip */}
-                <button
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => setTypePickerOpen((v) => !v)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all hover:opacity-80 shrink-0"
+                  className="h-8 shrink-0 gap-1.5 rounded-full px-2.5 text-xs font-semibold"
                   style={{
                     color: accent,
                     borderColor: `color-mix(in oklch, ${accent} 40%, transparent)`,
@@ -300,7 +299,7 @@ export function NoteDetailPanel({
                   <Icon className="h-3 w-3" />
                   {config.label}
                   <ChevronDown className="h-2.5 w-2.5 opacity-60" />
-                </button>
+                </Button>
 
                 {block.category && (
                   <span className="truncate text-xs text-muted-foreground/60">
@@ -309,79 +308,59 @@ export function NoteDetailPanel({
                 )}
               </div>
 
-              <div className="flex shrink-0 items-center gap-1">
-                <div
-                  className="mr-1 flex h-8 items-center rounded-md bg-secondary/55 p-0.5"
-                  role="group"
-                  aria-label="Note version"
+              <div className="note-detail-actions flex shrink-0 items-center gap-1">
+                <Tabs
+                  value={activeTab}
+                  onValueChange={(value) => {
+                    const next = value as "original" | "synthesis";
+                    analytics.track("detail_tab_switch", { tab: next });
+                    setActiveTab(next);
+                  }}
+                  className="mr-1"
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      analytics.track("detail_tab_switch", { tab: "original" });
-                      setActiveTab("original");
-                    }}
-                    aria-pressed={activeTab === "original"}
-                    className={`flex h-7 items-center rounded-[5px] px-2.5 text-[12px] font-medium transition-colors ${
-                      activeTab === "original"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Original
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      analytics.track("detail_tab_switch", { tab: "synthesis" });
-                      setActiveTab("synthesis");
-                    }}
-                    aria-pressed={activeTab === "synthesis"}
-                    className={`flex h-7 items-center rounded-[5px] px-2.5 text-[12px] font-medium transition-colors ${
-                      activeTab === "synthesis"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Synthesized
-                  </button>
-                </div>
+                  <TabsList className="h-8 p-0.5" aria-label="Note version">
+                    <TabsTrigger value="original" className="h-7 px-2.5 text-xs">Original</TabsTrigger>
+                    <TabsTrigger value="synthesis" className="h-7 px-2.5 text-xs">AI Summary</TabsTrigger>
+                  </TabsList>
+                </Tabs>
 
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={openExpandedEditor}
-                  className="flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   title="Edit note"
                   aria-label="Edit note"
                 >
                   <Pencil className="size-4" />
-                </button>
+                </Button>
 
                 {onTogglePin && (
-                  <button
+                  <Button
+                    type="button"
+                    variant={block.isPinned ? "secondary" : "ghost"}
+                    size="icon-sm"
                     onClick={() => onTogglePin(block.id)}
-                    className={`flex size-8 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
-                      block.isPinned
-                        ? "text-foreground bg-secondary/80"
-                        : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/60"
-                    }`}
                     title={block.isPinned ? "Unpin" : "Pin"}
                     aria-label={block.isPinned ? "Unpin note" : "Pin note"}
                   >
                     <Pin
                       className={`size-4 ${block.isPinned ? "fill-current" : "-rotate-45"}`}
                     />
-                  </button>
+                  </Button>
                 )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button
-                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
                       title="More note actions"
                       aria-label="More note actions"
                     >
                       <MoreHorizontal className="size-4" />
-                    </button>
+                    </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48 border-border/60">
                     <DropdownMenuItem
@@ -408,16 +387,18 @@ export function NoteDetailPanel({
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* The inbox editor is persistent; drawers retain their close action. */}
+                {/* Mobile inbox details are a full-screen drill-in; drawers retain their close action. */}
                 {mode === "overlay" && (
-                  <button
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
                     onClick={handleClose}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     title="Close (Esc)"
                     aria-label="Close note details"
                   >
                     <X className="h-4 w-4" />
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -432,7 +413,7 @@ export function NoteDetailPanel({
                   transition={{ duration: 0.12 }}
                   className="mx-4 mt-2 rounded-xl border border-border/60 bg-background/98 shadow-xl overflow-hidden z-10"
                 >
-                  <p className="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/65">
+                  <p className="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/65">
                     Change type
                   </p>
                   <div className="grid grid-cols-2 gap-1 p-2 pt-0">
@@ -488,9 +469,9 @@ export function NoteDetailPanel({
               {/* ── Synthesis tab ─────────────────────────────────────────── */}
               {activeTab === "synthesis" && (
                 <div className="space-y-4">
-                  {block.title && !block.isEnriching && (
-                    <h2 className="font-display mb-7 text-[32px] font-medium leading-[38px] tracking-[-0.025em] text-foreground min-[1440px]:text-[34px] min-[1440px]:leading-[40px]">
-                      {block.title}
+                  {!block.isEnriching && (
+                    <h2 className="font-display mb-7 text-3xl font-bold leading-10 tracking-tight text-foreground min-[1440px]:text-4xl min-[1440px]:leading-10">
+                      {displayTitle}
                     </h2>
                   )}
                   {block.isEnriching ? (
@@ -569,14 +550,7 @@ export function NoteDetailPanel({
                           </div>
                         ) : (
                           <div className="relative">
-                            <div className="markdown-body text-[17px] leading-[30px] text-foreground/90">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm]}
-                                components={MD}
-                              >
-                                {block.annotation}
-                              </ReactMarkdown>
-                            </div>
+                            <SharedMarkdown>{block.annotation}</SharedMarkdown>
                             <button
                               onClick={() => {
                                 setDraftAnnotation(block.annotation || "");
@@ -629,7 +603,7 @@ export function NoteDetailPanel({
                                 className="flex items-center gap-2 rounded-md px-3 py-2 bg-secondary/30 hover:bg-secondary/60 transition-colors group/src"
                               >
                                 <ExternalLink className="h-3 w-3 text-muted-foreground/65 group-hover/src:text-primary shrink-0 transition-colors" />
-                                <span className="truncate text-[13px] text-foreground/70">
+                                <span className="truncate text-sm text-foreground/70">
                                   {src.title || src.siteName || src.url}
                                 </span>
                               </a>
@@ -678,28 +652,21 @@ export function NoteDetailPanel({
                     openExpandedEditor();
                   }}
                 >
-                  {block.title && !block.isEnriching && (
-                    <h2 className="font-display mb-7 text-[32px] font-medium leading-[38px] tracking-[-0.025em] text-foreground min-[1440px]:text-[34px] min-[1440px]:leading-[40px]">
-                      {block.title}
+                  {!block.isEnriching && (
+                    <h2 className="font-display mb-7 text-3xl font-bold leading-10 tracking-tight text-foreground min-[1440px]:text-4xl min-[1440px]:leading-10">
+                      {displayTitle}
                     </h2>
                   )}
                   <div className="flex items-center justify-between">
                     <div className="w-full">
-                      <div className="markdown-body text-[17px] leading-[30px] text-foreground/90">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={MD}
-                        >
-                          {originalMarkdown}
-                        </ReactMarkdown>
-                      </div>
+                      <SharedMarkdown>{originalMarkdown}</SharedMarkdown>
                     </div>
                   </div>
                 </div>
               )}
 
             {/* ── Document metadata ─────────────────────────────────────────── */}
-            <div className="mt-12 flex flex-wrap items-center gap-2 font-mono text-xs leading-[18px] text-muted-foreground/65">
+            <div className="mt-12 flex flex-wrap items-center gap-2 font-mono text-xs leading-5 text-muted-foreground/65">
               <span>{formattedDate}</span>
               {block.isPinned && (
                 <>
@@ -747,6 +714,21 @@ export function NoteDetailPanel({
               setExpandedEditorOpen(false);
             }}
           />
+
+          <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Delete this note?</DialogTitle>
+                <DialogDescription>
+                  This permanently removes the note from this workspace and cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+                <Button type="button" variant="destructive" onClick={confirmDelete}>Delete note</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </AnimatePresence>

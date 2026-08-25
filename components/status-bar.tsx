@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Sparkles,
-  Search,
   AlignJustify,
   FolderInput,
   Network,
@@ -32,7 +31,6 @@ interface StatusBarProps {
   viewMode: "tiling" | "list" | "graph";
   onGhostPanelToggle: () => void;
   onViewModeChange: (mode: "tiling" | "list" | "graph") => void;
-  onSearchClick?: () => void;
   onImport: () => void;
   onExportFikrdata: () => void;
   onOpenSettings: () => void;
@@ -62,7 +60,6 @@ export function StatusBar({
   viewMode,
   onGhostPanelToggle,
   onViewModeChange,
-  onSearchClick,
   onImport,
   onExportFikrdata,
   onOpenSettings,
@@ -73,6 +70,7 @@ export function StatusBar({
   enrichingCount = 0,
   wordUsage,
   onWordCountClick,
+  onTriggerOnboarding,
 }: StatusBarProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pillHovered, setPillHovered] = useState(false);
@@ -101,7 +99,7 @@ export function StatusBar({
         onClick();
         setIsMenuOpen(false);
       }}
-      className={`flex min-h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-[13px] transition-colors hover:bg-foreground/[0.07] ${
+      className={`flex min-h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm transition-colors hover:bg-foreground/[0.07] ${
         destructive
           ? "text-red-400 hover:text-red-300"
           : "text-foreground/80 hover:text-foreground"
@@ -109,7 +107,7 @@ export function StatusBar({
     >
       <span className="opacity-60">{icon}</span>
       {label}
-      {shortcut && <span className="ml-auto font-mono text-[11px] text-muted-foreground">{shortcut}</span>}
+      {shortcut && <span className="ml-auto font-mono text-xs text-muted-foreground">{shortcut}</span>}
     </button>
   );
 
@@ -133,38 +131,24 @@ export function StatusBar({
 
   return (
     <header
-      className="studio-toolbar"
+      className="studio-toolbar studio-toolbar--workspace"
       style={{ WebkitAppRegion: "drag" } as any}
     >
       {/* ── Left: Menu + Brand + Space name ── */}
-      <div className="studio-toolbar__left">
+      <div
+        className="studio-toolbar__left"
+        style={{ WebkitAppRegion: "drag" } as any}
+      >
         {activeProjectName && (
           <div className="flex items-center">
-            <span className="max-w-[180px] truncate text-[13px] font-medium text-foreground">
+            <span className="max-w-[180px] truncate text-sm font-medium text-foreground">
               {activeProjectName}
             </span>
           </div>
         )}
       </div>
 
-      <div className="studio-toolbar__center">
-        {onSearchClick && (
-          <button
-            onClick={onSearchClick}
-            style={{ WebkitAppRegion: "no-drag" } as any}
-            className="group flex h-8 max-w-sm flex-1 items-center gap-2 rounded-md bg-secondary/55 px-3 text-muted-foreground/65 transition-colors duration-200 hover:bg-secondary/80 hover:text-foreground"
-            title="Search workspace (⌘F)"
-          >
-            <Search className="h-3 w-3 shrink-0" />
-            <span className="flex-1 truncate text-left text-[13px] font-medium">
-              Search workspace...
-            </span>
-            <span className="shrink-0 font-mono text-xs opacity-50 transition-opacity group-hover:opacity-70">
-              ⌘F
-            </span>
-          </button>
-        )}
-      </div>
+      <div className="studio-toolbar__center" style={{ WebkitAppRegion: "drag" } as any} />
 
       {/* ── Right: View toggle + workspace icons + system menu ── */}
       <div
@@ -177,7 +161,7 @@ export function StatusBar({
             onClick={onWordCountClick}
             onMouseEnter={() => setPillHovered(true)}
             onMouseLeave={() => setPillHovered(false)}
-            className={`relative flex items-center gap-1.5 h-7 px-2.5 rounded-md border transition-all duration-200 group ${pillColor.border} ${pillColor.bg} hover:opacity-90`}
+            className={`studio-word-usage relative flex items-center gap-1.5 h-8 px-2.5 rounded-md border transition-all duration-200 group ${pillColor.border} ${pillColor.bg} hover:opacity-90`}
             title={isUnlimited ? `${fmtWords(wordUsage!.wordsUsed)} words used (BYOK)` : `${fmtWords(wordUsage!.wordsUsed)} / ${fmtWords(wordUsage!.wordsLimit)} words used — click to manage`}
             style={{ WebkitAppRegion: "no-drag" } as any}
           >
@@ -189,7 +173,7 @@ export function StatusBar({
             )}
 
             {/* Text */}
-            <span className={`text-[11px] font-semibold font-mono ${pillColor.text} whitespace-nowrap`}>
+            <span className={`text-xs font-semibold font-mono ${pillColor.text} whitespace-nowrap`}>
               {isAtLimit && !pillHovered
                 ? "Limit reached"
                 : isUnlimited
@@ -213,7 +197,7 @@ export function StatusBar({
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 4 }}
                   transition={{ duration: 0.1 }}
-                  className={`text-[11px] font-semibold ml-0.5 ${pillColor.text}`}
+                  className={`text-xs font-semibold ml-0.5 ${pillColor.text}`}
                 >
                   {isAtLimit ? "Top up →" : "Billing →"}
                 </motion.span>
@@ -231,7 +215,7 @@ export function StatusBar({
         )}
 
         {/* List / Graph pill */}
-        <div className="flex items-center rounded-md border border-border/30 bg-secondary/30 p-0.5 gap-0.5">
+        <div className="studio-view-toggle flex items-center rounded-md border border-border/30 bg-secondary/30 p-0.5 gap-0.5">
           <button
             onClick={() => onViewModeChange("list")}
             className={`flex items-center justify-center p-1.5 rounded-sm transition-all duration-150 ${
@@ -258,9 +242,9 @@ export function StatusBar({
 
         {/* Global Enrichment Queue Indicator */}
         {enrichingCount > 0 && (
-          <div className="flex items-center rounded-md border border-border/30 bg-secondary/30 px-2.5 py-1 gap-2 mr-1">
+          <div className="studio-enrichment flex items-center rounded-md border border-border/30 bg-secondary/30 px-2.5 py-1 gap-2 mr-1">
             <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground/60" />
-            <span className="text-[11px] font-medium text-muted-foreground/70">
+            <span className="text-xs font-medium text-muted-foreground/70">
               AI is processing {enrichingCount} note{enrichingCount > 1 ? "s" : ""}...
             </span>
           </div>
@@ -270,7 +254,7 @@ export function StatusBar({
         <div className="flex items-center rounded-md bg-secondary/45 p-0.5">
           <button
             onClick={onGhostPanelToggle}
-            className={`relative flex min-h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition-colors duration-150 ${
+            className={`relative flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150 ${
               isGhostPanelOpen
                 ? "bg-foreground/[0.08] text-foreground"
                 : "text-muted-foreground hover:text-foreground"
@@ -327,6 +311,11 @@ export function StatusBar({
                     onOpenKeyboardShortcuts,
                     false,
                     "⌘/",
+                  )}
+                  {onTriggerOnboarding && menuItem(
+                    <Sparkles className="h-3.5 w-3.5" />,
+                    "Show introduction",
+                    onTriggerOnboarding,
                   )}
                 </div>
               </motion.div>

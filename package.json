@@ -1,6 +1,6 @@
 {
   "name": "fikr-studio",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "Local-first knowledge and writing workspace for macOS",
   "author": "Bigmints",
   "main": "main.js",
@@ -11,7 +11,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "NEXT_STATIC_EXPORT=1 next build",
+    "build": "NEXT_STATIC_EXPORT=1 next build --webpack",
     "start": "next start",
     "lint": "eslint app/ components/ lib/ tests/ main.js preload.js scripts/*.js scripts/*.mjs --ext .js,.mjs,.ts,.tsx",
     "typecheck": "tsc --noEmit",
@@ -28,7 +28,10 @@
     "release:verify": "./scripts/deploy.sh --build-only"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3"
+    "@openai/agents-core": "^0.17.0",
+    "@openai/agents-openai": "^0.17.0",
+    "electron-updater": "^6.8.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -124,10 +127,10 @@
     "typescript": "5.7.3",
     "typescript-eslint": "^8.59.3",
     "vaul": "^1.1.2",
-    "wait-on": "^8.0.5",
-    "zod": "^3.24.1"
+    "wait-on": "^8.0.5"
   },
   "overrides": {
-    "postcss": "$postcss"
+    "postcss": "$postcss",
+    "js-yaml": "^4.3.1"
   }
 }

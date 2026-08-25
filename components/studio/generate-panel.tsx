@@ -79,18 +79,18 @@ export function GeneratePanel({
               ),
               // Body
               p: ({ children }) => (
-                <p className="text-[14px] text-foreground/85 leading-[1.85] mb-4">
+                <p className="text-sm text-foreground/85 leading-relaxed mb-4">
                   {children}
                 </p>
               ),
               // Lists
               ul: ({ children }) => (
-                <ul className="list-disc list-outside pl-5 mb-4 space-y-1.5 text-[14px] text-foreground/85 leading-[1.8]">
+                <ul className="list-disc list-outside pl-5 mb-4 space-y-1.5 text-sm text-foreground/85 leading-relaxed">
                   {children}
                 </ul>
               ),
               ol: ({ children }) => (
-                <ol className="list-decimal list-outside pl-5 mb-4 space-y-1.5 text-[14px] text-foreground/85 leading-[1.8]">
+                <ol className="list-decimal list-outside pl-5 mb-4 space-y-1.5 text-sm text-foreground/85 leading-relaxed">
                   {children}
                 </ol>
               ),
@@ -111,14 +111,14 @@ export function GeneratePanel({
                     {children}
                   </code>
                 ) : (
-                  <code className="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[12px] font-mono">
+                  <code className="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs font-mono">
                     {children}
                   </code>
                 );
               },
               // Blockquote
               blockquote: ({ children }) => (
-                <blockquote className="border-l-2 border-primary/50 pl-4 my-4 text-muted-foreground italic text-[14px] leading-relaxed">
+                <blockquote className="border-l-2 border-primary/50 pl-4 my-4 text-muted-foreground italic text-sm leading-relaxed">
                   {children}
                 </blockquote>
               ),

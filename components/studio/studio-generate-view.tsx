@@ -12,6 +12,7 @@ import { StudioRichEditor } from "./studio-rich-editor";
 import { ArtifactDrawer } from "./artifact-drawer";
 import { VersionHistoryDrawer } from "./version-history-drawer";
 import PRESETS from "@/lib/generate/presets.json";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // ── Generating messages ────────────────────────────────────────────────────────
 const MSGS = [
@@ -187,7 +188,7 @@ export function StudioGenerateView({
           </button>
           <div className="studio-toolbar__divider" />
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2 }}>{project.name}</span>
+            <span style={{ fontSize: "var(--text-sm)", fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.2 }}>{project.name}</span>
           </div>
         </div>
         <div className="studio-toolbar__right" style={{ display: "flex", gap: 6 }}>
@@ -238,7 +239,7 @@ export function StudioGenerateView({
               <p className="text-sm font-semibold shimmer-text" style={{ transition: "opacity 0.4s", opacity: msgVisible ? 1 : 0, minHeight: 24, textAlign: "center" }}>
                 {MSGS[msgIdx]}
               </p>
-              <p style={{ fontSize: 12, color: "var(--muted-foreground)", maxWidth: 320, textAlign: "center", lineHeight: 1.6 }}>
+              <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", maxWidth: 320, textAlign: "center", lineHeight: 1.6 }}>
                 The AI is writing your article. This usually takes 15–45 seconds.
               </p>
               <div style={{ width: "100%", maxWidth: 520, display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
@@ -255,10 +256,10 @@ export function StudioGenerateView({
           {!isGenerating && isError && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 48, textAlign: "center" }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(239,68,68,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ color: "#ef4444", fontWeight: 700, fontSize: 18 }}>!</span>
+                <span style={{ color: "#ef4444", fontWeight: 700, fontSize: "var(--text-lg)" }}>!</span>
               </div>
-              <p style={{ fontSize: 14, fontWeight: 600 }}>Generation failed</p>
-              <p style={{ fontSize: 12, color: "var(--muted-foreground)", maxWidth: 340, lineHeight: 1.6 }}>
+              <p style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>Generation failed</p>
+              <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", maxWidth: 340, lineHeight: 1.6 }}>
                 {project.error || "The AI model produced no output. Try adjusting your parameters."}
               </p>
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
@@ -290,8 +291,8 @@ export function StudioGenerateView({
                             background: "var(--card)", cursor: "pointer", transition: "border-color 0.15s",
                           }}
                         >
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--foreground)", minWidth: 20 }}>[{c.index}]</span>
-                          <p style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.5, margin: 0 }}>{c.notePreview}</p>
+                          <span style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--foreground)", minWidth: 20 }}>[{c.index}]</span>
+                          <p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", lineHeight: 1.5, margin: 0 }}>{c.notePreview}</p>
                         </button>
                       ))}
                     </div>
@@ -323,7 +324,7 @@ export function StudioGenerateView({
               <button
                 type="button"
                 onClick={() => setWritingOpen((open) => !open)}
-                className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-secondary/50"
+                className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left text-sm font-semibold text-foreground transition-colors hover:bg-secondary/50"
                 aria-expanded={writingOpen}
               >
                 <span>Writing</span>
@@ -337,16 +338,14 @@ export function StudioGenerateView({
                 <div className="mt-4 flex flex-col gap-5">
                   <label className="flex flex-col gap-2 text-xs font-medium text-foreground">
                     Preset
-                    <select
-                      value={presetId}
-                      onChange={(e) => handlePresetChange(e.target.value)}
-                      disabled={isGenerating}
-                      className="h-8 w-full rounded-md border border-border/50 bg-background px-2 text-xs font-normal text-foreground outline-none transition-colors focus:border-foreground/40"
-                    >
-                      {PRESETS.map((preset) => (
-                        <option key={preset.id} value={preset.id}>{preset.name}</option>
-                      ))}
-                    </select>
+                    <Select value={presetId} onValueChange={handlePresetChange} disabled={isGenerating}>
+                      <SelectTrigger aria-label="Writing preset" className="h-8 border-border/50 px-2 text-xs font-normal">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        {PRESETS.map((preset) => <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </label>
 
                   <div className="flex flex-col gap-3">
