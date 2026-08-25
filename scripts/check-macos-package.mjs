@@ -4,7 +4,7 @@ import path from 'node:path';
 import pkg from '../package.json' with { type: 'json' };
 import { FORBIDDEN_INFO_KEYS } from './after-pack.js';
 
-const appPath = process.argv[2] || path.join('dist', 'mac-arm64', 'Fikr Studio.app');
+const appPath = path.resolve(process.argv[2] || path.join('dist', 'mac-arm64', 'Fikr Studio.app'));
 if (!existsSync(appPath)) throw new Error(`App bundle not found: ${appPath}`);
 
 function directoryBytes(entry) {
