@@ -221,3 +221,5 @@ worklog[0]{}:
     message: "Added pre-run tool catalog search after intent classification. The catalog selects the minimum Fikr tools and skills from request signals, matches named MCP servers or allowlisted tool names without connecting, then connects only selected MCPs. Internal tool-search events remain trace-only. Greetings select zero tools, stay concise, and expose no counts. 232 tests, lint, typecheck, build, and real Electron verification passed; preserved 43 notes, 12 chats, 7 creations."
   - date: "2026-08-27 12:11:29"
     message: "Post-commit: feat(release): prepare Fikr Studio 0.1.25"
+  - date: "2026-08-27 12:23:19"
+    message: "Published and independently verified Fikr Studio 0.1.25; all 232 tests, security gates, notarization, package checks, GitHub asset redownload, and Fikr Studio release-note readback passed."

@@ -232,7 +232,6 @@ tasks:
         priority: 1
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   in_progress:
-    - release_fikr_studio_v0_1_25:
         status: in_progress
         priority: high
         summary: "Release Fikr Studio v0.1.25"
@@ -465,6 +464,8 @@ tasks:
         priority: high
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   completed:
+    - release_fikr_studio_v0_1_25:
+        summary: "Built, Developer-ID signed, Apple notarized, draft-redownload verified, and published Fikr Studio 0.1.25 with six OTA assets; public GitHub and Fikr Studio note readback passed."
     - add_intent_driven_tool_catalog_search_stage:
         summary: "Added deterministic intent-driven search across Fikr tools, skills, sources, memories, and configured MCP descriptors; only selected tools are exposed and only selected MCP servers connect. Internal selection telemetry stays out of live UI. 232 tests, lint, typecheck, build, and Electron greeting proof passed."
     - fix_url_intent_routing_and_lazy_mcp_activation:
