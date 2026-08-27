@@ -31,6 +31,7 @@ lib/fikr-apps-firebase-adminsdk-*.json
 
 # Scratch / temp files
 runs/
+tmp/
 curl_out.txt
 *.tmp
 diagnose-db.js

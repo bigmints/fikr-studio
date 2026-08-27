@@ -162,7 +162,7 @@ export interface AISettings {
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "fikr-ai-settings"
-const SECURE_KEY_MASK = "••••••••"
+export const SECURE_KEY_MASK = "••••••••"
 let runtimeApiKey = ""
 
 const DEFAULT_SETTINGS: AISettings = {

@@ -2,7 +2,7 @@ project:
   name: fikr-studio
   status: in-development
   created: "2026-01-01"
-  last_updated: "2026-08-25"
+  last_updated: "2026-08-27"
   last_commit: "see git log"
 
 stack:
@@ -43,10 +43,17 @@ architecture:
   outbound_mcp: "Up to five hosted HTTP/SSE or local stdio MCP servers imported from standard config; discovery and an explicit per-tool allowlist are required before Chat can connect"
   external_mutation_consistency: "Electron main protects accepted MCP note and project mutations from stale full-workspace renderer saves until React state reflects each operation"
   managed_chat: "Plus/Pro retains the legacy cloud chat route until the managed API can return tool calls"
+  chat_memory: "Bounded local-first user memories are separate from notes and citations; Agents SDK recall remember and forget tools require explicit write/delete intent and reject likely secrets"
+  product_skills: "Versioned Fikr-owned skill packages are activated through the Agents SDK tool loop; Social Media Writer ships platform profiles and validated LinkedIn X Substack and Medium artifacts"
+  web_fetch: "A built-in Agents SDK tool securely fetches only user-supplied public HTTP/S URLs, extracts primary content with Readability and LinkeDOM, converts it to bounded GFM Markdown, and preserves distinct webpage provenance"
+  document_extraction: "PDFs are read through a Fikr-owned Agents SDK tool using local page-preserving extraction and selective bundled offline OCR; PDFs are not forwarded as provider files, and exact page provenance is required for claims"
+  cloud_recovery: "Initialized cloud state remains authoritative unless a bounded versioned local recovery intent explicitly restores only chat threads and creations; legacy or not-yet-initialized creation sync cannot erase non-empty local creations, while cloud note projects remain authoritative"
+  creation_drafts: "Every persisted creation remains reachable in Creations; empty-body records are visibly labelled Draft and cannot be copied or shared until content exists"
+  mac_packaging: "The signed macOS bundle retains the supported English Electron locale and must stay below the enforced 300 MB unpacked-app limit"
   clipboard: "Plain-text copy uses trusted preload IPC and Electron clipboard, with a browser fallback outside Electron"
   account_billing: "Account settings read a bounded billing summary through authenticated fikr.one IPC; Stripe data and all billing management remain on fikr.one"
 
-key_decisions[15]{id,decision,adr}:
+key_decisions[20]{id,decision,adr}:
   001,Next.js static export loaded inside Electron — two layers with strict IPC boundary,.agents/context/adrs/001-nextjs-electron-hybrid-architecture.md
   003,Two-tier MCP (local SSE + cloud Firestore relay) with fikr-studio-mcp NPM proxy,.agents/context/adrs/003-mcp-two-tier-architecture.md
   004,Auth via fikr.one deep link (fikr-studio://auth) + signInWithCustomToken — no standalone auth,.agents/context/adrs/004-sso-deeplink-auth.md
@@ -62,6 +69,11 @@ key_decisions[15]{id,decision,adr}:
   017,Chat attachments are bounded validated ephemeral Agents SDK inputs and persist metadata only,.agents/context/adrs/017-bounded-chat-attachments.md
   018,Electron main buffers accepted MCP mutations until renderer persistence reflects them preventing stale-state overwrite,.agents/context/adrs/018-protect-external-mcp-mutations.md
   019,Outbound MCP setup imports one standard hosted or local config at a time then requires explicit discovered-tool permissions,.agents/context/adrs/019-standard-mcp-config-import-and-local-servers.md
+  020,Durable chat memories are local-first tool-managed continuity and remain separate from knowledge citations,.agents/context/adrs/020-local-first-chat-memory-tools.md
+  021,Product skills are packaged versioned Fikr assets with tool allowlists and code-enforced output contracts,.agents/context/adrs/021-packaged-product-skills.md
+  022,Secure built-in webpage fetch validates URL DNS redirects MIME and limits before Readability extraction and distinct web citation,.agents/context/adrs/022-secure-built-in-web-fetch.md
+  023,Uploaded PDFs use local page-aware extraction with selective offline OCR and exact document citations,.agents/context/adrs/023-local-document-extraction-and-ocr.md
+  024,One-time versioned recovery may restore only bounded chats and creations while initialized cloud note projects remain authoritative,.agents/context/adrs/024-explicit-chat-creation-cloud-recovery.md
 
 key_rules:
   - "Firebase Admin credentials never ship in the desktop app"

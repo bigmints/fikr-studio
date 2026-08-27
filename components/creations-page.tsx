@@ -23,11 +23,14 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MarkdownEntryEditor } from "@/components/markdown-entry-editor";
 import { SharedMarkdown } from "@/components/shared-markdown";
+import { creationTitleFromMarkdown, ensureCreationDocument } from "@/lib/creation-document.mjs";
 
 interface Creation {
   id: string;
   name?: string;
   platform?: string;
+  format?: string;
+  hashtags?: string[];
   outputMarkdown?: string;
   updatedAt?: number;
   creationKind?: string;
@@ -36,7 +39,7 @@ interface Creation {
 interface CreationsPageProps {
   creations: Creation[];
   onDeleteCreation: (id: string) => void;
-  onUpdateCreation: (id: string, outputMarkdown: string) => void;
+  onUpdateCreation: (id: string, outputMarkdown: string, name: string) => void;
 }
 
 type SharePlatform = "linkedin" | "x" | "medium" | "substack";
@@ -49,6 +52,15 @@ const SHARE_PLATFORMS: Record<SharePlatform, { label: string; url: string }> = {
   medium: { label: "Medium", url: "https://medium.com/new-story" },
   substack: { label: "Substack", url: "https://substack.com/home" },
 };
+
+function creationTypeLabel(creation: Pick<Creation, "platform" | "format" | "outputMarkdown">) {
+  if (!creation.outputMarkdown?.trim()) return "Draft";
+  if (creation.platform === "linkedin") return "LinkedIn post";
+  if (creation.platform === "x") return creation.format === "thread" ? "X thread" : "X post";
+  if (creation.platform === "substack") return "Substack newsletter";
+  if (creation.platform === "medium") return "Medium article";
+  return "Creation";
+}
 
 const COVER_FORMATS: Record<CoverFormat, { label: string; ratio: string; className: string }> = {
   landscape: { label: "Landscape · 16:9", ratio: "16 / 9", className: "w-full max-w-xl" },
@@ -113,6 +125,10 @@ function safeFileName(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "fikr-creation";
 }
 
+function creationDisplayTitle(creation: Creation) {
+  return creationTitleFromMarkdown(creation.outputMarkdown ?? "", creation.name);
+}
+
 function openExternal(url: string) {
   const ipc = typeof window !== "undefined" ? (window as any).fikrStudio : null;
   if (ipc?.openUrl) return ipc.openUrl(url);
@@ -120,7 +136,10 @@ function openExternal(url: string) {
 }
 
 export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }: CreationsPageProps) {
-  const visible = useMemo(() => creations.filter((creation) => creation.outputMarkdown?.trim()), [creations]);
+  // Persisted drafts are creations too. Keeping them visible prevents an
+  // interrupted or older draft from becoming unreachable even though its
+  // record still exists in the workspace.
+  const visible = useMemo(() => creations, [creations]);
   const [selectedId, setSelectedId] = useState<string | null>(visible[0]?.id ?? null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -139,7 +158,14 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
   const selected = visible.find((creation) => creation.id === selectedId) ?? visible[0];
   const pendingDelete = visible.find((creation) => creation.id === pendingDeleteId);
   const editingCreation = visible.find((creation) => creation.id === editingId);
-  const editingInitialMarkdown = normalizeCreationMarkdown(editingCreation?.outputMarkdown ?? "");
+  const editingInitialMarkdown = editingCreation
+    ? ensureCreationDocument(editingCreation.outputMarkdown ?? "", editingCreation.name)
+    : "";
+  const selectedDocumentMarkdown = selected
+    ? ensureCreationDocument(selected.outputMarkdown ?? "", selected.name)
+    : "";
+  const selectedHasContent = Boolean(selected?.outputMarkdown?.trim());
+  const selectedTitle = selected ? creationDisplayTitle(selected) : "Untitled creation";
   const activeCoverFormat = COVER_FORMATS[coverFormat];
   const activeCoverStyle = COVER_STYLES[coverStyle];
   const activeCoverLayout = COVER_LAYOUTS[coverFormat];
@@ -150,7 +176,7 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
   }, [selectedId, visible]);
 
   const copy = async (creation: Creation) => {
-    await writeClipboardText(creation.outputMarkdown ?? "");
+    await writeClipboardText(ensureCreationDocument(creation.outputMarkdown ?? "", creation.name));
     setCopiedId(creation.id);
     window.setTimeout(() => setCopiedId(null), 1_500);
   };
@@ -165,7 +191,7 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
   };
 
   const openEditor = (creation: Creation) => {
-    setDraftMarkdown(normalizeCreationMarkdown(creation.outputMarkdown ?? ""));
+    setDraftMarkdown(ensureCreationDocument(creation.outputMarkdown ?? "", creation.name));
     setEditingId(creation.id);
   };
 
@@ -176,17 +202,19 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
 
   const saveEditor = () => {
     if (!editingCreation || !draftMarkdown.trim()) return;
-    if (draftMarkdown === editingInitialMarkdown) {
+    const documentMarkdown = ensureCreationDocument(draftMarkdown, editingCreation.name);
+    const title = creationTitleFromMarkdown(documentMarkdown, editingCreation.name);
+    if (documentMarkdown === editingInitialMarkdown && title === editingCreation.name) {
       setEditingId(null);
       return;
     }
-    onUpdateCreation(editingCreation.id, draftMarkdown);
+    onUpdateCreation(editingCreation.id, documentMarkdown, title);
     setEditingId(null);
   };
 
   const copyShareText = async () => {
     if (!selected) return;
-    await writeClipboardText(selected.outputMarkdown ?? "");
+    await writeClipboardText(ensureCreationDocument(selected.outputMarkdown ?? "", selected.name));
     setShareCopied(true);
     window.setTimeout(() => setShareCopied(false), 1_500);
   };
@@ -198,7 +226,7 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
     try {
       const { toPng } = await import("html-to-image");
       const dataUrl = await toPng(coverRef.current, { pixelRatio: 2, cacheBust: true });
-      const saved = await downloadPngDataUrl(`${safeFileName(selected.name || "fikr-creation")}-cover.png`, dataUrl);
+      const saved = await downloadPngDataUrl(`${safeFileName(selectedTitle)}-cover.png`, dataUrl);
       if (!saved) return;
       setCoverDownloaded(true);
       window.setTimeout(() => setCoverDownloaded(false), 2_000);
@@ -221,7 +249,7 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
               <PenLine className="size-6" />
             </span>
             <h2 className="fikr-page-title">Your creations will appear here</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">Ask Fikr to make a social post, then save it when it feels right.</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">Ask Fikr to write for LinkedIn, X, Substack, or Medium, then save the draft when it feels right.</p>
           </div>
         </div>
       </main>
@@ -233,30 +261,36 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
       <section className={`${mobileDetailOpen ? "hidden" : "flex"} min-h-0 flex-col overflow-hidden bg-sidebar/25 lg:flex lg:border-r lg:border-border`}>
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
           <h1 className="fikr-toolbar-title">Creations</h1>
-          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold tabular-nums text-primary" aria-label={`${visible.length} saved ${visible.length === 1 ? "creation" : "creations"}`}>{visible.length}</span>
+          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold tabular-nums text-primary" aria-label={`${visible.length} ${visible.length === 1 ? "creation" : "creations"}`}>{visible.length}</span>
         </header>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
           {visible.map((creation) => (
-            <div key={creation.id} className={`group relative flex items-center overflow-hidden rounded-lg transition-colors ${selected?.id === creation.id ? "bg-primary/[0.08]" : "hover:bg-secondary/55"}`}>
+            <div key={creation.id} className={`group relative flex items-center overflow-hidden rounded-lg transition-colors ${selected?.id === creation.id ? "bg-primary/10 ring-1 ring-inset ring-primary/15" : "hover:bg-secondary/55"}`}>
               {selected?.id === creation.id && <span className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-primary" aria-hidden="true" />}
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => { setSelectedId(creation.id); setMobileDetailOpen(true); }}
-                className="h-auto min-h-24 min-w-0 flex-1 flex-col items-start justify-center rounded-lg px-3 py-3 text-left hover:bg-transparent"
+                className="h-auto min-w-0 flex-1 justify-start rounded-lg px-3 py-3 text-left hover:bg-transparent"
               >
-                <span className="flex w-full items-center gap-1.5 text-xs font-normal text-muted-foreground">
-                  {creation.platform === "linkedin" ? <Linkedin className="size-3.5" /> : <FileText className="size-3.5" />}
-                  {creation.platform === "linkedin" ? "LinkedIn post" : "Creation"}
-                  <span aria-hidden="true">·</span>
-                  <span>{creation.updatedAt ? new Date(creation.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Just now"}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-start gap-2.5">
+                    <span className="line-clamp-2 min-w-0 flex-1 whitespace-normal text-sm font-semibold leading-5 text-foreground/95">{creationDisplayTitle(creation)}</span>
+                    <time className="shrink-0 pt-px text-xs font-medium tabular-nums text-muted-foreground">
+                      {creation.updatedAt ? new Date(creation.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Just now"}
+                    </time>
+                  </span>
+                  <span className="mt-1.5 flex min-w-0 items-center gap-1.5 leading-4">
+                    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                      {creation.platform === "linkedin" ? <Linkedin className="size-3.5" /> : <FileText className="size-3.5" />}
+                      {creationTypeLabel(creation)}
+                    </span>
+                  </span>
                 </span>
-                <span className="mt-1.5 line-clamp-1 block w-full whitespace-normal text-base font-bold leading-5 text-foreground">{creation.name || "Untitled creation"}</span>
-                <span className="mt-1 line-clamp-2 w-full whitespace-normal text-xs font-normal leading-4 text-muted-foreground">{creationExcerpt(creation.outputMarkdown ?? "") || "Saved creation"}</span>
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button type="button" size="icon-sm" variant="ghost" aria-label={`Creation options for ${creation.name || "Untitled creation"}`} className="mr-1 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
+                  <Button type="button" size="icon-sm" variant="ghost" aria-label={`Creation options for ${creationDisplayTitle(creation)}`} className="mr-1 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
                     <MoreHorizontal />
                   </Button>
                 </DropdownMenuTrigger>
@@ -280,24 +314,24 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
               </Button>
               <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-muted-foreground">
                 {selected.platform === "linkedin" ? <Linkedin className="size-4" /> : <FileText className="size-4" />}
-                <span>{selected.platform === "linkedin" ? "LinkedIn post" : "Creation"}</span>
+                <span>{creationTypeLabel(selected)}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Button type="button" size="sm" variant="ghost" aria-label="Edit creation" onClick={() => openEditor(selected)} className="h-8 gap-2 px-2.5">
                   <PenLine className="size-4" />
                   <span className="hidden sm:inline">Edit</span>
                 </Button>
-                <Button type="button" size="sm" aria-label="Share creation" onClick={() => openShare(selected)} className="h-8 gap-2 px-2.5">
+                <Button type="button" size="sm" aria-label="Share creation" onClick={() => openShare(selected)} disabled={!selectedHasContent} className="h-8 gap-2 px-2.5">
                   <Share2 className="size-4" />
                   <span className="hidden sm:inline">Share</span>
                 </Button>
-                <Button type="button" size="sm" variant="secondary" aria-label={copiedId === selected.id ? "Creation copied" : "Copy creation"} onClick={() => void copy(selected)} className="h-8 gap-2 px-2.5">
+                <Button type="button" size="sm" variant="secondary" aria-label={copiedId === selected.id ? "Creation copied" : "Copy creation"} onClick={() => void copy(selected)} disabled={!selectedHasContent} className="h-8 gap-2 px-2.5">
                   {copiedId === selected.id ? <Check className="size-4" /> : <Copy className="size-4" />}
                   <span className="hidden sm:inline">{copiedId === selected.id ? "Copied" : "Copy"}</span>
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" size="icon-sm" variant="ghost" aria-label={`Creation options for ${selected.name || "Untitled creation"}`}>
+                    <Button type="button" size="icon-sm" variant="ghost" aria-label={`Creation options for ${selectedTitle}`}>
                       <MoreHorizontal />
                     </Button>
                   </DropdownMenuTrigger>
@@ -311,19 +345,19 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto">
               <article className="mx-auto w-full max-w-3xl px-5 pb-14 sm:px-8 lg:px-10">
-                <header className="border-b border-border/70 pb-7 pt-9 sm:pb-8 sm:pt-11" data-testid="creation-document-header">
+                <header className="border-b border-border/70 pb-5 pt-9 sm:pb-6 sm:pt-11" data-testid="creation-document-header">
                   <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <span>{selected.platform === "linkedin" ? "LinkedIn post" : "Creation"}</span>
+                    <span>{creationTypeLabel(selected)}</span>
                     <span aria-hidden="true">·</span>
                     <span>{selected.updatedAt ? new Date(selected.updatedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : "Saved now"}</span>
+                    {selected.hashtags && selected.hashtags.length > 0 && selected.platform === "medium" && (
+                      <><span aria-hidden="true">·</span><span>{selected.hashtags.join(" · ")}</span></>
+                    )}
                   </div>
-                  <h1 className="mt-3 max-w-2xl font-display text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
-                    {selected.name || "Untitled creation"}
-                  </h1>
                 </header>
-                <div className="py-8 sm:py-9">
+                <div className="py-7 sm:py-8">
                   <SharedMarkdown className="fikr-markdown--document">
-                    {selected.outputMarkdown ?? ""}
+                    {selectedDocumentMarkdown}
                   </SharedMarkdown>
                 </div>
               </article>
@@ -335,7 +369,7 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
         open={Boolean(editingCreation)}
         value={draftMarkdown}
         initialValue={editingInitialMarkdown}
-        contextLabel={editingCreation?.name || "Edit creation"}
+        contextLabel={editingCreation ? creationDisplayTitle(editingCreation) : "Edit creation"}
         saveLabel="Save changes"
         onChange={setDraftMarkdown}
         onSave={saveEditor}
@@ -368,10 +402,10 @@ export function CreationsPage({ creations, onDeleteCreation, onUpdateCreation }:
 
                     <div className={`flex min-h-0 flex-1 flex-col justify-center ${activeCoverLayout.body}`}>
                       <h3 className={`${activeCoverLayout.title} font-serif font-semibold leading-[1.05] tracking-[-0.035em]`}>
-                        {selected.name || "Knowledge into action"}
+                        {selectedTitle || "Knowledge into action"}
                       </h3>
                       <p className={`${activeCoverLayout.excerpt} ${activeCoverStyle.mutedClassName}`}>
-                        {creationExcerpt(selected.outputMarkdown ?? "")}
+                        {creationExcerpt(selectedDocumentMarkdown)}
                       </p>
                     </div>
                   </div>

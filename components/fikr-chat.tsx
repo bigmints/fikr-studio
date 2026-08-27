@@ -10,10 +10,11 @@ import {
   Layers3,
   FileText,
   FolderPlus,
+  ExternalLink,
   ImageIcon,
   Linkedin,
   Loader2,
-  Paperclip,
+  Plus,
   PlusSquare,
   Save,
   Search,
@@ -23,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  friendlyChatError,
   generateFikrChat,
   type ChatProject,
   type FikrArtifact,
@@ -30,13 +32,17 @@ import {
   type FikrChatAttachment,
   type FikrChatAttachmentInput,
   type FikrChatMessage,
+  type FikrChatMemory,
   type FikrChatThread,
   type FikrOutputKind,
 } from "@/lib/fikr-chat";
+import { applyChatMemoryMutations } from "@/lib/chat-memory.mjs";
 import { dedupeAgentEvents, recommendProjectForKnowledgeDraft, shouldOfferInsightSave, titleFromQuery } from "@/lib/chat-domain.mjs";
 import { writeClipboardText } from "@/lib/clipboard";
+import { creationDocumentFromArtifact } from "@/lib/creation-document.mjs";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -48,6 +54,8 @@ interface FikrChatProps {
   projects: ChatProject[];
   threads: FikrChatThread[];
   setThreads: Dispatch<SetStateAction<FikrChatThread[]>>;
+  memories: FikrChatMemory[];
+  setMemories: Dispatch<SetStateAction<FikrChatMemory[]>>;
   activeThreadId: string | null;
   onActiveThreadChange: (id: string | null) => void;
   onSaveKnowledge: (threadId: string, draft: { title: string; content: string; kind: Extract<FikrOutputKind, "insight" | "knowledge-note"> }, projectId: string) => boolean;
@@ -64,7 +72,11 @@ function makeId(prefix: string) {
 const MAX_ATTACHMENTS = 4;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
-const ATTACHMENT_ACCEPT = ".pdf,application/pdf,image/png,image/jpeg,image/webp";
+const IMAGE_ATTACHMENT_ACCEPT = "image/png,image/jpeg,image/webp";
+// Electron's macOS picker can leave valid PDFs disabled when MIME and extension
+// filters are combined. The extension filter is portable and the selected file
+// is still validated by attachmentMediaType before it enters chat state.
+const PDF_ATTACHMENT_ACCEPT = ".pdf";
 const CREATE_SPACE_VALUE = "__create-space__";
 
 function attachmentMediaType(file: File): FikrChatAttachmentInput["mediaType"] | null {
@@ -108,10 +120,19 @@ function knowledgeDraftForMessage(message: FikrChatMessage) {
   return null;
 }
 
+function artifactTypeLabel(artifact: FikrArtifact) {
+  if (artifact.platform === "linkedin") return "LinkedIn post";
+  if (artifact.platform === "x") return artifact.format === "thread" ? "X thread" : "X post";
+  if (artifact.platform === "substack") return "Substack newsletter";
+  return "Medium article";
+}
+
 export function FikrChat({
   projects,
   threads,
   setThreads,
+  memories,
+  setMemories,
   activeThreadId,
   onActiveThreadChange,
   onSaveKnowledge,
@@ -130,15 +151,16 @@ export function FikrChat({
   const [isCreateSpaceOpen, setIsCreateSpaceOpen] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState("");
   const [savedKnowledgeIds, setSavedKnowledgeIds] = useState<Set<string>>(new Set());
-  const [savedCreationIds, setSavedCreationIds] = useState<Set<string>>(new Set());
   const [copiedArtifactIds, setCopiedArtifactIds] = useState<Set<string>>(new Set());
   const [expandedDetailIds, setExpandedDetailIds] = useState<Set<string>>(new Set());
   const [activeAgentEvents, setActiveAgentEvents] = useState<FikrAgentEvent[]>([]);
+  const [pendingToolApproval, setPendingToolApproval] = useState<Pick<FikrAgentEvent, "runId" | "approvalId" | "serverName" | "toolName" | "arguments"> | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<FikrChatAttachmentInput[]>([]);
   const [sourcePreview, setSourcePreview] = useState<{ projectId: string; noteId: string } | null>(null);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentImageInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentPdfInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -149,24 +171,6 @@ export function FikrChat({
       setSaveProjectId(projects[0].id);
     }
   }, [projects, saveProjectId]);
-
-  useEffect(() => {
-    const unsavedArtifacts = threads.flatMap((thread) => thread.messages
-      .filter((message) => message.role === "assistant" && message.artifact && !savedCreationIds.has(message.id))
-      .map((message) => ({ threadId: thread.id, message })));
-    if (unsavedArtifacts.length === 0) return;
-
-    for (const { threadId, message } of unsavedArtifacts) {
-      if (!isCreationSaved(threadId, message.artifact!)) {
-        onSaveCreation(threadId, message.artifact!);
-      }
-    }
-    setSavedCreationIds((current) => {
-      const next = new Set(current);
-      unsavedArtifacts.forEach(({ message }) => next.add(message.id));
-      return next;
-    });
-  }, [isCreationSaved, onSaveCreation, savedCreationIds, threads]);
 
   const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
   const sourceProject = sourcePreview ? projects.find((project) => project.id === sourcePreview.projectId) : null;
@@ -181,6 +185,16 @@ export function FikrChat({
 
   const updateThread = (threadId: string, updater: (thread: FikrChatThread) => FikrChatThread) => {
     setThreads((current) => current.map((thread) => thread.id === threadId ? updater(thread) : thread));
+  };
+
+  const handleScopeChange = (projectId: string) => {
+    const nextScope: FikrChatThread["scope"] = projectId === "all"
+      ? { kind: "all" }
+      : { kind: "projects", projectIds: [projectId] };
+    setScopeProjectId(projectId);
+    if (activeThread) {
+      updateThread(activeThread.id, (thread) => ({ ...thread, scope: nextScope }));
+    }
   };
 
   const addAttachments = async (selected: FileList | null) => {
@@ -234,6 +248,7 @@ export function FikrChat({
     setError(null);
     setSaveKnowledgeMessageId(null);
     setActiveAgentEvents([]);
+    setPendingToolApproval(null);
 
     const now = Date.now();
     const threadId = activeThread?.id ?? makeId("chat");
@@ -277,10 +292,16 @@ export function FikrChat({
         query,
         projects,
         history,
+        memories,
         attachments: submittedAttachments,
         scope: threadScope,
         signal: controller.signal,
-        onAgentEvent: (event) => setActiveAgentEvents((current) => [...current.slice(-7), event]),
+        onAgentEvent: (event) => {
+          setActiveAgentEvents((current) => [...current.slice(-7), event]);
+          if (event.type === "approval_requested") setPendingToolApproval(event);
+          if ((event.type === "approval_approved" || event.type === "approval_rejected")
+            && event.approvalId === pendingToolApproval?.approvalId) setPendingToolApproval(null);
+        },
       });
       const assistantMessage: FikrChatMessage = {
         id: makeId("message"),
@@ -288,6 +309,8 @@ export function FikrChat({
         content: generation.answer,
         createdAt: Date.now(),
         sourceNoteIds: generation.sources.map((source) => source.noteId),
+        webSources: generation.webSources,
+        documentSources: generation.documentSources,
         outputKind: generation.outputKind,
         artifact: generation.artifact,
         insightDraft: generation.insightDraft,
@@ -304,6 +327,12 @@ export function FikrChat({
         messages: [...thread.messages, assistantMessage],
         updatedAt: assistantMessage.createdAt,
       }));
+      if (generation.memoryMutations?.length) {
+        setMemories((current) => applyChatMemoryMutations(current, generation.memoryMutations) as FikrChatMemory[]);
+      }
+      if (generation.artifact && !isCreationSaved(threadId, generation.artifact)) {
+        onSaveCreation(threadId, generation.artifact);
+      }
     } catch (caught) {
       if ((caught as { name?: string })?.name === "AbortError") {
         updateThread(threadId, (thread) => ({
@@ -317,13 +346,30 @@ export function FikrChat({
         setPendingAttachments((current) => current.length > 0 ? current : submittedAttachments);
         setError("Stopped. Edit your message or send it again.");
       } else {
-        setError(caught instanceof Error ? caught.message : "Fikr couldn’t answer that. Try again.");
+        setError(friendlyChatError(caught));
         setPendingAttachments((current) => current.length > 0 ? current : submittedAttachments);
       }
     } finally {
       abortRef.current = null;
       setIsLoading(false);
       setActiveAgentEvents([]);
+      setPendingToolApproval(null);
+    }
+  };
+
+  const respondToToolApproval = async (approved: boolean) => {
+    if (!pendingToolApproval?.approvalId) return;
+    const ipc = typeof window !== "undefined" ? (window as any).fikrStudio : null;
+    try {
+      const accepted = await ipc?.respondAgentApproval?.(
+        pendingToolApproval.runId,
+        pendingToolApproval.approvalId,
+        approved,
+      );
+      if (!accepted) throw new Error("This approval request is no longer active.");
+      setPendingToolApproval(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Couldn’t respond to this tool request.");
     }
   };
 
@@ -386,7 +432,7 @@ export function FikrChat({
 
   const copyArtifact = async (message: FikrChatMessage) => {
     if (!message.artifact) return;
-    await writeClipboardText(message.artifact.content);
+    await writeClipboardText(creationDocumentFromArtifact(message.artifact));
     setCopiedArtifactIds((current) => new Set(current).add(message.id));
     window.setTimeout(() => setCopiedArtifactIds((current) => {
       const next = new Set(current);
@@ -396,11 +442,54 @@ export function FikrChat({
   };
 
   const renderAnswer = (message: FikrChatMessage) => {
-    const citationMarkdown = message.content.replace(/\[#?(\d+)\](?!\()/g, "[$1](#fikr-source-$1)");
+    const citationMarkdown = message.content
+      .replace(/\[([#\d,\s]+)\](?!\()/g, (marker, contents: string) => {
+        const indices = Array.from(contents.matchAll(/\d+/g), (match) => Number(match[0]));
+        if (indices.length === 0) return marker;
+        return indices.map((index) => `[${index}](#fikr-source-${index})`).join(" ");
+      })
+      .replace(/\[W(\d+)\](?!\()/gi, (_marker, index: string) => `[W${index}](#fikr-web-source-${index})`);
+    const linkedCitationMarkdown = citationMarkdown
+      .replace(/\[D(\d+):p\.(\d+)\](?!\()/gi, (_marker, documentIndex: string, pageNumber: string) => `[D${documentIndex}:p.${pageNumber}](#fikr-document-source-D${documentIndex}-p-${pageNumber})`);
     return (
       <SharedMarkdown
         components={{
           a: ({ href, children }) => {
+            const documentMatch = href?.match(/^#fikr-document-source-D(\d+)-p-(\d+)$/i);
+            if (documentMatch) {
+              const citation = `D${Number(documentMatch[1])}:p.${Number(documentMatch[2])}`;
+              const source = message.documentSources?.find((candidate) => candidate.citation === citation);
+              return source ? (
+                <span
+                  className="fikr-chat-citation"
+                  aria-label={`${source.name}, page ${source.pageNumber}${source.extractionMethod === "ocr" ? ", read with OCR" : ""}`}
+                  title={`${source.name} · page ${source.pageNumber}${source.extractionMethod === "ocr" ? " · OCR" : ""}`}
+                >
+                  {citation}
+                </span>
+              ) : <span>{children}</span>;
+            }
+            const webMatch = href?.match(/^#fikr-web-source-(\d+)$/);
+            if (webMatch) {
+              const source = message.webSources?.[Number(webMatch[1]) - 1];
+              const canOpen = source?.finalUrl.startsWith("https://");
+              return source ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="fikr-chat-citation"
+                  aria-label={`Open web source ${webMatch[1]}: ${source.title}`}
+                  disabled={!canOpen}
+                  onClick={() => {
+                    const ipc = (window as any).fikrStudio;
+                    if (ipc?.openUrl) void ipc.openUrl(source.finalUrl);
+                  }}
+                >
+                  W{webMatch[1]}
+                </Button>
+              ) : <span>{children}</span>;
+            }
             const match = href?.match(/^#fikr-source-(\d+)$/);
             if (!match) return href ? <a href={href} target="_blank" rel="noreferrer">{children}</a> : <span>{children}</span>;
             const noteId = message.sourceNoteIds[Number(match[1]) - 1];
@@ -420,21 +509,20 @@ export function FikrChat({
           },
         }}
       >
-        {citationMarkdown}
+        {linkedCitationMarkdown}
       </SharedMarkdown>
     );
   };
 
   const visibleAgentActivity = (events: FikrAgentEvent[] | undefined) => (dedupeAgentEvents(events ?? []) as FikrAgentEvent[])
-    .filter((event) => (event.type === "tool_completed" && event.toolName !== "activate_skill") || event.type === "mcp_connected");
+    .filter((event) => event.type === "tool_completed" || event.type === "mcp_connected");
 
   const scopeControl = (
     <Select
       value={currentScope.kind === "all" ? "all" : currentScope.projectIds[0]}
-      disabled={Boolean(activeThread?.messages.length)}
-      onValueChange={setScopeProjectId}
+      onValueChange={handleScopeChange}
     >
-      <SelectTrigger aria-label="Knowledge scope" title={activeThread?.messages.length ? "Knowledge scope is fixed for this chat. Start a new chat to change it." : "Choose knowledge scope"} className="h-9 min-w-0 max-w-56 rounded-md border-0 bg-secondary/80 px-2.5 text-xs font-medium text-foreground hover:bg-secondary focus:ring-ring/25 disabled:cursor-default disabled:opacity-70 sm:px-3">
+      <SelectTrigger aria-label="Knowledge scope" title="Choose knowledge scope" className="h-9 min-w-0 max-w-56 rounded-md border-0 bg-secondary/80 px-2.5 text-xs font-medium text-foreground hover:bg-secondary focus:ring-ring/25 sm:px-3">
         <Layers3 className="size-3.5 shrink-0 text-primary" />
         <SelectValue />
       </SelectTrigger>
@@ -446,38 +534,99 @@ export function FikrChat({
   );
 
   const attachmentTray = pendingAttachments.length > 0 && (
-    <div className="mb-3 flex flex-wrap gap-2" aria-label="Files ready to attach">
+    <div className="mb-2 flex flex-wrap gap-2" aria-label="Files ready to attach">
       {pendingAttachments.map((attachment) => (
-        <div key={attachment.id} className="group flex max-w-full items-center gap-2 rounded-lg border border-[#18212f]/10 bg-white/72 py-1.5 pl-1.5 pr-2 text-left dark:border-border dark:bg-card/80">
-          {attachment.kind === "image" ? (
-            <img src={attachment.dataUrl} alt="" className="size-9 shrink-0 rounded-md object-cover" />
-          ) : (
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[#3ca6a6]/10 text-[#287d7d] dark:bg-primary/10 dark:text-primary"><FileText className="size-4" /></span>
-          )}
-          <span className="min-w-0">
-            <span className="block max-w-40 truncate text-xs font-medium text-[#18212f] dark:text-foreground">{attachment.name}</span>
-            <span className="block text-xs text-[#18212f]/45 dark:text-muted-foreground">{formatFileSize(attachment.size)}</span>
-          </span>
-          <Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingAttachments((current) => current.filter((candidate) => candidate.id !== attachment.id))} aria-label={`Remove ${attachment.name}`} className="ml-1 shrink-0 text-muted-foreground">
-            <X className="size-3.5" />
-          </Button>
-        </div>
+        attachment.kind === "image" ? (
+          <div key={attachment.id} className="group relative size-16 overflow-hidden rounded-xl border border-border/70 bg-muted" title={`${attachment.name} · ${formatFileSize(attachment.size)}`}>
+            <img src={attachment.dataUrl} alt={attachment.name} className="size-full object-cover" />
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon-xs"
+              onClick={() => setPendingAttachments((current) => current.filter((candidate) => candidate.id !== attachment.id))}
+              aria-label={`Remove ${attachment.name}`}
+              className="absolute right-1 top-1 rounded-full bg-background/90 text-foreground opacity-90 shadow-sm backdrop-blur-sm hover:bg-background group-hover:opacity-100"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <div key={attachment.id} className="group flex h-16 max-w-60 items-center gap-2.5 rounded-xl border border-border/70 bg-secondary/45 py-2 pl-2 pr-1.5 text-left">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-background text-primary"><FileText className="size-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-medium text-foreground">{attachment.name}</span>
+              <span className="block text-xs text-muted-foreground">PDF · {formatFileSize(attachment.size)}</span>
+            </span>
+            <Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingAttachments((current) => current.filter((candidate) => candidate.id !== attachment.id))} aria-label={`Remove ${attachment.name}`} className="shrink-0 rounded-full text-muted-foreground">
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        )
       ))}
     </div>
   );
 
-  const attachmentInput = (
-    <input
-      ref={attachmentInputRef}
-      type="file"
-      accept={ATTACHMENT_ACCEPT}
-      multiple
-      className="hidden"
-      onChange={(event) => {
-        void addAttachments(event.currentTarget.files);
-        event.currentTarget.value = "";
-      }}
-    />
+  const attachmentInputs = (
+    <>
+      <input
+        ref={attachmentImageInputRef}
+        type="file"
+        accept={IMAGE_ATTACHMENT_ACCEPT}
+        multiple
+        className="hidden"
+        aria-label="Choose images"
+        onChange={(event) => {
+          void addAttachments(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
+      />
+      <input
+        ref={attachmentPdfInputRef}
+        type="file"
+        accept={PDF_ATTACHMENT_ACCEPT}
+        multiple
+        className="hidden"
+        aria-label="Choose PDFs"
+        onChange={(event) => {
+          void addAttachments(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
+      />
+    </>
+  );
+
+  const renderAttachmentMenu = (side: "top" | "bottom") => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={pendingAttachments.length >= MAX_ATTACHMENTS}
+          aria-label="Add photos or files"
+          title={pendingAttachments.length >= MAX_ATTACHMENTS ? `Maximum ${MAX_ATTACHMENTS} attachments` : "Add photos or files"}
+          className="group size-9 shrink-0 rounded-full bg-secondary/70 text-foreground hover:bg-secondary data-[state=open]:bg-secondary"
+        >
+          <Plus className="size-[18px] transition-transform duration-150 group-data-[state=open]:rotate-45" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side={side} sideOffset={side === "top" ? 60 : 10} className="w-60">
+        <DropdownMenuItem onSelect={() => attachmentImageInputRef.current?.click()} className="items-start py-2.5">
+          <ImageIcon className="mt-0.5 text-primary" />
+          <span className="grid gap-0.5">
+            <span className="font-medium">Upload image</span>
+            <span className="text-xs font-normal text-muted-foreground">PNG, JPG or WebP</span>
+          </span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => attachmentPdfInputRef.current?.click()} className="items-start py-2.5">
+          <FileText className="mt-0.5 text-primary" />
+          <span className="grid gap-0.5">
+            <span className="font-medium">Upload PDF</span>
+            <span className="text-xs font-normal text-muted-foreground">PDF up to 10 MB</span>
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 
   if (!activeThread || activeThread.messages.length === 0) {
@@ -492,7 +641,8 @@ export function FikrChat({
               onSubmit={handleSubmit}
               className="fikr-chat-home-composer mx-auto mt-7 max-w-[720px] rounded-xl border border-border bg-card px-4 py-3 text-left shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-ring/15 sm:px-5 sm:py-4"
             >
-              {attachmentInput}
+              {attachmentInputs}
+              {attachmentTray}
               <textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -508,12 +658,9 @@ export function FikrChat({
                 placeholder="Ask Fikr about your knowledge, an idea, or something you want to create…"
                 className="w-full resize-none bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
               />
-              {attachmentTray}
               <div className="mt-3 flex items-end justify-between gap-3 sm:gap-4">
                 <div className="flex min-w-0 items-center gap-2">
-                  <Button type="button" variant="secondary" size="sm" onClick={() => attachmentInputRef.current?.click()} disabled={pendingAttachments.length >= MAX_ATTACHMENTS} className="shrink-0 gap-2 text-xs" aria-label="Add PDF or image">
-                    <Paperclip className="size-3.5 text-primary" /><span className="hidden sm:inline">Add files</span>
-                  </Button>
+                  {renderAttachmentMenu("bottom")}
                   {scopeControl}
                 </div>
                 <Button
@@ -584,33 +731,47 @@ export function FikrChat({
                   <Card className="mt-5 gap-0 overflow-hidden border-primary/20 py-0 shadow-sm" data-testid="social-artifact">
                     <CardHeader className="gap-1 border-b border-border/60 bg-primary/[0.045] px-4 py-3.5 sm:px-5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                          <span className="flex size-7 items-center justify-center rounded-md bg-primary/12 text-primary"><Linkedin className="size-3.5" /></span>
-                          {message.artifact.title || (message.artifact.platform === "linkedin" ? "LinkedIn post" : "Social post")}
-                        </p>
-                        <span className="text-xs text-muted-foreground">{message.artifact.sourceNoteIds.length > 0 ? "From your knowledge" : "From your attachment"}</span>
+                        <div className="flex min-w-0 items-start gap-2">
+                          <span className="flex size-7 items-center justify-center rounded-md bg-primary/12 text-primary">
+                            {message.artifact.platform === "linkedin" ? <Linkedin className="size-3.5" /> : <FileText className="size-3.5" />}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">{message.artifact.title || artifactTypeLabel(message.artifact)}</p>
+                            {message.artifact.subtitle && <p className="mt-0.5 text-xs font-normal text-muted-foreground">{message.artifact.subtitle}</p>}
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{artifactTypeLabel(message.artifact)} · {message.artifact.sourceNoteIds.length > 0 ? "From your knowledge" : (message.artifact.sourceUrls?.length ?? 0) > 0 ? "From a webpage" : "From your attachment"}</span>
                       </div>
                     </CardHeader>
                     <CardContent className="px-4 py-4 sm:px-5">
-                      <SharedMarkdown className="fikr-artifact-markdown max-h-72 overflow-hidden text-sm">
+                      <SharedMarkdown className="fikr-artifact-markdown text-sm">
                         {message.artifact.content}
                       </SharedMarkdown>
+                      {message.artifact.platform === "medium" && message.artifact.hashtags.length > 0 && (
+                        <p className="mt-4 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                          Tags · {message.artifact.hashtags.join(" · ")}
+                        </p>
+                      )}
                     </CardContent>
                     <CardFooter className="flex-wrap justify-between gap-2 border-t border-border/60 bg-secondary/20 px-3 py-2.5 sm:px-4">
                       <span className="inline-flex items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status">
-                        {savedCreationIds.has(message.id) ? <Check className="size-3.5 text-primary" /> : <Loader2 className="size-3.5 animate-spin" />}
-                        {savedCreationIds.has(message.id) ? "Saved to Creations" : "Saving…"}
+                        {isCreationSaved(activeThread.id, message.artifact) ? <Check className="size-3.5 text-primary" /> : <X className="size-3.5" />}
+                        {isCreationSaved(activeThread.id, message.artifact) ? "Saved to Creations" : "Not in Creations"}
                       </span>
                       <div className="flex items-center gap-1">
                         <Button type="button" variant="ghost" size="sm" onClick={() => void copyArtifact(message)}>
                           {copiedArtifactIds.has(message.id) ? <Check className="size-4" /> : <Copy className="size-4" />}{copiedArtifactIds.has(message.id) ? "Copied" : "Copy"}
                         </Button>
-                        <Button type="button" size="sm" onClick={onOpenCreations}>Open in Creations</Button>
+                        {isCreationSaved(activeThread.id, message.artifact) ? (
+                          <Button type="button" size="sm" onClick={onOpenCreations}>Open in Creations</Button>
+                        ) : (
+                          <Button type="button" size="sm" onClick={() => onSaveCreation(activeThread.id, message.artifact!)}>Save to Creations</Button>
+                        )}
                       </div>
                     </CardFooter>
                   </Card>
                 )}
-                {(visibleAgentActivity(message.agentEvents).length > 0 || message.sourceNoteIds.length > 0) && (
+                {(visibleAgentActivity(message.agentEvents).length > 0 || message.sourceNoteIds.length > 0 || (message.webSources?.length ?? 0) > 0 || (message.documentSources?.length ?? 0) > 0) && (
                   <div className="mt-3">
                     <Button
                       type="button"
@@ -626,7 +787,7 @@ export function FikrChat({
                     >
                       Details
                       {visibleAgentActivity(message.agentEvents).length > 0 && ` · ${visibleAgentActivity(message.agentEvents).length} steps`}
-                      {message.sourceNoteIds.length > 0 && ` · ${message.sourceNoteIds.length} sources`}
+                      {(message.sourceNoteIds.length + (message.webSources?.length ?? 0) + (message.documentSources?.length ?? 0)) > 0 && ` · ${message.sourceNoteIds.length + (message.webSources?.length ?? 0) + (message.documentSources?.length ?? 0)} sources`}
                       <ChevronDown className={`size-3.5 transition-transform ${expandedDetailIds.has(message.id) ? "rotate-180" : ""}`} />
                     </Button>
                     {expandedDetailIds.has(message.id) && (
@@ -659,6 +820,41 @@ export function FikrChat({
                         ) : null;
                       })}
                         </ol>}
+                        {(message.webSources?.length ?? 0) > 0 && (
+                          <ol className="mt-2 space-y-0.5" data-testid="chat-web-sources">
+                            {message.webSources!.map((source, index) => (
+                              <li key={`${source.finalUrl}-${index}`}>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="xs"
+                                  disabled={!source.finalUrl.startsWith("https://")}
+                                  onClick={() => {
+                                    const ipc = (window as any).fikrStudio;
+                                    if (ipc?.openUrl) void ipc.openUrl(source.finalUrl);
+                                  }}
+                                  className="h-auto w-full justify-start whitespace-normal px-1.5 py-1.5 text-left text-xs font-normal leading-5 text-muted-foreground hover:text-foreground"
+                                >
+                                  <span className="inline-flex size-5 shrink-0 items-center justify-center rounded bg-primary/12 text-[10px] font-semibold text-primary">W{index + 1}</span>
+                                  <span className="min-w-0 flex-1 break-words">{source.title || source.siteName || source.finalUrl}</span>
+                                  <ExternalLink className="size-3.5 shrink-0" />
+                                </Button>
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                        {(message.documentSources?.length ?? 0) > 0 && (
+                          <ol className="mt-2 space-y-0.5" data-testid="chat-document-sources">
+                            {message.documentSources!.map((source) => (
+                              <li key={source.citation} className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-xs text-muted-foreground">
+                                <span className="inline-flex min-w-12 shrink-0 items-center justify-center rounded bg-primary/12 px-1.5 py-1 text-[10px] font-semibold text-primary">{source.citation}</span>
+                                <FileText className="size-3.5 shrink-0" />
+                                <span className="min-w-0 flex-1 break-words">{source.name} · page {source.pageNumber}</span>
+                                {source.extractionMethod === "ocr" && <span className="text-[10px] uppercase tracking-wide">OCR</span>}
+                              </li>
+                            ))}
+                          </ol>
+                        )}
                       </div>
                     )}
                   </div>
@@ -746,16 +942,14 @@ export function FikrChat({
           }}
           className="fikr-chat-composer mx-auto max-w-3xl rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm transition-colors focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/15"
         >
-          {attachmentInput}
+          {attachmentInputs}
+          {attachmentTray}
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(draft); }
           }} rows={1} placeholder="Ask Fikr or describe what you want to create…" aria-label="Message Fikr" className="max-h-36 min-h-9 w-full resize-none bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground" />
-          {attachmentTray}
           <div className="fikr-chat-composer-tools mt-1 flex items-end justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <Button type="button" variant="secondary" size="sm" onClick={() => attachmentInputRef.current?.click()} disabled={pendingAttachments.length >= MAX_ATTACHMENTS} aria-label="Add PDF or image" className="shrink-0 gap-2 text-xs">
-                <Paperclip className="size-4 text-primary" /><span className="hidden sm:inline">Add files</span>
-              </Button>
+              {renderAttachmentMenu("top")}
               {scopeControl}
             </div>
             {isLoading ? (
@@ -794,6 +988,30 @@ export function FikrChat({
               <Button type="submit" disabled={!newSpaceName.trim()}>Create Space</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pendingToolApproval)}
+        onOpenChange={(open) => { if (!open && pendingToolApproval) void respondToToolApproval(false); }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Allow this tool once?</DialogTitle>
+            <DialogDescription>
+              Fikr wants to use {pendingToolApproval?.toolName ?? "an external tool"} from {pendingToolApproval?.serverName ?? "an MCP server"}. Nothing runs until you allow it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg bg-secondary/45 p-3">
+            <p className="font-mono text-xs font-medium text-foreground">{pendingToolApproval?.toolName}</p>
+            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground">
+              {JSON.stringify(pendingToolApproval?.arguments ?? {}, null, 2)}
+            </pre>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => void respondToToolApproval(false)}>Reject</Button>
+            <Button type="button" onClick={() => void respondToToolApproval(true)}>Allow once</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

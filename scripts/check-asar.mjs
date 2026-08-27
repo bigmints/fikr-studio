@@ -13,6 +13,11 @@ const required = [
   '/lib/auth-callback.js',
   '/lib/ai-request.js',
   '/lib/agent-runtime.js',
+  '/lib/document-extractor.js',
+  '/lib/fikr-skills.js',
+  '/lib/web-fetch.js',
+  '/lib/linkedom-worker.js',
+  '/lib/linkedom-LICENSE.txt',
   '/lib/agent-mcp-config.js',
   '/lib/mcp-auth.js',
   '/lib/mcp-validation.js',
@@ -27,6 +32,10 @@ const required = [
   '/lib/workspace-lock.js',
   '/lib/workspace-store.js',
   '/lib/update-status.js',
+  '/skills/social-media-writer/manifest.json',
+  '/skills/social-media-writer/SKILL.md',
+  '/node_modules/unpdf/dist/index.cjs',
+  '/node_modules/unpdf/dist/pdfjs.mjs',
 ];
 const forbidden = [
   /service-account/i,
@@ -42,5 +51,17 @@ for (const file of required) {
 for (const file of files) {
   const rule = forbidden.find(pattern => pattern.test(file));
   if (rule) throw new Error(`Forbidden packaged file: ${file}`);
+}
+const unpacked = `${asar}.unpacked`;
+const canvasPackage = process.arch === 'arm64' ? 'canvas-darwin-arm64' : 'canvas-darwin-x64';
+const canvasBinary = process.arch === 'arm64' ? 'skia.darwin-arm64.node' : 'skia.darwin-x64.node';
+const requiredUnpacked = [
+  path.join('node_modules', '@napi-rs', canvasPackage, canvasBinary),
+  path.join('node_modules', 'tesseract.js', 'src', 'worker-script', 'node', 'index.js'),
+  path.join('node_modules', 'tesseract.js-core', 'tesseract-core-simd-lstm.wasm'),
+  path.join('node_modules', '@tesseract.js-data', 'eng', '4.0.0_best_int', 'eng.traineddata.gz'),
+];
+for (const file of requiredUnpacked) {
+  if (!existsSync(path.join(unpacked, file))) throw new Error(`Required unpacked document runtime file missing: ${file}`);
 }
 console.log(`app.asar passed (${files.length} files, ${asarBytes} bytes)`);

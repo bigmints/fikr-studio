@@ -338,7 +338,7 @@ export function ListArea({
                   }`}
                 >
                   {isSelected && <span className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-primary" aria-hidden="true" />}
-                  <div className="flex min-w-0 items-start gap-2.5">
+                  <div className="flex w-full min-w-0 items-start gap-2.5">
                     {selectionMode && (
                       <span
                         className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-colors ${
@@ -355,7 +355,7 @@ export function ListArea({
                       <div className="min-w-0">
                         <div className="flex items-start gap-2.5">
                           <p className="line-clamp-2 min-w-0 flex-1 whitespace-normal text-sm font-semibold leading-5 text-foreground/95">{title}</p>
-                          <time className="shrink-0 pt-px text-xs font-medium tabular-nums text-muted-foreground">{relativeTime(block.timestamp)}</time>
+                          <time className="ml-auto shrink-0 pt-px text-right text-xs font-medium tabular-nums text-muted-foreground">{relativeTime(block.timestamp)}</time>
                         </div>
                         <div className="mt-1.5 flex min-w-0 items-center gap-1.5 leading-4">
                           <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">

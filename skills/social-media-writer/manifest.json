@@ -1,0 +1,59 @@
+{
+  "id": "social-media-writer",
+  "name": "Social Media Writer",
+  "version": "1.2.0",
+  "description": "Turn Fikr knowledge and uploaded sources into platform-ready LinkedIn, X, Substack, and Medium content.",
+  "triggers": [
+    "linkedin",
+    "x post",
+    "twitter",
+    "thread",
+    "substack",
+    "newsletter",
+    "medium",
+    "social post",
+    "social media"
+  ],
+  "allowedTools": [
+    "search_fikr_knowledge",
+    "inspect_fikr_note",
+    "fetch_web_page",
+    "extract_document",
+    "create_social_content",
+    "recall_fikr_memories"
+  ],
+  "platforms": {
+    "linkedin": {
+      "label": "LinkedIn",
+      "formats": ["post"],
+      "defaultFormat": "post",
+      "targetLength": "600-1500 characters",
+      "hardLimit": "3000 characters",
+      "hashtagPolicy": "Use 3-5 specific hashtags at the end. Never use generic engagement bait."
+    },
+    "x": {
+      "label": "X",
+      "formats": ["post", "thread"],
+      "defaultFormat": "post",
+      "targetLength": "A single post is at most 280 characters; a thread is 3-10 focused posts",
+      "hardLimit": "280 characters per post",
+      "hashtagPolicy": "Use at most 2 hashtags, only when they improve discovery."
+    },
+    "substack": {
+      "label": "Substack",
+      "formats": ["newsletter"],
+      "defaultFormat": "newsletter",
+      "targetLength": "800-2000 words",
+      "hardLimit": "50000 characters",
+      "hashtagPolicy": "Do not add inline hashtags."
+    },
+    "medium": {
+      "label": "Medium",
+      "formats": ["article"],
+      "defaultFormat": "article",
+      "targetLength": "800-1800 words",
+      "hardLimit": "50000 characters",
+      "hashtagPolicy": "Use up to 5 topic tags as metadata, never as an inline hashtag block."
+    }
+  }
+}

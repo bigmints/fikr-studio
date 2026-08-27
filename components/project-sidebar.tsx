@@ -11,9 +11,9 @@ import {
   Key,
   LogOut,
   LogIn,
-  Shield,
   Moon,
   Sun,
+  Monitor,
   Keyboard,
   HelpCircle,
   RefreshCw,
@@ -36,10 +36,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -124,6 +131,7 @@ interface ProjectSidebarProps {
   activeChatThreadId: string | null;
   onSelectChatThread: (id: string) => void;
   onNewChat: () => void;
+  onRenameChat: (id: string, title: string) => void;
   onDeleteChat: (id: string) => void;
   studioProjects?: any[];
   activeStudioProjectId?: string;
@@ -154,6 +162,7 @@ export function ProjectSidebar({
   activeChatThreadId,
   onSelectChatThread,
   onNewChat,
+  onRenameChat,
   onDeleteChat,
   studioProjects = [],
   activeStudioProjectId = "",
@@ -170,6 +179,8 @@ export function ProjectSidebar({
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [chatPendingDeleteId, setChatPendingDeleteId] = useState<string | null>(null);
+  const [chatPendingRenameId, setChatPendingRenameId] = useState<string | null>(null);
+  const [chatRenameTitle, setChatRenameTitle] = useState("");
 
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -297,10 +308,10 @@ export function ProjectSidebar({
     .slice(0, 12);
 
   const navigation = [
-    ["Chat", MessageCircle],
-    ["Knowledge", BookOpen],
-    ["Creations", PenLine],
-    ["Connections", Cable],
+    ["Chat", "Chat", MessageCircle],
+    ["Knowledge", "Spaces", BookOpen],
+    ["Creations", "Creations", PenLine],
+    ["Connections", "Connections", Cable],
   ] as const;
   const contextKind = activeSurface === "Chat"
     ? "chats"
@@ -309,6 +320,10 @@ export function ProjectSidebar({
       : null;
   const showContextPanel = contextKind === "workspaces"
     || (contextKind === "chats" && sortedThreads.length > 0);
+  const contextCount = contextKind === "chats" ? chatThreads.length : projects.length;
+  const contextCountLabel = contextKind === "chats"
+    ? `${contextCount} ${contextCount === 1 ? "chat" : "chats"}`
+    : `${contextCount} ${contextCount === 1 ? "space" : "spaces"}`;
   const closeMobilePanel = () => {
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
       onClose();
@@ -335,7 +350,7 @@ export function ProjectSidebar({
           </div>
 
           <nav className="flex flex-col items-center gap-1.5 px-2" aria-label="Main navigation">
-            {navigation.map(([surface, Icon]) => (
+            {navigation.map(([surface, label, Icon]) => (
               <Tooltip key={surface}>
                 <TooltipTrigger asChild>
                   <Button
@@ -346,7 +361,7 @@ export function ProjectSidebar({
                       setActiveSurface(surface);
                       closeMobilePanel();
                     }}
-                    aria-label={surface}
+                    aria-label={label}
                     aria-current={activeSurface === surface ? "page" : undefined}
                     className={`relative size-9 rounded-lg text-white/66 hover:bg-white/8 hover:text-white ${
                       activeSurface === surface
@@ -360,7 +375,7 @@ export function ProjectSidebar({
                     <Icon className="size-5" strokeWidth={1.9} />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="right">{surface}</TooltipContent>
+                <TooltipContent side="right">{label}</TooltipContent>
               </Tooltip>
             ))}
           </nav>
@@ -370,22 +385,6 @@ export function ProjectSidebar({
           </div>
 
           <div className="fikr-rail-footer mt-auto flex flex-col items-center gap-1.5 px-2 pb-3">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => onOpenSettings("account")}
-                  aria-label="Settings"
-                  className="size-9 rounded-lg text-white/60 hover:bg-white/8 hover:text-white"
-                >
-                  <Settings className="size-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Settings</TooltipContent>
-            </Tooltip>
-
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -432,14 +431,12 @@ export function ProjectSidebar({
                     <Sparkles /> Upgrade to Pro
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem onClick={() => onOpenSettings("account")}>
+                  <Settings /> Settings
+                </DropdownMenuItem>
                 {!isManagedPlan && (
                   <DropdownMenuItem onClick={() => onOpenSettings("llm")}>
                     <Key /> LLM Setup
-                  </DropdownMenuItem>
-                )}
-                {user && (
-                  <DropdownMenuItem onClick={() => onOpenSettings("account")}>
-                    <Shield /> Manage Account
                   </DropdownMenuItem>
                 )}
                 {user && isManagedPlan && (
@@ -449,15 +446,30 @@ export function ProjectSidebar({
                   </DropdownMenuItem>
                 )}
                 {mounted && (
-                  <DropdownMenuItem
-                    onClick={(event) => {
-                      event.preventDefault();
-                      setTheme(theme === "dark" ? "light" : "dark");
-                    }}
-                  >
-                    {theme === "dark" ? <Sun /> : <Moon />}
-                    {theme === "dark" ? "Light Mode" : "Dark Mode"}
-                  </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      {theme === "dark" ? <Moon /> : theme === "system" ? <Monitor /> : <Sun />}
+                      Appearance
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                      <DropdownMenuSubContent className="w-40">
+                        <DropdownMenuRadioGroup value={theme ?? "light"} onValueChange={setTheme}>
+                          <DropdownMenuRadioItem value="light" className="gap-2 [&>svg]:size-4 [&>svg]:shrink-0">
+                            <Sun />
+                            Light
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="dark" className="gap-2 [&>svg]:size-4 [&>svg]:shrink-0">
+                            <Moon />
+                            Dark
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="system" className="gap-2 [&>svg]:size-4 [&>svg]:shrink-0">
+                            <Monitor />
+                            System
+                          </DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                  </DropdownMenuSub>
                 )}
                 <DropdownMenuItem onClick={() => setIsAboutOpen(true)}>
                   <HelpCircle /> About / Help
@@ -492,16 +504,22 @@ export function ProjectSidebar({
         {contextKind && showContextPanel && (
           <aside
             className="fikr-context-panel hidden lg:flex"
-            aria-label={contextKind === "chats" ? "Recent chats" : "Workspaces"}
+            aria-label={contextKind === "chats" ? "Recent chats" : "Spaces"}
             data-testid="fikr-context-panel"
             data-context-kind={contextKind}
           >
             <div className="fikr-context-panel__header flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border px-3">
               <div className="min-w-0 flex-1">
                 <h1 className="fikr-toolbar-title text-sidebar-foreground">
-                  {contextKind === "chats" ? "Chats" : "Knowledge"}
+                  {contextKind === "chats" ? "Chats" : "Spaces"}
                 </h1>
               </div>
+              <span
+                className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold tabular-nums text-primary"
+                aria-label={contextCountLabel}
+              >
+                {contextCount}
+              </span>
               <Button
                 type="button"
                 size="sm"
@@ -519,17 +537,8 @@ export function ProjectSidebar({
 
             <ScrollArea className="min-h-0 flex-1">
               <div className="pb-4">
-                {contextKind === "workspaces" && <section aria-labelledby="workspaces-heading" className="min-w-0">
-                  <div className="flex h-10 items-center justify-between px-4 pt-1">
-                    <h2 id="workspaces-heading" className="text-xs font-bold uppercase tracking-wide text-primary">
-                      Workspaces
-                    </h2>
-                    <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                      {projects.length} {projects.length === 1 ? "space" : "spaces"}
-                    </span>
-                  </div>
-
-                  <div className="min-w-0 space-y-0.5 px-2">
+                {contextKind === "workspaces" && <section aria-label="Spaces" className="min-w-0">
+                  <div className="min-w-0 space-y-0.5 px-2 pt-2">
                     {projects.map((project) => (
                       <div
                         key={project.id}
@@ -623,7 +632,7 @@ export function ProjectSidebar({
                                 type="button"
                                 size="icon-sm"
                                 variant="ghost"
-                                aria-label={`Workspace actions for ${project.name}`}
+                                aria-label={`Space actions for ${project.name}`}
                                 className="mr-1 shrink-0 rounded-md text-muted-foreground opacity-0 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:opacity-100 group-hover:opacity-100"
                               >
                                 <MoreHorizontal />
@@ -694,11 +703,11 @@ export function ProjectSidebar({
                             aria-current={activeChatThreadId === thread.id && activeSurface === "Chat" ? "page" : undefined}
                             className="h-[50px] w-0 min-w-0 flex-1 justify-start overflow-hidden rounded-none px-3 py-2 text-sidebar-foreground hover:bg-transparent"
                           >
-                            <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
-                              <span className={`w-full truncate text-sm leading-5 ${
+                            <span className="flex min-w-0 flex-1 items-start gap-2.5 text-left">
+                              <span className={`min-w-0 flex-1 truncate text-sm leading-5 ${
                                 activeChatThreadId === thread.id && activeSurface === "Chat" ? "font-semibold" : "font-medium"
                               }`}>{thread.title}</span>
-                              <span className="text-xs font-normal tabular-nums text-muted-foreground">
+                              <span className="ml-auto shrink-0 pt-px text-right text-xs font-normal tabular-nums text-muted-foreground">
                                 {mounted ? formatThreadActivity(thread.updatedAt) : "Recent"}
                               </span>
                             </span>
@@ -716,6 +725,14 @@ export function ProjectSidebar({
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" side="right" sideOffset={6} className="w-40">
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setChatPendingRenameId(thread.id);
+                                  setChatRenameTitle(thread.title);
+                                }}
+                              >
+                                <Edit3 /> Rename chat
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
                                 onSelect={() => setChatPendingDeleteId(thread.id)}
@@ -761,7 +778,7 @@ export function ProjectSidebar({
             </SheetHeader>
 
             <nav className="grid grid-cols-2 gap-2 px-4 py-4" aria-label="Mobile navigation">
-              {navigation.map(([surface, Icon]) => (
+              {navigation.map(([surface, label, Icon]) => (
                 <Button
                   key={surface}
                   type="button"
@@ -778,7 +795,7 @@ export function ProjectSidebar({
                   }`}
                 >
                   <Icon className={`size-[17px] ${activeSurface === surface ? "text-primary" : "text-muted-foreground"}`} />
-                  {surface}
+                  {label}
                 </Button>
               ))}
             </nav>
@@ -787,10 +804,15 @@ export function ProjectSidebar({
               <div className="flex min-h-0 flex-1 flex-col border-t border-sidebar-border">
                 <div className="flex items-center gap-3 px-4 pb-2 pt-4">
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-sm font-semibold text-sidebar-foreground">
-                      {contextKind === "chats" ? "Recent chats" : "Workspaces"}
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-sidebar-foreground">
+                      <span>{contextKind === "chats" ? "Recent chats" : "Spaces"}</span>
+                      <span
+                        className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold tabular-nums text-primary"
+                        aria-label={contextCountLabel}
+                      >
+                        {contextCount}
+                      </span>
                     </h2>
-                    {contextKind === "workspaces" && <p className="mt-0.5 text-xs text-muted-foreground">Open a knowledge space.</p>}
                   </div>
                   <Button
                     type="button"
@@ -820,11 +842,11 @@ export function ProjectSidebar({
                             activeChatThreadId === thread.id ? "bg-sidebar-accent/70" : "hover:bg-sidebar-accent/45"
                           }`}
                         >
-                          <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
-                            <span className={`w-full truncate text-sm leading-5 ${
+                          <span className="flex min-w-0 flex-1 items-start gap-2.5 text-left">
+                            <span className={`min-w-0 flex-1 truncate text-sm leading-5 ${
                               activeChatThreadId === thread.id && activeSurface === "Chat" ? "font-semibold" : "font-medium"
                             }`}>{thread.title}</span>
-                            <span className="text-xs font-normal tabular-nums text-muted-foreground">
+                            <span className="ml-auto shrink-0 pt-px text-right text-xs font-normal tabular-nums text-muted-foreground">
                               {mounted ? formatThreadActivity(thread.updatedAt) : "Recent"}
                             </span>
                           </span>
@@ -877,6 +899,48 @@ export function ProjectSidebar({
         </Sheet>
 
         <AboutPanel open={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+        <Dialog
+          open={Boolean(chatPendingRenameId)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setChatPendingRenameId(null);
+              setChatRenameTitle("");
+            }
+          }}
+        >
+          <DialogContent showCloseButton={false} className="sm:max-w-md">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!chatPendingRenameId) return;
+                const title = chatRenameTitle.trim().split(/\s+/).slice(0, 5).join(" ");
+                if (!title) return;
+                onRenameChat(chatPendingRenameId, title);
+                setChatPendingRenameId(null);
+                setChatRenameTitle("");
+              }}
+            >
+              <DialogHeader>
+                <DialogTitle>Rename chat</DialogTitle>
+                <DialogDescription>Use a short title of up to five words.</DialogDescription>
+              </DialogHeader>
+              <Input
+                value={chatRenameTitle}
+                onChange={(event) => setChatRenameTitle(event.target.value)}
+                aria-label="Chat title"
+                autoFocus
+                maxLength={120}
+                className="my-5"
+              />
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="ghost">Cancel</Button>
+                </DialogClose>
+                <Button type="submit" disabled={!chatRenameTitle.trim()}>Rename</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
         <Dialog open={Boolean(chatPendingDeleteId)} onOpenChange={(open) => { if (!open) setChatPendingDeleteId(null); }}>
           <DialogContent showCloseButton={false} className="sm:max-w-md">
             <DialogHeader>

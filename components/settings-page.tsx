@@ -22,8 +22,11 @@ import {
   RefreshCw,
   Bot,
   ArrowUpRight,
+  CheckCircle2,
+  Loader2,
+  Plus,
 } from "lucide-react";
-import { AI_PROVIDER_PRESETS, getPreset, type AIProvider, type AISettings } from "@/lib/ai-settings";
+import { AI_PROVIDER_PRESETS, SECURE_KEY_MASK, getPreset, type AIProvider, type AISettings } from "@/lib/ai-settings";
 import { signOut, onIdTokenChanged, User as FirebaseUser } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { analytics } from "@/lib/analytics";
@@ -33,7 +36,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AgentMcpConnections } from "@/components/agent-mcp-connections";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export type SettingsSection = "llm" | "tools" | "account";
 
@@ -104,6 +115,9 @@ export function SettingsPage({
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [draft, setDraft] = useState<AISettings>(aiSettings);
   const [showKey, setShowKey] = useState(false);
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const [isVerifyingProvider, setIsVerifyingProvider] = useState(false);
+  const [providerError, setProviderError] = useState<string | null>(null);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userPlan, setUserPlan] = useState("Free");
   const [billing, setBilling] = useState<BillingSummary | null>(null);
@@ -114,12 +128,17 @@ export function SettingsPage({
   const isPlus = userPlan.toLowerCase().includes("plus");
   const isManagedPlan = isPro || isPlus;
   const currentPreset = getPreset(draft.provider);
+  const configuredPreset = getPreset(aiSettings.provider);
+  const hasConfiguredProvider = Boolean(aiSettings.apiKey);
 
   // Jump to correct section when opened from different menu items
   useEffect(() => {
     if (open) {
       setSection(initialSection);
       setDraft(aiSettings);
+      setProviderDialogOpen(false);
+      setProviderError(null);
+      setIsVerifyingProvider(false);
     }
   }, [open, initialSection, aiSettings]);
 
@@ -137,15 +156,16 @@ export function SettingsPage({
         const verified = token && ipc?.setUser
           ? await ipc.setUser(u.uid, token).catch(() => null)
           : null;
+        const planRaw = verified?.plan || "free";
+        const plan = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
+        setUserPlan(plan);
+        onAuthChange?.(u, token, plan);
+
         const account = verified && ipc?.getAccount
           ? await ipc.getAccount().catch(() => verified)
           : verified;
-        const planRaw = account?.plan || "free";
-        const plan = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
-        setUserPlan(plan);
         setBilling(account?.billing ?? null);
         setBillingLoading(false);
-        onAuthChange?.(u, token, plan);
       } else {
         const ipc = (window as any).fikrStudio;
         if (ipc?.setUser) await ipc.setUser(null, null).catch(() => null);
@@ -158,20 +178,71 @@ export function SettingsPage({
     return () => unsub();
   }, [onAuthChange]);
 
-  const handleSave = () => {
-    onUpdateAISettings({ ...draft, apiKey: draft.apiKey.trim() });
-    analytics.track("settings_save");
-    onClose();
-    toast("Settings saved");
+  const openProviderDialog = () => {
+    setDraft({ ...aiSettings, apiKey: "" });
+    setShowKey(false);
+    setProviderError(null);
+    setIsVerifyingProvider(false);
+    setProviderDialogOpen(true);
+  };
+
+  const handleProviderDialogChange = (nextOpen: boolean) => {
+    if (!nextOpen && isVerifyingProvider) return;
+    setProviderDialogOpen(nextOpen);
+    if (!nextOpen) {
+      setProviderError(null);
+      setIsVerifyingProvider(false);
+      setShowKey(false);
+    }
+  };
+
+  const handleVerifyAndSaveProvider = async () => {
+    const apiKey = draft.apiKey.trim();
+    if (!apiKey) {
+      setProviderError("Enter an API key.");
+      return;
+    }
+
+    const ipc = typeof window !== "undefined" ? (window as any).fikrStudio : null;
+    if (!ipc?.verifyAndSetAiKey) {
+      setProviderError("Open Fikr Studio desktop to verify and save this provider.");
+      return;
+    }
+
+    setProviderError(null);
+    setIsVerifyingProvider(true);
+    try {
+      const result = await ipc.verifyAndSetAiKey(draft.provider, apiKey);
+      if (!result?.ok) {
+        if (result?.status === 401 || result?.status === 403) {
+          setProviderError("This API key was not accepted. Check it and try again.");
+        } else {
+          setProviderError("Fikr couldn’t verify this provider. Try again.");
+        }
+        return;
+      }
+
+      onUpdateAISettings({ ...draft, apiKey: SECURE_KEY_MASK });
+      analytics.track("settings_save", { provider: draft.provider });
+      setProviderDialogOpen(false);
+      toast.success(`${currentPreset.label} connected`);
+    } catch (error) {
+      setProviderError(error instanceof Error ? error.message : "Fikr couldn’t verify this provider. Try again.");
+    } finally {
+      setIsVerifyingProvider(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
       <DialogContent
         showCloseButton={false}
-        className="inset-0 left-0 top-0 z-[300] flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 p-0 shadow-none sm:max-w-none md:flex-row"
+        className="inset-0 left-0 top-0 z-[300] flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 p-0 shadow-none sm:max-w-none"
         style={{ WebkitAppRegion: "no-drag" } as any}
       >
+        {showApiKeyBanner && <ApiKeyBanner onAddKey={() => { setSection("llm"); openProviderDialog(); }} />}
+
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row" data-testid="settings-layout">
           {/* ── Left sidebar ────────────────────────────────── */}
           <aside className="flex h-auto w-full shrink-0 flex-col border-b border-border/50 bg-sidebar md:h-full md:w-[var(--fikr-context-sidebar-width)] md:border-b-0 md:border-r">
             <header className="flex h-14 shrink-0 items-center border-b border-border px-3">
@@ -193,7 +264,7 @@ export function SettingsPage({
             </div>
 
             <nav className="flex flex-1 gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:gap-0.5 md:overflow-visible md:px-2 md:pb-0">
-              {NAV.filter(n => !(n.id === "llm" && isManagedPlan)).map(({ id, label, description, Icon }) => (
+              {NAV.map(({ id, label, description, Icon }) => (
                 <Button
                   key={id}
                   type="button"
@@ -218,7 +289,6 @@ export function SettingsPage({
 
           {/* ── Main content ────────────────────────────────── */}
           <div className="flex-1 flex flex-col min-w-0">
-            {showApiKeyBanner && <ApiKeyBanner onAddKey={() => setSection("llm")} />}
             <header className="flex h-14 shrink-0 items-center border-b border-border px-5 sm:px-8">
               <div className="min-w-0">
                 <DialogTitle className="truncate text-lg font-bold leading-tight tracking-tight">{NAV.find(n => n.id === section)?.label}</DialogTitle>
@@ -232,87 +302,138 @@ export function SettingsPage({
 
                 {/* ── LLM Setup ── */}
                 {section === "llm" && (
-                  <Card className="gap-5 py-5 shadow-none">
-                    <CardHeader className="gap-1 px-5">
-                      <CardTitle className="text-lg">AI provider</CardTitle>
-                      <CardDescription>Choose who powers generation in Fikr Studio.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-5 px-5">
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-semibold text-foreground" htmlFor="ai-provider">Provider</label>
-                      <Select
-                        value={draft.provider}
-                        onValueChange={(value) => setDraft((current) => {
-                          const provider = value as AIProvider;
-                          if (current.provider === provider) return current;
-                          return {
-                            ...current,
-                            provider,
-                            apiKey: "",
-                            taskModels: { analysis: null, tools: null, transcription: null, vision: null, embedding: null },
-                          };
-                        })}
-                      >
-                        <SelectTrigger id="ai-provider" aria-label="AI provider" className="min-h-11 w-full rounded-md border-border/70 bg-background px-3.5">
-                          <span className="flex min-w-0 items-center gap-2.5">
-                            <Cpu className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <SelectValue />
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {AI_PROVIDER_PRESETS.map((preset) => (
-                            <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <label htmlFor="llm-api-key" className="text-xs font-semibold text-foreground">API Key</label>
-                      <div className="relative">
-                        <Key className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          id="llm-api-key"
-                          type={showKey ? "text" : "password"}
-                          value={draft.apiKey}
-                          onChange={e => setDraft(d => ({ ...d, apiKey: e.target.value }))}
-                          placeholder={currentPreset.keyPlaceholder || "Paste your API key here"}
-                          className="h-11 pl-10 pr-11"
-                          autoComplete="off" spellCheck={false}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={showKey ? "Hide API key" : "Show API key"}
-                          onClick={() => setShowKey(v => !v)}
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-                        >
-                          {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <Dialog open={providerDialogOpen} onOpenChange={handleProviderDialogChange}>
+                    <section aria-labelledby="ai-providers-heading">
+                      <div className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
+                        <div>
+                          <h2 id="ai-providers-heading" className="text-lg font-semibold text-foreground">AI provider</h2>
+                          <p className="mt-1 text-sm leading-6 text-muted-foreground">Connect a provider to use AI across Fikr Studio.</p>
+                        </div>
+                        <Button type="button" size="sm" onClick={openProviderDialog} className="w-full shrink-0 sm:w-auto">
+                          <Plus className="size-4" />
+                          {hasConfiguredProvider ? "Change provider" : "Add provider"}
                         </Button>
                       </div>
-                      <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-                        <p className="text-xs text-muted-foreground">Stored on this Mac and sent only to the selected AI provider.</p>
-                        {currentPreset.keyUrl && currentPreset.keyUrl !== "#" && (
-                          <a href={currentPreset.keyUrl} target="_blank" rel="noopener noreferrer" className="flex shrink-0 items-center gap-1 text-xs text-primary hover:underline">
-                            Get a key <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
 
+                      {hasConfiguredProvider ? (
+                        <Card className="mt-6 gap-0 border-0 bg-muted/20 py-0 shadow-none">
+                          <CardContent className="flex min-h-20 items-center gap-3 px-4 py-4">
+                            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-background text-muted-foreground shadow-xs">
+                              <Cpu className="size-[18px]" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-foreground">{configuredPreset.label}</p>
+                              <p className="text-xs text-muted-foreground">API key saved on this Mac</p>
+                            </div>
+                            <span className="hidden items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 sm:flex">
+                              <CheckCircle2 className="size-3.5" /> Saved
+                            </span>
+                            <Button type="button" size="sm" variant="outline" onClick={openProviderDialog}>Change</Button>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <Card className="mt-6 gap-0 border-dashed bg-muted/20 py-0 shadow-none">
+                          <CardContent className="flex min-h-44 flex-col items-center justify-center px-6 py-8 text-center">
+                            <span className="grid size-10 place-items-center rounded-xl bg-background text-muted-foreground shadow-xs">
+                              <Cpu className="size-[18px]" />
+                            </span>
+                            <p className="mt-4 text-sm font-semibold text-foreground">No AI provider added</p>
+                            <p className="mt-1 max-w-sm text-sm leading-5 text-muted-foreground">Add a provider, verify your API key, and start using AI.</p>
+                          </CardContent>
+                        </Card>
+                      )}
 
+                      <DialogContent className="sm:max-w-lg">
+                        <DialogHeader>
+                          <DialogTitle>{hasConfiguredProvider ? "Change AI provider" : "Add AI provider"}</DialogTitle>
+                          <DialogDescription>Choose a provider and enter its API key. Fikr will verify it before saving.</DialogDescription>
+                        </DialogHeader>
 
-                    <div className="flex justify-end gap-2 border-t border-border/60 pt-5">
-                      <Button type="button" variant="ghost" onClick={onClose}>
-                        Cancel
-                      </Button>
-                      <Button type="button" onClick={handleSave}>
-                        Save Changes
-                      </Button>
-                    </div>
-                    </CardContent>
-                  </Card>
+                        <div className="grid gap-5">
+                          <div className="grid gap-2">
+                            <label className="text-sm font-medium text-foreground" htmlFor="provider-setup-provider">Provider</label>
+                            <Select
+                              value={draft.provider}
+                              disabled={isVerifyingProvider}
+                              onValueChange={(value) => setDraft((current) => {
+                                const provider = value as AIProvider;
+                                if (current.provider === provider) return current;
+                                return {
+                                  ...current,
+                                  provider,
+                                  apiKey: "",
+                                  taskModels: { analysis: null, tools: null, transcription: null, vision: null, embedding: null },
+                                };
+                              })}
+                            >
+                              <SelectTrigger id="provider-setup-provider" aria-label="AI provider" className="min-h-11 w-full bg-background px-3.5">
+                                <span className="flex min-w-0 items-center gap-2.5">
+                                  <Cpu className="size-4 shrink-0 text-muted-foreground" />
+                                  <SelectValue />
+                                </span>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {AI_PROVIDER_PRESETS.map((preset) => (
+                                  <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="grid gap-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <label htmlFor="provider-setup-key" className="text-sm font-medium text-foreground">API key</label>
+                              {currentPreset.keyUrl && currentPreset.keyUrl !== "#" && (
+                                <a href={currentPreset.keyUrl} target="_blank" rel="noopener noreferrer" className="flex shrink-0 items-center gap-1 text-xs text-primary hover:underline">
+                                  Get a key <ExternalLink className="size-3" />
+                                </a>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <Key className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                id="provider-setup-key"
+                                type={showKey ? "text" : "password"}
+                                value={draft.apiKey}
+                                onChange={(event) => { setDraft((current) => ({ ...current, apiKey: event.target.value })); setProviderError(null); }}
+                                placeholder={currentPreset.keyPlaceholder || "Paste your API key"}
+                                className="h-11 pl-10 pr-11"
+                                autoComplete="off"
+                                spellCheck={false}
+                                disabled={isVerifyingProvider}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={showKey ? "Hide API key" : "Show API key"}
+                                onClick={() => setShowKey((visible) => !visible)}
+                                disabled={isVerifyingProvider}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                              >
+                                {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                              </Button>
+                            </div>
+                            <p className="text-xs leading-5 text-muted-foreground">Verified securely, then stored only on this Mac.</p>
+                          </div>
+
+                          {providerError && (
+                            <p role="alert" className="rounded-md bg-destructive/8 px-3 py-2.5 text-sm text-destructive">{providerError}</p>
+                          )}
+                        </div>
+
+                        <DialogFooter>
+                          <DialogClose asChild>
+                            <Button type="button" variant="outline" disabled={isVerifyingProvider}>Cancel</Button>
+                          </DialogClose>
+                          <Button type="button" onClick={() => void handleVerifyAndSaveProvider()} disabled={isVerifyingProvider || !draft.apiKey.trim()}>
+                            {isVerifyingProvider && <Loader2 className="size-4 animate-spin" />}
+                            {isVerifyingProvider ? "Verifying…" : "Verify and save"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </section>
+                  </Dialog>
                 )}
 
                 {/* ── Chat tools ── */}
@@ -506,7 +627,7 @@ export function SettingsPage({
                         </div>
                       </>
                     ) : (
-                      <Card className="gap-0 overflow-hidden py-0 shadow-none">
+                      <Card className="gap-0 overflow-hidden border-0 bg-transparent py-0 shadow-none">
                         <div className="bg-gradient-to-br from-primary/16 via-primary/7 to-background px-6 py-7 sm:px-8 sm:py-9">
                           <span className="mb-4 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><Cloud className="size-5" /></span>
                           <CardTitle className="max-w-md text-xl">Your Fikr account, in one place</CardTitle>
@@ -575,6 +696,7 @@ export function SettingsPage({
               </div>
             </div>
           </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

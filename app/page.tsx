@@ -27,7 +27,8 @@ import { ApiKeyBanner } from "@/components/api-key-banner";
 import { FikrChat } from "@/components/fikr-chat";
 import { CreationsPage } from "@/components/creations-page";
 import { type FikrSurface } from "@/components/project-sidebar";
-import { type FikrArtifact, type FikrChatThread } from "@/lib/fikr-chat";
+import { type FikrArtifact, type FikrChatMemory, type FikrChatThread } from "@/lib/fikr-chat";
+import { normalizeChatMemories } from "@/lib/chat-memory.mjs";
 import {
   createCreationFromArtifact,
   creationMatchesArtifact,
@@ -81,6 +82,7 @@ export default function Page() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [studioProjects, setStudioProjects] = useState<any[]>([]);
   const [chatThreads, setChatThreads] = useState<FikrChatThread[]>([]);
+  const [chatMemories, setChatMemories] = useState<FikrChatMemory[]>([]);
   const [activeChatThreadId, setActiveChatThreadId] = useState<string | null>(null);
   const [activeStudioProjectId, setActiveStudioProjectId] = useState<string>("");
   const [activeProjectId, setActiveProjectId] = useState<string>("");
@@ -91,6 +93,25 @@ export default function Page() {
   // Suppresses the save-on-change effect during cloud push (workspace-synced).
   // Without this, the effect would immediately re-upload the stale pre-sync state.
   const isSyncingFromCloud = useRef(false);
+  // Persistence callbacks must observe the same collections React is about to
+  // render. Keep these ref-sync effects ahead of the save-on-change effect so
+  // the first hydrated render cannot write the initial empty arrays to disk.
+  const projectsRef = useRef(projects);
+  const studioProjectsRef = useRef(studioProjects);
+  const chatThreadsRef = useRef(chatThreads);
+  const chatMemoriesRef = useRef(chatMemories);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+  useEffect(() => {
+    studioProjectsRef.current = studioProjects;
+  }, [studioProjects]);
+  useEffect(() => {
+    chatThreadsRef.current = chatThreads;
+  }, [chatThreads]);
+  useEffect(() => {
+    chatMemoriesRef.current = chatMemories;
+  }, [chatMemories]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isIndexOpen, setIsIndexOpen] = useState(false);
   const [isGhostPanelOpen, setIsGhostPanelOpen] = useState(false);
@@ -119,6 +140,7 @@ export default function Page() {
   // ── Auth + usage polling ─────────────────────────────────────────────────
   const [cloudIdToken, setCloudIdToken] = useState<string | null>(null);
   const [cloudPlan, setCloudPlan] = useState<string>("Free");
+  const [isAuthResolved, setIsAuthResolved] = useState(false);
   const [wordUsage, setWordUsage] = useState<WordUsage | null>(null);
   const usagePollRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -154,6 +176,7 @@ export default function Page() {
     (user: any, idToken: string | null, plan: string) => {
       setCloudIdToken(idToken);
       setCloudPlan(plan);
+      setIsAuthResolved(true);
       // Send only the ID token; main verifies identity and plan through fikr.one.
       if (typeof window !== "undefined" && (window as any).fikrStudio?.setUser) {
         (window as any).fikrStudio.setUser(user?.uid ?? null, idToken ?? null);
@@ -199,9 +222,11 @@ export default function Page() {
     currentModel,
     isHydrated,
   } = useAISettings();
-  const showApiKeyBanner = isHydrated
+  const showApiKeyBanner = isAuthResolved
+    && isHydrated
     && !settings.apiKey
     && !["plus", "pro"].some((tier) => cloudPlan.toLowerCase().includes(tier));
+  const isLaunchReady = isLoaded && isHydrated && isAuthResolved;
   const debounceTimers = useRef<Record<string, Record<string, NodeJS.Timeout>>>(
     {},
   );
@@ -411,7 +436,6 @@ export default function Page() {
 
       setProjects(sanitizedProjects);
       setActiveProjectId(initialActiveId);
-      setIsLoaded(true);
 
       try {
         const rawThreads = ipc
@@ -425,16 +449,27 @@ export default function Page() {
         setChatThreads([]);
       }
 
+      try {
+        const rawMemories = ipc
+          ? diskData?.chatMemories
+          : JSON.parse(localStorage.getItem("fikr-chat-memories") || "[]");
+        setChatMemories(normalizeChatMemories(rawMemories) as FikrChatMemory[]);
+      } catch (e) {
+        console.error("Failed to load chat memories", e);
+        setChatMemories([]);
+      }
+
       // Load studio projects — in Electron use diskData (same workspace.json),
       // fall back to localStorage in browser mode.
       try {
-        if (ipc && diskData?.studioProjects?.length > 0) {
+        if (ipc && Array.isArray(diskData?.studioProjects)) {
           // Electron path: already loaded from disk above
           const reset = diskData.studioProjects.map((p: any) =>
             p.status === "generating"
               ? { ...p, status: "error", outputMarkdown: undefined, error: "Generation was interrupted. Click Retry to regenerate." }
               : p
           );
+          studioProjectsRef.current = reset;
           setStudioProjects(reset);
           setActiveStudioProjectId("");
         } else if (!ipc) {
@@ -467,6 +502,7 @@ export default function Page() {
           .catch(console.error);
       }
 
+      setIsLoaded(true);
       if (!introSeen) setIsIntroOpen(true);
     };
 
@@ -490,6 +526,7 @@ export default function Page() {
           studioProjects: studioProjectsRef.current,
           activeStudioProjectId,
           chatThreads,
+          chatMemories,
         })
         .then((saved: boolean) => {
           if (!saved) {
@@ -511,6 +548,7 @@ export default function Page() {
         localStorage.setItem("nodepad-active-project", activeProjectId);
         localStorage.setItem("nodepad-backup", JSON.stringify(projects));
         localStorage.setItem("fikr-chat-threads", JSON.stringify(chatThreads));
+        localStorage.setItem("fikr-chat-memories", JSON.stringify(chatMemories));
       } catch {
         toast.error("Changes couldn’t be saved", {
           id: "workspace-save-error",
@@ -518,7 +556,7 @@ export default function Page() {
         });
       }
     }
-  }, [projects, activeProjectId, activeStudioProjectId, chatThreads, isLoaded]);
+  }, [projects, activeProjectId, activeStudioProjectId, chatThreads, chatMemories, isLoaded]);
 
   // 3. MCP Live Events — listen for notes/projects pushed by external AI agents
   useEffect(() => {
@@ -594,12 +632,19 @@ export default function Page() {
             // can happen in a later microtask queue than the setTimeout(0) callback.
             setTimeout(() => { isSyncingFromCloud.current = false; }, 500);
           }
-          if (workspace?.studioProjects?.length > 0) {
-            setStudioProjects(workspace.studioProjects);
+          if (workspace && Object.prototype.hasOwnProperty.call(workspace, "studioProjects")) {
+            const syncedStudioProjects = Array.isArray(workspace.studioProjects)
+              ? workspace.studioProjects
+              : [];
+            studioProjectsRef.current = syncedStudioProjects;
+            setStudioProjects(syncedStudioProjects);
           }
           if (workspace?.chatThreads) {
             setChatThreads(normalizeChatThreads(workspace.chatThreads) as FikrChatThread[]);
             setActiveChatThreadId(null);
+          }
+          if (workspace && Object.prototype.hasOwnProperty.call(workspace, "chatMemories")) {
+            setChatMemories(normalizeChatMemories(workspace.chatMemories) as FikrChatMemory[]);
           }
         } else if (event.type === "workspace-cleared") {
           // User chose "Clear everything" during logout.
@@ -609,12 +654,14 @@ export default function Page() {
           setStudioProjects([]);
           setActiveStudioProjectId("");
           setChatThreads([]);
+          setChatMemories([]);
           setActiveChatThreadId(null);
           localStorage.removeItem("fikr-studio-projects");
           localStorage.removeItem("nodepad-projects");
           localStorage.removeItem("nodepad-active-project");
           localStorage.removeItem("nodepad-backup");
           localStorage.removeItem("fikr-chat-threads");
+          localStorage.removeItem("fikr-chat-memories");
         } else if (event.type === "mcp-port-updated") {
           setMcpPort(event.payload.port);
         }
@@ -662,23 +709,6 @@ export default function Page() {
     [],
   );
 
-  // A ref to read current projects without causing re-renders or stale closures
-  const projectsRef = useRef(projects);
-  useEffect(() => {
-    projectsRef.current = projects;
-  }, [projects]);
-
-  // Keep a ref to studioProjects for use in async callbacks that outlive renders
-  const studioProjectsRef = useRef(studioProjects);
-  useEffect(() => {
-    studioProjectsRef.current = studioProjects;
-  }, [studioProjects]);
-
-  const chatThreadsRef = useRef(chatThreads);
-  useEffect(() => {
-    chatThreadsRef.current = chatThreads;
-  }, [chatThreads]);
-
   // Persist studioProjects helper (always available at page level)
   const persistStudio = useCallback((updated: any[], nextActiveStudioProjectId = activeStudioProjectId) => {
     if (typeof window !== "undefined" && (window as any).fikrStudio?.saveWorkspace) {
@@ -688,6 +718,7 @@ export default function Page() {
         studioProjects: updated,
         activeStudioProjectId: nextActiveStudioProjectId,
         chatThreads: chatThreadsRef.current,
+        chatMemories: chatMemoriesRef.current,
       });
     } else {
       localStorage.setItem("fikr-studio-projects", JSON.stringify(updated));
@@ -1912,6 +1943,18 @@ export default function Page() {
     });
   }, [activeChatThreadId]);
 
+  const handleRenameChat = useCallback((threadId: string, nextTitle: string) => {
+    const title = nextTitle.trim().split(/\s+/).slice(0, 5).join(" ").slice(0, 120);
+    if (!title) return;
+    const updated = chatThreadsRef.current.map((thread) => thread.id === threadId
+      ? { ...thread, title, updatedAt: Date.now() }
+      : thread);
+    chatThreadsRef.current = updated;
+    setChatThreads(updated);
+    analytics.track("chat_rename", { threadId });
+    toast("Chat renamed");
+  }, []);
+
   const handleDeleteCreation = useCallback((creationId: string) => {
     const current = studioProjectsRef.current;
     const deletedIndex = current.findIndex((creation: any) => creation.id === creationId);
@@ -1944,9 +1987,9 @@ export default function Page() {
     });
   }, [activeStudioProjectId, persistStudio]);
 
-  const handleUpdateCreation = useCallback((creationId: string, outputMarkdown: string) => {
+  const handleUpdateCreation = useCallback((creationId: string, outputMarkdown: string, name: string) => {
     const updated = studioProjectsRef.current.map((creation: any) => creation.id === creationId
-      ? { ...creation, outputMarkdown, updatedAt: Date.now() }
+      ? { ...creation, name, outputMarkdown, updatedAt: Date.now() }
       : creation);
     studioProjectsRef.current = updated;
     setStudioProjects(updated);
@@ -1959,7 +2002,21 @@ export default function Page() {
     <SearchProvider>
       <GlobalSearchEngine projects={projects} />
       <UpdateCheckIndicator />
-      <div className="flex h-dvh overflow-hidden bg-background">
+      {!isLaunchReady ? (
+        <div
+          className="grid h-dvh place-items-center bg-background px-6 text-center"
+          data-testid="app-launch-gate"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex flex-col items-center">
+            <img src="./logo.svg" alt="" className="size-11 animate-pulse object-contain" />
+            <p className="mt-4 text-sm font-semibold text-foreground">Opening Fikr</p>
+            <p className="mt-1 text-xs text-muted-foreground">Checking your account and workspace.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex h-dvh flex-col overflow-hidden bg-background">
         {/* Hidden file input for .fikrdata import */}
         <input
           ref={importInputRef}
@@ -1969,6 +2026,9 @@ export default function Page() {
           onChange={handleImportFile}
         />
 
+        {showApiKeyBanner && <ApiKeyBanner onAddKey={() => openSettings("llm")} />}
+
+        <div className="flex min-h-0 flex-1" data-testid="workspace-layout">
          <ProjectSidebar
            isOpen={isSidebarOpen}
            onOpen={() => setIsSidebarOpen(true)}
@@ -2003,6 +2063,7 @@ export default function Page() {
              setActiveSurface("Chat");
              setActiveChatThreadId(null);
            }}
+           onRenameChat={handleRenameChat}
            onDeleteChat={handleDeleteChat}
            onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
            studioProjects={studioProjects}
@@ -2018,8 +2079,6 @@ export default function Page() {
          />
 
         <div className="fikr-app-content relative flex min-w-0 flex-1 flex-col overflow-hidden">
-          {showApiKeyBanner && <ApiKeyBanner onAddKey={() => openSettings("llm")} />}
-
           {/* The existing workspace toolbar belongs to Knowledge. */}
           {activeSurface === "Knowledge" && (
             <StatusBar
@@ -2075,6 +2134,8 @@ export default function Page() {
               projects={projects}
               threads={chatThreads}
               setThreads={setChatThreads}
+              memories={chatMemories}
+              setMemories={setChatMemories}
               activeThreadId={activeChatThreadId}
               onActiveThreadChange={setActiveChatThreadId}
               onSaveKnowledge={handleSaveChatKnowledge}
@@ -2235,6 +2296,7 @@ export default function Page() {
           isOpen={isIndexOpen}
           viewMode={viewMode}
         />
+        </div>
 
 
 
@@ -2259,17 +2321,19 @@ export default function Page() {
         {/* First-visit intro video modal */}
         <IntroModal open={isIntroOpen} onClose={handleIntroClose} />
 
-        {/* Full-screen Settings Page */}
-        <SettingsPage
-          open={settingsOpen}
-          initialSection={settingsSection}
-          aiSettings={settings}
-          onUpdateAISettings={updateSettings}
-          onClose={() => setSettingsOpen(false)}
-          onAuthChange={handleAuthChange}
-          showApiKeyBanner={showApiKeyBanner}
-        />
-      </div>
+        </div>
+      )}
+
+      {/* Mounted during launch so authentication resolves before the workspace is revealed. */}
+      <SettingsPage
+        open={settingsOpen}
+        initialSection={settingsSection}
+        aiSettings={settings}
+        onUpdateAISettings={updateSettings}
+        onClose={() => setSettingsOpen(false)}
+        onAuthChange={handleAuthChange}
+        showApiKeyBanner={showApiKeyBanner}
+      />
     </SearchProvider>
   );
 }

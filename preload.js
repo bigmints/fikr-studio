@@ -27,11 +27,13 @@ contextBridge.exposeInMainWorld("fikrStudio", {
   /** Store BYOK credentials using Electron safeStorage (macOS Keychain-backed). */
   hasSecureAiKey: (provider) => ipcRenderer.invoke("fikr-studio:secure-has-ai-key", provider),
   setSecureAiKey: (provider, apiKey) => ipcRenderer.invoke("fikr-studio:secure-set-ai-key", provider, apiKey),
+  verifyAndSetAiKey: (provider, apiKey) => ipcRenderer.invoke("fikr-studio:verify-and-set-ai-key", provider, apiKey),
   requestAi: (provider, body) => ipcRenderer.invoke("fikr-studio:request-ai", { provider, body }),
 
   /** Run and cancel bounded Fikr agent workflows in the trusted main process. */
   runAgent: (request) => ipcRenderer.invoke("fikr-studio:run-agent", request),
   cancelAgent: (runId) => ipcRenderer.invoke("fikr-studio:cancel-agent", runId),
+  respondAgentApproval: (runId, approvalId, approved) => ipcRenderer.invoke("fikr-studio:respond-agent-approval", runId, approvalId, approved),
   onAgentEvent: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on("fikr-studio:agent-event", handler);

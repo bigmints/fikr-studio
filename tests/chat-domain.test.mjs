@@ -2,15 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildAgentKnowledgeContext,
   buildCitedAnswerFixture,
+  buildKnowledgeInventoryAnswer,
   canCreateSocialArtifact,
   createCreationFromArtifact,
   creationMatchesArtifact,
   createKnowledgeNoteFromAnswer,
   dedupeAgentEvents,
   mergeKnowledgeSources,
+  isKnowledgeInventoryRequest,
   normalizeChatThreads,
   recommendProjectForKnowledgeDraft,
+  resolveAgentSources,
   retrieveKnowledge,
   shouldOfferInsightSave,
   shouldUseWorkspaceFallback,
@@ -29,6 +33,18 @@ test("managed artifact parsing is permitted only for explicit social creation", 
   assert.equal(canCreateSocialArtifact("According to my notes, what is Xtara's product vision?"), false);
   assert.equal(canCreateSocialArtifact("How many posts mention Xtara?"), false);
   assert.equal(canCreateSocialArtifact("Create a LinkedIn post from my Xtara notes"), true);
+});
+
+test("knowledge inventory requests and count corrections stay deterministic", () => {
+  assert.equal(isKnowledgeInventoryRequest("How many notes do I have?"), true);
+  assert.equal(isKnowledgeInventoryRequest("wrong", [{ role: "user", content: "How many notes do I have?" }]), true);
+  assert.equal(isKnowledgeInventoryRequest("hello"), false);
+  assert.equal(buildKnowledgeInventoryAnswer("How many notes do I have?", {
+    scopeKind: "all",
+    totalNotes: 43,
+    totalSpaces: 8,
+    spaces: [],
+  }), "You have 43 notes across 8 spaces.");
 });
 
 const projects = [
@@ -68,6 +84,33 @@ const projects = [
     ],
   },
 ];
+
+test("agent knowledge context keeps the complete selected scope while preserving ranked priors", () => {
+  const context = buildAgentKnowledgeContext(projects, { kind: "all" }, [{
+    noteId: "interviews",
+    score: 0.9,
+  }]);
+
+  assert.equal(context.inventory.totalSpaces, 2);
+  assert.equal(context.inventory.totalNotes, 3);
+  assert.deepEqual(context.inventory.spaces.map((space) => space.noteCount), [2, 1]);
+  assert.deepEqual(context.sources.map((source) => source.noteId), ["interviews", "launch", "pricing"]);
+  assert.equal(context.sources[0].score, 0.9);
+
+  const scoped = buildAgentKnowledgeContext(projects, { kind: "projects", projectIds: ["research"] }, []);
+  assert.equal(scoped.inventory.scopeKind, "projects");
+  assert.equal(scoped.inventory.totalSpaces, 1);
+  assert.equal(scoped.inventory.totalNotes, 1);
+  assert.deepEqual(scoped.sources.map((source) => source.noteId), ["interviews"]);
+});
+
+test("runtime source IDs define the renderer citation order and omit uncited search hits", () => {
+  const context = buildAgentKnowledgeContext(projects, { kind: "all" }, []);
+  const resolved = resolveAgentSources(context.sources, ["pricing", "launch", "pricing", "missing"]);
+
+  assert.deepEqual(resolved.map((source) => source.noteId), ["pricing", "launch"]);
+  assert.deepEqual(resolved.map((source) => source.citationIndex), [1, 2]);
+});
 
 test("creates compact semantic chat titles with no more than five words", () => {
   assert.equal(
@@ -119,6 +162,72 @@ test("normalization persists attachment metadata without binary file data", () =
     size: 2048,
   }]);
   assert.equal("dataUrl" in thread.messages[0].attachments[0], false);
+});
+
+test("normalization persists bounded webpage provenance and creation source URLs", () => {
+  const url = "https://example.com/report";
+  const [thread] = normalizeChatThreads([{
+    id: "web-thread",
+    messages: [{
+      id: "web-message",
+      role: "assistant",
+      content: "The report supports bounded extraction [W1].",
+      outputKind: "creation",
+      webSources: [{
+        citation: "W1",
+        requestedUrl: url,
+        finalUrl: url,
+        title: "Web report",
+        excerpt: "A report about retrieval.",
+        wordCount: 120,
+        fetchedAt: 123,
+        markdown: "must not persist",
+      }],
+      artifact: {
+        platform: "linkedin",
+        title: "Reliable retrieval",
+        content: "Bounded extraction keeps research focused.",
+        sourceUrls: [url, "file:///etc/passwd"],
+      },
+    }],
+  }]);
+
+  assert.equal(thread.messages[0].webSources.length, 1);
+  assert.equal(thread.messages[0].webSources[0].finalUrl, url);
+  assert.equal("markdown" in thread.messages[0].webSources[0], false);
+  assert.deepEqual(thread.messages[0].artifact.sourceUrls, [url]);
+
+  const creation = createCreationFromArtifact({ artifact: thread.messages[0].artifact, threadId: "web-thread", now: 500 });
+  assert.deepEqual(creation.sourceUrls, [url]);
+});
+
+test("normalization persists bounded PDF page provenance without extracted content", () => {
+  const [thread] = normalizeChatThreads([{
+    id: "document-thread",
+    messages: [{
+      id: "document-message",
+      role: "assistant",
+      content: "The report requires page-aware citations [D1:p.2].",
+      outputKind: "answer",
+      documentSources: [{
+        citation: "D1:p.2",
+        attachmentId: "attachment-pdf",
+        name: "../report.pdf",
+        pageNumber: 2,
+        extractionMethod: "ocr",
+        markdown: "must not persist",
+      }],
+    }],
+  }]);
+
+  assert.deepEqual(thread.messages[0].documentSources, [{
+    citation: "D1:p.2",
+    attachmentId: "attachment-pdf",
+    name: "report.pdf",
+    pageNumber: 2,
+    extractionMethod: "ocr",
+  }]);
+  assert.equal("markdown" in thread.messages[0].documentSources[0], false);
 });
 
 test("retrieves and cites relevant notes across workspaces", () => {
@@ -268,7 +377,7 @@ test("does not recommend a workspace when content signals are ambiguous", () => 
   ), null);
 });
 
-test("builds a cited no-spend social-post fixture from retrieved sources", () => {
+test("builds a cited no-spend social-content fixture from retrieved sources", () => {
   const sources = retrieveKnowledge("launch post", projects, { limit: 3 });
   const result = buildCitedAnswerFixture(
     "Turn my launch notes into a LinkedIn post",
@@ -277,7 +386,8 @@ test("builds a cited no-spend social-post fixture from retrieved sources", () =>
 
   assert.match(result.answer, /knowledge/i);
   assert.deepEqual(result.citations, sources.map((source) => source.noteId));
-  assert.equal(result.artifact?.kind, "social-post");
+  assert.equal(result.artifact?.kind, "social-content");
+  assert.equal(result.artifact?.format, "post");
   assert.equal(result.outputKind, "creation");
   assert.equal(result.artifact?.platform, "linkedin");
   assert.match(result.artifact?.content ?? "", /#ProductLaunch/);
@@ -458,7 +568,7 @@ test("creates collision-safe explicit note and creation records", () => {
   assert.equal(creation.id, "creation-launch-story-500-2");
   assert.equal(creation.status, "done");
   assert.equal(creation.platform, "linkedin");
-  assert.equal(creation.outputMarkdown, "A clearer way to launch.");
+  assert.equal(creation.outputMarkdown, "# Launch story\n\nA clearer way to launch.");
 });
 
 test("creation persistence deduplicates matching platform content across chats", () => {
@@ -475,4 +585,19 @@ test("creation persistence deduplicates matching platform content across chats",
   assert.equal(creationMatchesArtifact(creation, artifact), true);
   assert.equal(creationMatchesArtifact(creation, { ...artifact, platform: "linkedin" }), false);
   assert.equal(creationMatchesArtifact(creation, { ...artifact, content: "Different post." }), false);
+});
+
+test("authored creation H1 stays the persisted title and still deduplicates", () => {
+  const artifact = {
+    kind: "social-post",
+    platform: "linkedin",
+    title: "Fallback title",
+    content: "# Authored title\n\nThe complete post.",
+    sourceNoteIds: [],
+  };
+  const creation = createCreationFromArtifact({ artifact, threadId: "headed", now: 600 });
+
+  assert.equal(creation.name, "Authored title");
+  assert.equal(creation.outputMarkdown, artifact.content);
+  assert.equal(creationMatchesArtifact(creation, artifact), true);
 });

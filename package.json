@@ -1,6 +1,6 @@
 {
   "name": "fikr-studio",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "description": "Local-first knowledge and writing workspace for macOS",
   "author": "Bigmints",
   "main": "main.js",
@@ -19,6 +19,7 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "check:history-secrets": "node scripts/check-history-secrets.mjs",
     "check:asar": "node scripts/check-asar.mjs",
+    "check:document-package": "ELECTRON_RUN_AS_NODE=1 \"dist/mac-arm64/Fikr Studio.app/Contents/MacOS/Fikr Studio\" scripts/check-packaged-document-runtime.mjs \"dist/mac-arm64/Fikr Studio.app/Contents/Resources\"",
     "check:mac-package": "node scripts/check-macos-package.mjs",
     "verify": "npm run lint && npm run typecheck && npm test && npm run check:secrets && npm run check:history-secrets && npm audit",
     "electron:dev": "NODE_PATH=./node_modules concurrently -k -n NEXT,ELECTRON -c cyan,yellow \"next dev -p 3741 --webpack\" \"wait-on http://localhost:3741 && cross-env ELECTRON_IS_DEV=1 electron .\"",
@@ -28,9 +29,17 @@
     "release:verify": "./scripts/deploy.sh --build-only"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "@napi-rs/canvas": "^0.1.80",
     "@openai/agents-core": "^0.17.0",
     "@openai/agents-openai": "^0.17.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "electron-updater": "^6.8.3",
+    "linkedom": "^0.18.13",
+    "tesseract.js": "^7.0.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
+    "unpdf": "^1.8.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

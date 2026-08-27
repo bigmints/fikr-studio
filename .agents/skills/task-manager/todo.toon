@@ -2,6 +2,45 @@ tasks:
   next:
         status: todo
         priority: 1
+        summary: "Release Fikr Studio v0.1.25"
+        status: todo
+        priority: 1
+        summary: "Add intent-driven tool catalog search stage"
+        status: todo
+        priority: 1
+        summary: "Fix URL intent routing and lazy MCP activation"
+        status: todo
+        priority: 1
+        summary: "Audit and production-verify document extraction goal"
+        status: todo
+        priority: 1
+        summary: "Add fail-closed one-time chat and creation cloud recovery intent"
+        status: todo
+        priority: 1
+        summary: "Build local PDF extraction and selective OCR agent tool"
+        status: todo
+        priority: 1
+        summary: "Build secure webpage-to-Markdown agent tool"
+        status: todo
+        priority: 1
+        summary: "Repair chat retrieval citations and tool orchestration"
+        status: todo
+        priority: 2
+        summary: "Remove modal borders globally"
+        status: todo
+        priority: 2
+        summary: "Fix modal select dropdown layering"
+        status: todo
+        priority: 2
+        summary: "Soften shared shadcn card borders"
+        status: todo
+        priority: 2
+        summary: "Add Light Dark and System appearance preference"
+        status: todo
+        priority: 2
+        summary: "Build Gemini-style plus menu for chat image and PDF uploads"
+        status: todo
+        priority: 1
         summary: "Implement production UI audit fixes"
         status: todo
         priority: 1
@@ -193,6 +232,46 @@ tasks:
         priority: 1
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   in_progress:
+    - release_fikr_studio_v0_1_25:
+        status: in_progress
+        priority: high
+        summary: "Release Fikr Studio v0.1.25"
+        status: in_progress
+        priority: high
+        summary: "Add intent-driven tool catalog search stage"
+        status: in_progress
+        priority: high
+        summary: "Fix URL intent routing and lazy MCP activation"
+        status: in_progress
+        priority: high
+        summary: "Audit and production-verify document extraction goal"
+        status: in_progress
+        priority: high
+        summary: "Add fail-closed one-time chat and creation cloud recovery intent"
+        status: in_progress
+        priority: high
+        summary: "Build local PDF extraction and selective OCR agent tool"
+        status: in_progress
+        priority: high
+        summary: "Build secure webpage-to-Markdown agent tool"
+        status: in_progress
+        priority: high
+        summary: "Repair chat retrieval citations and tool orchestration"
+        status: in_progress
+        priority: high
+        summary: "Remove modal borders globally"
+        status: in_progress
+        priority: high
+        summary: "Fix modal select dropdown layering"
+        status: in_progress
+        priority: high
+        summary: "Soften shared shadcn card borders"
+        status: in_progress
+        priority: high
+        summary: "Add Light Dark and System appearance preference"
+        status: in_progress
+        priority: high
+        summary: "Build Gemini-style plus menu for chat image and PDF uploads"
         status: in_progress
         priority: high
         summary: "Implement production UI audit fixes"
@@ -386,6 +465,30 @@ tasks:
         priority: high
         summary: "Browse all pages of fikr-studio, find usability issues and fix them"
   completed:
+    - add_intent_driven_tool_catalog_search_stage:
+        summary: "Added deterministic intent-driven search across Fikr tools, skills, sources, memories, and configured MCP descriptors; only selected tools are exposed and only selected MCP servers connect. Internal selection telemetry stays out of live UI. 232 tests, lint, typecheck, build, and Electron greeting proof passed."
+    - fix_url_intent_routing_and_lazy_mcp_activation:
+        summary: "URL hostnames no longer influence intent; external MCP servers connect only for explicit current-request intent; exact Substack note and greeting regressions plus live Electron proof passed."
+    - audit_and_production_verify_document_extraction_go:
+        summary: "Production-verified local text PDF extraction, selective OCR, exact page citations, ephemeral image vision, persistence, signed packaging, and real Electron flows; fixed OpenAI-compatible vision tool schemas and preserved the 43-note 12-chat 7-creation workspace."
+    - add_fail_closed_one_time_chat_and_creation_cloud_r:
+        summary: "Fixed the first-render creations overwrite, restored and independently verified 43 notes/12 chats/7 creations across two Electron launches, exposed persisted drafts safely, added regression coverage, and passed 227 tests plus signed package gates."
+    - build_local_pdf_extraction_and_selective_ocr_agent:
+        summary: "Added provider-independent local PDF extraction, selective bundled OCR, exact page citations, provenance persistence, packaged runtime verification, and live Electron acceptance for text and scanned PDFs."
+    - build_secure_webpage_to_markdown_agent_tool:
+        summary: "Added secure built-in fetch_web_page tool with Readability LinkeDOM GFM conversion web citations skills integration packaging hardening and live Electron/OpenRouter validation"
+    - repair_chat_retrieval_citations_and_tool_orchestra:
+        summary: "Hardened Agents SDK orchestration, citations, attachment handling, MCP approvals, chat rename/delete, and creation persistence; verified 185 tests, all 9 local MCP tools, live image/PDF synthesis, external MCP approval, restart persistence, static Electron build, lint, typecheck, secrets, audit, and build."
+    - remove_modal_borders_globally:
+        summary: "Removed the border from the shared shadcn DialogContent primitive, preserved internal dividers, added regression coverage, rebuilt, and verified in Electron."
+    - fix_modal_select_dropdown_layering:
+        summary: "Raised shared shadcn Select portals above dialog layers, added regression coverage, and live-verified Destination and Cover format changes in Electron."
+    - soften_shared_shadcn_card_borders:
+        summary: "Changed the shared shadcn Card to use a 50% semantic border, added regression coverage, rebuilt, and verified the signed-in dark Electron account page."
+    - add_light_dark_and_system_appearance_preference:
+        summary: "Added a visible shadcn Light Dark System appearance submenu with persisted system preference, OS resolution, portal layering, and regression coverage."
+    - build_gemini_style_plus_menu_for_chat_image_and_pd:
+        summary: "Implemented and verified Gemini-style plus menu for image and PDF attachments in both chat composers, with removable image/PDF previews, refined menu placement, 161/161 tests, lint, typecheck, production build, and UI interaction checks passing."
     - complete_production_readiness_audit_verify_studio_:
         summary: "Completed production-readiness verification and the approved race recovery: authenticated cloud/local/UI readback shows 8 spaces, 43 notes, 12 chats, 7 non-empty creations, zero QA markers, and one completion log; the race-fixed 0.1.23 release remains verified and unpublished."
     - implement_production_ui_audit_fixes:

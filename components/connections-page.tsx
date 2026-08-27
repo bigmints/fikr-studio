@@ -5,6 +5,7 @@ import { Check, Copy, ExternalLink, Loader2, Zap, RefreshCw, Lock, Webhook } fro
 import { Button } from "@/components/ui/button";
 import { writeClipboardText } from "@/lib/clipboard";
 import { maskLocalMcpText } from "@/lib/connection-display.mjs";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -61,7 +62,7 @@ const getIntegrations = (mcpPort: number | null, mcpToken: string | null): Integ
       { label: "Click Install below", detail: "Fikr writes the local MCP configuration securely." },
       { label: "Restart Claude Desktop", detail: "Start a new conversation — the 🔌 icon shows available tools." },
     ],
-    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { url: endpoint, type: "sse" } } }, null, 2),
+    snippet: JSON.stringify({ mcpServers: { "fikr-studio": { command: "npx", args: ["-y", "fikr-studio-mcp@latest", endpoint] } } }, null, 2),
     snippetLang: "json",
     docsUrl: "https://docs.anthropic.com/en/docs/developer/mcp",
     primaryActionLabel: "Install",
@@ -77,7 +78,7 @@ const getIntegrations = (mcpPort: number | null, mcpToken: string | null): Integ
     connectionType: "1-click",
     requiresPlan: null,
     steps: [
-      { label: "Click Install below", detail: "Fikr writes to ~/.codeium/windsurf/mcp_settings.json automatically." },
+      { label: "Click Install below", detail: "Fikr writes to ~/.codeium/windsurf/mcp_config.json automatically." },
       { label: "Restart Windsurf", detail: "Open Cascade — the Fikr tools will be available." },
     ],
     snippet: JSON.stringify({ mcpServers: { "fikr-studio": { serverUrl: endpoint } } }, null, 2),
@@ -178,6 +179,15 @@ function useIpc() {
   return (window as any).fikrStudio ?? null;
 }
 
+function openExternalUrl(url: string) {
+  const ipc = typeof window !== "undefined" ? (window as any).fikrStudio : null;
+  if (ipc?.openUrl) {
+    void ipc.openUrl(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 function BrandIcon({ integration, size = 40 }: { integration: Integration; size?: number }) {
   const [err, setErr] = useState(false);
   if (integration.iconEmoji) {
@@ -242,16 +252,16 @@ function StatusDot({ status }: { status: StatusType }) {
 }
 
 // -- Agent Prompt Card --
-function AgentPromptCard({ mcpPort, mcpToken }: { mcpPort: number | null; mcpToken: string | null }) {
+function AgentPromptCard({ mcpPort, mcpToken, copyEnabled }: { mcpPort: number | null; mcpToken: string | null; copyEnabled: boolean }) {
   const port = mcpPort ?? 3025;
   const skillUrl = `http://localhost:${port}/skill.md?token=${encodeURIComponent(mcpToken ?? "<local-token>")}`;
   const endpoint = `http://localhost:${port}/sse?token=${encodeURIComponent(mcpToken ?? "<local-token>")}`;
   const agentPrompt = `Fetch ${skillUrl}, then connect to the local MCP endpoint ${endpoint}.`;
-  return <SnippetBox label="Agent Prompt" code={agentPrompt} visibleCode={maskLocalMcpText(agentPrompt, mcpToken)} mono={false} />;
+  return <SnippetBox label="Agent Prompt" code={agentPrompt} visibleCode={maskLocalMcpText(agentPrompt, mcpToken)} mono={false} copyEnabled={copyEnabled} />;
 }
 
 // -- Snippet Box --
-function SnippetBox({ label, code, visibleCode = code, mono = true, children }: { label: string; code: string; visibleCode?: string; mono?: boolean; children?: React.ReactNode }) {
+function SnippetBox({ label, code, visibleCode = code, mono = true, copyEnabled = true, children }: { label: string; code: string; visibleCode?: string; mono?: boolean; copyEnabled?: boolean; children?: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await writeClipboardText(code);
@@ -268,6 +278,8 @@ function SnippetBox({ label, code, visibleCode = code, mono = true, children }: 
           variant="ghost"
           size="sm"
           onClick={copy}
+          disabled={!copyEnabled}
+          title={copyEnabled ? `Copy ${label}` : "Open Fikr Studio desktop to load the private local token"}
           className={`h-7 gap-1 px-2.5 text-xs font-semibold ${
             copied
               ? "bg-emerald-500/20 text-emerald-400"
@@ -301,6 +313,7 @@ function IntegrationSheet({
   onInstall,
   onUninstall,
   installing,
+  localConnectionReady,
 }: {
   integration: Integration | null;
   open: boolean;
@@ -311,6 +324,7 @@ function IntegrationSheet({
   onInstall: (id: string) => void;
   onUninstall: (id: string) => void;
   installing: string | null;
+  localConnectionReady: boolean;
 }) {
   const isMcpClient = integration?.category === "MCP Clients";
 
@@ -344,7 +358,7 @@ function IntegrationSheet({
         <div className="flex-1 px-5 py-4 space-y-4">
 
           {/* MCP Config box */}
-          <SnippetBox label="MCP Config" code={config} visibleCode={maskLocalMcpText(config, mcpToken)}>
+          <SnippetBox label="MCP Config" code={config} visibleCode={maskLocalMcpText(config, mcpToken)} copyEnabled={localConnectionReady}>
             {isMcpClient && (
               <div className="px-3.5 py-2 border-t border-white/[0.06]">
                 <p className="text-xs text-zinc-500">
@@ -356,7 +370,7 @@ function IntegrationSheet({
 
           {/* Agent Prompt box — MCP clients only */}
           {isMcpClient && (
-            <AgentPromptCard mcpPort={mcpPort} mcpToken={mcpToken} />
+            <AgentPromptCard mcpPort={mcpPort} mcpToken={mcpToken} copyEnabled={localConnectionReady} />
           )}
 
           {/* Setup steps */}
@@ -384,7 +398,8 @@ function IntegrationSheet({
                 className="flex-1 h-10 font-bold"
                 variant={status === "installed" ? "secondary" : "default"}
                 onClick={() => onInstall(integration.id)}
-                disabled={installing === integration.id}
+                disabled={!localConnectionReady || installing === integration.id}
+                title={localConnectionReady ? undefined : "Open Fikr Studio desktop to install this connection"}
               >
                 {installing === integration.id ? (
                   <><Loader2 className="h-4 w-4 animate-spin" /> {status === "installed" ? "Reconnecting…" : "Installing…"}</>
@@ -432,6 +447,7 @@ function IntegrationRow({
   onInstall,
   onUninstall,
   installing,
+  localConnectionReady,
 }: {
   integration: Integration;
   status: StatusType;
@@ -439,6 +455,7 @@ function IntegrationRow({
   onInstall: (id: string) => void;
   onUninstall: (id: string) => void;
   installing: string | null;
+  localConnectionReady: boolean;
 }) {
   const isInstalled = status === "installed";
   const isOneClick = integration.connectionType === "1-click";
@@ -483,7 +500,8 @@ function IntegrationRow({
             size="sm"
             className="flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold"
             onClick={() => onInstall(integration.id)}
-            disabled={installing === integration.id}
+            disabled={!localConnectionReady || installing === integration.id}
+            title={localConnectionReady ? undefined : "Open Fikr Studio desktop to install this connection"}
           >
             {installing === integration.id ? (
               <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Installing…</>
@@ -503,6 +521,8 @@ function IntegrationRow({
                 : "text-primary hover:bg-primary/10"
             }`}
             onClick={handleCopy}
+            disabled={!localConnectionReady}
+            title={localConnectionReady ? `Copy ${integration.name} configuration` : "Open Fikr Studio desktop to load the private local token"}
           >
             {copied ? (
               <>
@@ -532,17 +552,18 @@ export function ConnectionsPage({ mcpPort, mcpToken, plan }: ConnectionsPageProp
   const [promptCopied, setPromptCopied] = useState(false);
 
   const isPlusPro = plan.toLowerCase().includes("plus") || plan.toLowerCase().includes("pro");
+  const localConnectionReady = Boolean(ipc?.installMcp && mcpToken);
   const INTEGRATIONS = useMemo(() => getIntegrations(mcpPort, mcpToken), [mcpPort, mcpToken]);
   const selectedIntegration = INTEGRATIONS.find((i) => i.id === selectedId) ?? null;
   const localPort = mcpPort ?? 3025;
   const encodedToken = encodeURIComponent(mcpToken ?? "<local-token>");
   const skillUrl = `http://localhost:${localPort}/skill.md?token=${encodedToken}`;
   const endpoint = `http://localhost:${localPort}/sse?token=${encodedToken}`;
-  const connectionPrompt = `Connect this AI tool to Fikr through local MCP. Read ${skillUrl}, follow the setup instructions, then connect to ${endpoint}. Keep the local token private and never save it in project files or logs.`;
+  const connectionPrompt = `Set up Fikr with this AI tool. Follow ${skillUrl}, then connect to ${endpoint}. Keep the token private and never save it in project files or logs.`;
   const maskedToken = mcpToken ? "••••••••••••" : "<waiting-for-fikr>";
   const visibleSkillUrl = `http://localhost:${localPort}/skill.md?token=${maskedToken}`;
   const visibleEndpoint = `http://localhost:${localPort}/sse?token=${maskedToken}`;
-  const visibleConnectionPrompt = `Connect this AI tool to Fikr through local MCP. Read ${visibleSkillUrl} and follow the setup instructions, then connect to ${visibleEndpoint}.`;
+  const visibleConnectionPrompt = `Set up Fikr with this AI tool. Follow ${visibleSkillUrl}, then connect to ${visibleEndpoint}.`;
 
   // Auto-check 1-click integrations on mount
   const checkStatus = useCallback(async (id: string) => {
@@ -561,99 +582,152 @@ export function ConnectionsPage({ mcpPort, mcpToken, plan }: ConnectionsPageProp
   }, [checkStatus, INTEGRATIONS]);
 
   const handleInstall = async (id: string) => {
-    if (!ipc?.installMcp) return;
+    if (!ipc?.installMcp || !mcpToken) {
+      toast.error("Open Fikr Studio desktop to install local AI connections.");
+      return;
+    }
     setInstalling(id);
     try {
-      await ipc.installMcp(id);
+      const installed = await ipc.installMcp(id);
+      if (!installed) throw new Error("The connection configuration was not installed");
+      if (ipc.testMcp) {
+        const result = await ipc.testMcp(id);
+        if (!result?.ok) throw new Error(result?.error || "The connection could not be verified");
+      }
       setStatuses((s) => ({ ...s, [id]: "installed" }));
-    } catch {
+      toast.success(`${INTEGRATIONS.find((integration) => integration.id === id)?.name ?? "Connection"} installed`);
+    } catch (error) {
       setStatuses((s) => ({ ...s, [id]: "error" }));
+      toast.error("Couldn’t install this connection", {
+        description: error instanceof Error ? error.message : "Open the connection details and try again.",
+      });
     } finally {
       setInstalling(null);
     }
   };
 
   const handleUninstall = async (id: string) => {
-    if (!ipc?.uninstallMcp) return;
+    if (!ipc?.uninstallMcp) {
+      toast.error("Open Fikr Studio desktop to disconnect local AI connections.");
+      return;
+    }
     setInstalling(id); // reuse the installing state for loading spinner
     try {
-      await ipc.uninstallMcp(id);
+      const removed = await ipc.uninstallMcp(id);
+      if (!removed) throw new Error("The installed connection could not be found");
       setStatuses((s) => ({ ...s, [id]: "not_configured" }));
-    } catch {
+      toast.success("Connection removed");
+    } catch (error) {
       setStatuses((s) => ({ ...s, [id]: "error" }));
+      toast.error("Couldn’t remove this connection", {
+        description: error instanceof Error ? error.message : "Try again from Fikr Studio desktop.",
+      });
     } finally {
       setInstalling(null);
     }
   };
 
   const handleCopyPrompt = async () => {
-    await writeClipboardText(connectionPrompt);
-    setPromptCopied(true);
-    window.setTimeout(() => setPromptCopied(false), 2_000);
+    try {
+      await writeClipboardText(connectionPrompt);
+      setPromptCopied(true);
+      window.setTimeout(() => setPromptCopied(false), 2_000);
+    } catch {
+      toast.error("Couldn’t copy the setup prompt");
+    }
   };
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-background text-foreground" data-testid="connections-page">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4 sm:px-5">
+      <header className="flex h-14 shrink-0 items-center border-b border-border px-4 sm:px-5">
         <h1 className="fikr-toolbar-title">Connections</h1>
-        {!isPlusPro && (
-          <Button
-            type="button"
-            size="sm"
-            className="mr-11 hidden h-8 shrink-0 px-3 text-xs sm:inline-flex lg:mr-0"
-            onClick={() => window.open("https://fikr.one/pricing", "_blank")}
-          >
-            Upgrade
-          </Button>
-        )}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="fikr-page-frame">
-        <header
-          className="overflow-hidden rounded-3xl bg-[linear-gradient(135deg,#0f766e_0%,#155e75_55%,#3730a3_100%)] p-6 text-white shadow-[0_20px_60px_rgba(15,118,110,0.18)] sm:p-8"
+        <section
+          data-testid="messenger-hooks-banner"
+          className="overflow-hidden rounded-3xl bg-[linear-gradient(135deg,#0f766e_0%,#155e75_55%,#3730a3_100%)] p-6 text-white shadow-[0_20px_60px_rgba(15,118,110,0.2)] sm:p-8"
+          aria-labelledby="remote-notes-heading"
+        >
+          <div className="grid gap-7 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-stretch">
+            <div className="flex flex-col justify-center">
+              <div className="mb-5 flex w-fit items-center gap-2 rounded-full bg-white/12 px-3 py-1.5 text-xs font-semibold text-white/90 ring-1 ring-inset ring-white/15">
+                <Webhook className="size-3.5" /> Remote connections <span className="text-white/65">Plus / Pro</span>
+              </div>
+              <h2 id="remote-notes-heading" className="max-w-2xl font-display text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+                Connect apps that work while Fikr is closed.
+              </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-white/78 sm:text-base">
+                Plus and Pro let apps and services send notes to Fikr over the internet. Fikr Studio does not need to be open.
+              </p>
+            </div>
+
+            <div className="flex min-w-0 flex-col justify-between rounded-2xl bg-black/18 p-5 ring-1 ring-inset ring-white/12 backdrop-blur-sm">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/65">How it works</p>
+                <ol className="mt-3 space-y-2 text-sm leading-5 text-white/85">
+                  <li><span className="mr-2 text-white/50">1.</span>Connect an app to Fikr</li>
+                  <li><span className="mr-2 text-white/50">2.</span>Send a note from that app</li>
+                  <li><span className="mr-2 text-white/50">3.</span>Find it in Fikr when you return</li>
+                </ol>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => openExternalUrl(isPlusPro ? "https://www.fikr.one/dashboard/settings" : "https://fikr.one/pricing")}
+                className="mt-6 w-full shrink-0 border-0 bg-white text-slate-950 hover:bg-white/90"
+              >
+                {isPlusPro ? "Connect an app" : "Get Plus to connect apps"} <ExternalLink className="size-4" />
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section
+          data-testid="local-connections-banner"
+          className="mt-8 overflow-hidden rounded-3xl border border-border/70 bg-card p-6 shadow-sm sm:p-8"
           aria-labelledby="connections-title"
         >
           <div className="grid gap-7 lg:grid-cols-[minmax(0,0.8fr)_minmax(360px,1.2fr)] lg:items-stretch">
             <div className="flex flex-col justify-center">
-              <div className="mb-5 flex w-fit items-center gap-2 rounded-full bg-white/12 px-3 py-1.5 text-xs font-semibold text-white/90 ring-1 ring-inset ring-white/15">
-                <Zap className="size-3.5" /> Local connection
+              <div className="mb-5 flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary ring-1 ring-inset ring-primary/15">
+                <Zap className="size-3.5" /> Free
               </div>
-              <h2 id="connections-title" className="max-w-lg font-display text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-                Your knowledge, in every AI tool.
+              <h2 id="connections-title" className="max-w-lg font-display text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+                Connect your AI tools.
               </h2>
-              <p className="mt-4 max-w-md text-sm leading-6 text-white/75 sm:text-base">
-                Connect Claude, Cursor, Windsurf, and more.
+              <p className="mt-4 max-w-md text-sm leading-6 text-muted-foreground sm:text-base">
+                Works on this computer while Fikr Studio is open.
               </p>
             </div>
 
-            <div className="flex min-w-0 flex-col rounded-2xl bg-black/18 p-4 ring-1 ring-inset ring-white/12 backdrop-blur-sm sm:p-5">
+            <div className="flex min-w-0 flex-col rounded-2xl border border-border/70 bg-muted/35 p-4 sm:p-5">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/65">Setup prompt</p>
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-white/65">
-                  <Lock className="size-3" /> Private to this computer
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Setup</p>
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                  <Lock className="size-3" /> On this computer
                 </span>
               </div>
-              <p className="min-w-0 flex-1 break-words text-sm leading-6 text-white/90">
-                {visibleConnectionPrompt}
-              </p>
+              <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-words rounded-xl border border-border/70 bg-background/80 p-4 text-xs leading-6 text-foreground shadow-inner">
+                <code>{visibleConnectionPrompt}</code>
+              </pre>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-white/60">
-                  {mcpToken ? "Keep Fikr open while connected." : "Open Fikr Studio to enable copy."}
+                <p className="text-xs text-muted-foreground">
+                  {mcpToken ? "Keep Fikr Studio open." : "Open Fikr Studio to connect."}
                 </p>
                 <Button
                   type="button"
-                  variant="secondary"
                   onClick={() => void handleCopyPrompt()}
                   disabled={!mcpToken}
-                  title={mcpToken ? "Copy the complete local MCP prompt" : "Open Fikr Studio to load the local MCP token"}
-                  className="w-full shrink-0 border-0 bg-white text-slate-950 hover:bg-white/90 sm:w-auto"
+                  title={mcpToken ? "Copy the complete local MCP prompt" : "Open Fikr Studio desktop to load the local MCP token"}
+                  className="w-full shrink-0 sm:w-auto"
                 >
                   {promptCopied ? <><Check className="size-4" /> Copied</> : <><Copy className="size-4" /> Copy prompt</>}
                 </Button>
               </div>
             </div>
           </div>
-        </header>
+        </section>
 
         <section className="pt-8" aria-labelledby="ai-apps-heading">
           <h2 id="ai-apps-heading" className="mb-5 text-xl font-bold tracking-tight">AI apps</h2>
@@ -667,33 +741,9 @@ export function ConnectionsPage({ mcpPort, mcpToken, plan }: ConnectionsPageProp
                 onInstall={handleInstall}
                 onUninstall={handleUninstall}
                 installing={installing}
+                localConnectionReady={localConnectionReady}
               />
             ))}
-          </div>
-        </section>
-
-        <section className="mt-8 rounded-2xl border border-border/70 bg-secondary/30 p-5 sm:p-6" aria-labelledby="remote-notes-heading">
-          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
-            <div className="flex max-w-3xl items-start gap-3">
-              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                {isPlusPro ? <Webhook className="size-4" /> : <Lock className="size-4" />}
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 id="remote-notes-heading" className="text-base font-semibold tracking-tight">Add notes while Fikr is closed</h2>
-                  <span className="rounded-full bg-background/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Plus / Pro</span>
-                </div>
-                <p className="mt-1 text-sm leading-5 text-muted-foreground">Messenger Hooks receive notes without exposing local tools.</p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant={isPlusPro ? "default" : "outline"}
-              onClick={() => window.open(isPlusPro ? "https://www.fikr.one/dashboard/settings" : "https://fikr.one/pricing", "_blank")}
-              className="w-full shrink-0 sm:w-auto"
-            >
-              {isPlusPro ? "Open Messenger Hooks" : "View plans"} <ExternalLink className="size-4" />
-            </Button>
           </div>
         </section>
 
@@ -707,6 +757,7 @@ export function ConnectionsPage({ mcpPort, mcpToken, plan }: ConnectionsPageProp
         onInstall={handleInstall}
         onUninstall={handleUninstall}
         installing={installing}
+        localConnectionReady={localConnectionReady}
         />
         </div>
       </div>

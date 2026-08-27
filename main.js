@@ -12,7 +12,7 @@ const { createWorkspaceStore } = require('./lib/workspace-store');
 const { resolveWorkspaceDirectory } = require('./lib/workspace-path');
 const { createWorkspaceLock } = require('./lib/workspace-lock');
 const { updateJsonConfig } = require('./lib/json-config-store');
-const { performAiRequest } = require('./lib/ai-request');
+const { performAiRequest, verifyAiKey } = require('./lib/ai-request');
 const { discoverMcpTools, runFikrAgent, validateAgentRequest } = require('./lib/agent-runtime');
 const { createAgentMcpConfigStore } = require('./lib/agent-mcp-config');
 const { clearLocalFiles } = require('./lib/local-data');
@@ -879,6 +879,21 @@ ipcMain.handle('fikr-studio:secure-set-ai-key', (event, provider, apiKey) => {
   return true;
 });
 
+ipcMain.handle('fikr-studio:verify-and-set-ai-key', async (event, provider, apiKey) => {
+  assertTrustedIpc(event);
+  assertAiProvider(provider);
+  if (typeof apiKey !== 'string' || !apiKey.trim() || apiKey.length > 16_384) {
+    throw new Error('Invalid API key');
+  }
+  const result = await verifyAiKey({ provider, apiKey: apiKey.trim() });
+  if (!result.ok) return result;
+
+  const keys = readSecureAiKeys();
+  keys[provider] = apiKey.trim();
+  writeSecureAiKeys(keys);
+  return result;
+});
+
 ipcMain.handle('fikr-studio:request-ai', async (event, payload) => {
   assertTrustedIpc(event);
   const { provider, body } = payload ?? {};
@@ -895,7 +910,8 @@ ipcMain.handle('fikr-studio:run-agent', async (event, payload) => {
   if (activeAgentRuns.size >= 3) throw new Error('Too many active agent runs');
 
   const controller = new AbortController();
-  activeAgentRuns.set(request.runId, { controller, senderId: event.sender.id });
+  const activeRun = { controller, senderId: event.sender.id, approvals: new Map() };
+  activeAgentRuns.set(request.runId, activeRun);
   const apiKey = request.provider === 'local'
     ? ''
     : readSecureAiKeys()[request.provider] ?? '';
@@ -905,6 +921,32 @@ ipcMain.handle('fikr-studio:run-agent', async (event, payload) => {
       request,
       apiKey,
       signal: controller.signal,
+      onApprovalRequest: (approval) => new Promise((resolve, reject) => {
+        if (controller.signal.aborted) {
+          reject(controller.signal.reason ?? new DOMException('Aborted', 'AbortError'));
+          return;
+        }
+        const abort = () => {
+          activeRun.approvals.delete(approval.approvalId);
+          reject(controller.signal.reason ?? new DOMException('Aborted', 'AbortError'));
+        };
+        const settle = (decision) => {
+          controller.signal.removeEventListener('abort', abort);
+          activeRun.approvals.delete(approval.approvalId);
+          resolve(decision);
+        };
+        activeRun.approvals.set(approval.approvalId, settle);
+        controller.signal.addEventListener('abort', abort, { once: true });
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('fikr-studio:agent-event', {
+            runId: request.runId,
+            type: 'approval_requested',
+            at: Date.now(),
+            message: `${approval.toolName} needs your approval`,
+            ...approval,
+          });
+        }
+      }),
       onEvent: (agentEvent) => {
         if (!event.sender.isDestroyed()) event.sender.send('fikr-studio:agent-event', agentEvent);
       },
@@ -915,6 +957,18 @@ ipcMain.handle('fikr-studio:run-agent', async (event, payload) => {
   } finally {
     activeAgentRuns.delete(request.runId);
   }
+});
+
+ipcMain.handle('fikr-studio:respond-agent-approval', (event, runIdValue, approvalIdValue, approvedValue) => {
+  assertTrustedIpc(event);
+  const runId = typeof runIdValue === 'string' ? runIdValue.trim().slice(0, 240) : '';
+  const approvalId = typeof approvalIdValue === 'string' ? approvalIdValue.trim().slice(0, 240) : '';
+  const activeRun = activeAgentRuns.get(runId);
+  if (!activeRun || activeRun.senderId !== event.sender.id) return false;
+  const settle = activeRun.approvals.get(approvalId);
+  if (!settle) return false;
+  settle({ approved: approvedValue === true });
+  return true;
 });
 
 ipcMain.handle('fikr-studio:cancel-agent', async (event, runId) => {
@@ -1025,8 +1079,12 @@ ipcMain.handle('fikr-studio:save-base64-file', async (event, payload) => {
       }
       if (client === "claude") {
         config.mcpServers["fikr-studio"] = {
-          url: `http://localhost:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}`,
-          type: "sse"
+          command: findCompatibleNpx(),
+          args: [
+            "-y",
+            "fikr-studio-mcp@latest",
+            `http://localhost:${MCP_PORT}/sse?token=${encodeURIComponent(mcpAuthToken)}`
+          ]
         };
       } else if (client === "windsurf") {
         config.mcpServers["fikr-studio"] = {
@@ -1355,6 +1413,7 @@ async function executeTool(name, args, mainWindow) {
       pushToRenderer(mainWindow, "project-created", { project: newProject });
       return {
         content: [{ type: "text", text: `Project "${args.name}" created with id: ${newProject.id}` }],
+        structuredContent: { projectId: newProject.id },
       };
     }
 
@@ -1786,7 +1845,7 @@ Create or edit \`~/.cursor/mcp.json\`:
 \`\`\`
 
 ### Windsurf
-Create or edit \`~/.codeium/windsurf/mcp_settings.json\`:
+Create or edit \`~/.codeium/windsurf/mcp_config.json\`:
 \`\`\`json
 {
   "mcpServers": {

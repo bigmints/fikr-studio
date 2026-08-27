@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-08-25T09:09:18Z"
-  host: "BigMac-2"
-  task: "Session end: complete_production_readiness_audit_verify_studio_ — recovery verified"
+  last_seen: "2026-08-27T12:09:22Z"
+  host: "Mac"
+  task: "release_fikr_studio_v0_1_25: validate and publish"
   status: alive

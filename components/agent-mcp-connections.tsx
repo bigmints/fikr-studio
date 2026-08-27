@@ -19,11 +19,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -195,6 +197,7 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
 
   return (
     <section aria-labelledby={embedded ? undefined : "chat-mcp-heading"} aria-label={embedded ? "Chat tool connections" : undefined}>
+      <Dialog open={isAdding} onOpenChange={setAddOpen}>
       <div className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           {!embedded && (
@@ -207,10 +210,12 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
             Connect tools that Fikr can use while you chat.
           </p>
         </div>
-        <Button type="button" size="sm" onClick={() => setAddOpen(true)} className="w-full shrink-0 sm:w-auto">
-          <Plus className="size-4" />
-          Add MCP server
-        </Button>
+        <DialogTrigger asChild>
+          <Button type="button" size="sm" className="w-full shrink-0 sm:w-auto">
+            <Plus className="size-4" />
+            Add MCP server
+          </Button>
+        </DialogTrigger>
       </div>
 
       {connections.length === 0 ? (
@@ -266,9 +271,8 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
 
       {!isAdding && error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
 
-      <Dialog open={isAdding} onOpenChange={setAddOpen}>
-        <DialogContent className="max-h-[min(780px,calc(100dvh-2rem))] gap-0 overflow-hidden p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-6 pb-4 pt-6 pr-12">
+        <DialogContent className="max-h-[min(780px,calc(100dvh-2rem))] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
             <DialogTitle>{permissionStep ? "Choose what Fikr can use" : "Add MCP server"}</DialogTitle>
             <DialogDescription>
               {permissionStep
@@ -278,8 +282,8 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
           </DialogHeader>
 
           {permissionStep ? (
-            <div className="min-h-0">
-              <div className="border-b bg-muted/25 px-6 py-4">
+            <div className="min-h-0 space-y-4">
+              <div className="rounded-lg border bg-muted/25 p-4">
                 <div className="flex items-center gap-3">
                   <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-background text-muted-foreground">
                     {draft.transport === "stdio" ? <TerminalSquare className="size-4" /> : <Server className="size-4" />}
@@ -294,7 +298,7 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
                 </div>
               </div>
 
-              <div className="flex items-center justify-between px-6 pb-2 pt-4">
+              <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground">Available tools</p>
                 <Button
                   type="button"
@@ -310,8 +314,8 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
                 </Button>
               </div>
 
-              <ScrollArea className="h-[min(330px,38dvh)] px-4 pb-4">
-                <div className="space-y-1 px-2">
+              <ScrollArea className="h-[min(330px,38dvh)]">
+                <div className="space-y-1 pr-3">
                   {tools.map((candidate) => {
                     const checked = draft.allowedTools.includes(candidate.name);
                     return (
@@ -328,13 +332,13 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
               </ScrollArea>
             </div>
           ) : (
-            <div className="px-6 py-5">
-              <Tabs value={addMode} onValueChange={(value) => { setAddMode(value); setError(null); }}>
-                <TabsList>
-                  <TabsTrigger value="config">Paste config</TabsTrigger>
-                  <TabsTrigger value="remote">Hosted server</TabsTrigger>
+            <div>
+              <Tabs className="gap-0" value={addMode} onValueChange={(value) => { setAddMode(value); setError(null); }}>
+                <TabsList aria-label="Connection type" className="grid h-10 w-full grid-cols-2 rounded-lg bg-muted/60 p-1">
+                  <TabsTrigger className="h-8 w-full data-[state=active]:bg-background data-[state=active]:shadow-xs" value="config">Paste config</TabsTrigger>
+                  <TabsTrigger className="h-8 w-full data-[state=active]:bg-background data-[state=active]:shadow-xs" value="remote">Hosted server</TabsTrigger>
                 </TabsList>
-                <TabsContent value="config" className="mt-4 space-y-3">
+                <TabsContent value="config" className="mt-5 min-h-[296px] space-y-3">
                   <div>
                     <label htmlFor="mcp-config" className="text-sm font-medium text-foreground">MCP configuration</label>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">Paste one `mcpServers` entry from the provider’s setup guide.</p>
@@ -351,7 +355,7 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
                     <LockKeyhole className="size-3.5" /> Local commands and private values stay on this Mac.
                   </p>
                 </TabsContent>
-                <TabsContent value="remote" className="mt-4 space-y-4">
+                <TabsContent value="remote" className="mt-5 min-h-[296px] space-y-4">
                   <div>
                     <label htmlFor="mcp-name" className="text-sm font-medium text-foreground">Name</label>
                     <Input id="mcp-name" value={remoteName} onChange={(event) => setRemoteName(event.target.value)} placeholder="Research" className="mt-2" />
@@ -366,15 +370,17 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
             </div>
           )}
 
-          {error && <p role="alert" className="border-t border-destructive/15 bg-destructive/5 px-6 py-3 text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
 
-          <DialogFooter className="border-t px-6 py-4">
+          <DialogFooter>
             {permissionStep ? (
               <>
                 <Button type="button" variant="ghost" onClick={() => { setTools([]); setDraft(EMPTY_CONNECTION); setError(null); }} className="mr-auto">
                   <ChevronLeft className="size-4" /> Back
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">Cancel</Button>
+                </DialogClose>
                 <Button type="button" onClick={() => void save()} disabled={isSaving || draft.allowedTools.length === 0}>
                   {isSaving && <Loader2 className="size-4 animate-spin" />}
                   Add {draft.allowedTools.length || ""} {draft.allowedTools.length === 1 ? "tool" : "tools"}
@@ -382,7 +388,9 @@ export function AgentMcpConnections({ embedded = false }: { embedded?: boolean }
               </>
             ) : (
               <>
-                <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">Cancel</Button>
+                </DialogClose>
                 <Button
                   type="button"
                   onClick={() => void connectAndDiscover()}
